@@ -3,9 +3,14 @@
 #include <string.h>
 #include "fluluks/error.h"
 
-/* Lecture tolérante : hors bornes ou erreur = signature absente. */
-static bool rd(fl_bdev *d, uint64_t off, size_t len, void *buf) {
-  return fl_bdev_read_bytes(d, off, len, buf) == FL_OK;
+/* Lecture à trois états : 0 = données lues, 1 = hors bornes (signature absente),
+ * <0 = vraie erreur d'E/S (à propager). */
+#define RD_ABSENT 1
+static int rd(fl_bdev *d, uint64_t off, size_t len, void *buf) {
+  int rc = fl_bdev_read_bytes(d, off, len, buf);
+  if (rc == FL_OK) return 0;
+  if (rc == FL_EINVAL) return RD_ABSENT;
+  return rc;
 }
 
 static uint16_t le16(const uint8_t *p) { return (uint16_t)(p[0] | (p[1] << 8)); }
@@ -62,7 +67,9 @@ int fl_probe(fl_bdev *d, fl_probe_result *out) {
   out->content = FL_CONTENT_UNKNOWN;
 
   uint8_t b[512];
-  if (rd(d, 0, sizeof b, b)) {
+  int r = rd(d, 0, sizeof b, b);
+  if (r < 0) return r;
+  if (r == 0) {
     if (memcmp(b, "LUKS\xBA\xBE", 6) == 0) {
       unsigned ver = ((unsigned)b[6] << 8) | b[7];
       if (ver == 1 || ver == 2) {
@@ -82,7 +89,9 @@ int fl_probe(fl_bdev *d, fl_probe_result *out) {
   }
 
   uint8_t sb[136]; /* superbloc ext à 1024, champs jusqu'à 1160 */
-  if (rd(d, 1024, sizeof sb, sb)) {
+  r = rd(d, 1024, sizeof sb, sb);
+  if (r < 0) return r;
+  if (r == 0) {
     const uint8_t *s = sb; /* s[i] = octet 1024+i */
     if (le16(s + 56) == 0xEF53) {
       static const char hex[] = "0123456789abcdef";
@@ -100,13 +109,21 @@ int fl_probe(fl_bdev *d, fl_probe_result *out) {
     }
   }
 
-  if (rd(d, 512, 32, b) && memcmp(b, "LABELONE", 8) == 0 && memcmp(b + 24, "LVM2 001", 8) == 0) {
+  r = rd(d, 512, 32, b);
+  if (r < 0) return r;
+  if (r == 0 && memcmp(b, "LABELONE", 8) == 0 && memcmp(b + 24, "LVM2 001", 8) == 0) {
     out->content = FL_CONTENT_LVM2;
     return FL_OK;
   }
-  if (rd(d, 0, 4, b) && memcmp(b, "XFSB", 4) == 0) { out->content = FL_CONTENT_XFS; return FL_OK; }
-  if (rd(d, 65600, 8, b) && memcmp(b, "_BHRfS_M", 8) == 0) { out->content = FL_CONTENT_BTRFS; return FL_OK; }
-  if (rd(d, 4086, 10, b) && memcmp(b, "SWAPSPACE2", 10) == 0) { out->content = FL_CONTENT_SWAP; return FL_OK; }
+  r = rd(d, 0, 4, b);
+  if (r < 0) return r;
+  if (r == 0 && memcmp(b, "XFSB", 4) == 0) { out->content = FL_CONTENT_XFS; return FL_OK; }
+  r = rd(d, 65600, 8, b);
+  if (r < 0) return r;
+  if (r == 0 && memcmp(b, "_BHRfS_M", 8) == 0) { out->content = FL_CONTENT_BTRFS; return FL_OK; }
+  r = rd(d, 4086, 10, b);
+  if (r < 0) return r;
+  if (r == 0 && memcmp(b, "SWAPSPACE2", 10) == 0) { out->content = FL_CONTENT_SWAP; return FL_OK; }
   return FL_OK;
 }
 

@@ -103,6 +103,57 @@ static void test_probe_minuscule(void) {
   fl_bdev_close(d);
 }
 
+/* Périphériques en mémoire pour les cas hostiles. */
+typedef struct { uint8_t data[2048 * 512]; bool fail; } memdev;
+
+static int mem_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
+  memdev *m = d->priv;
+  if (m->fail) return FL_EIO;
+  memcpy(buf, m->data + lba * 512, (size_t)count * 512);
+  return FL_OK;
+}
+static const fl_bdev_ops mem_ops = { mem_read, NULL, NULL, NULL };
+
+static void mem_init(fl_bdev *d, memdev *m) {
+  memset(m, 0, sizeof *m);
+  d->ops = &mem_ops;
+  d->sector_size = 512;
+  d->sector_count = 2048;
+  d->read_only = true;
+  d->priv = m;
+}
+
+static void test_probe_erreur_es(void) {
+  static memdev m;
+  fl_bdev d;
+  fl_probe_result r;
+  mem_init(&d, &m);
+  m.fail = true;
+  TT_ASSERT_EQ(fl_probe(&d, &r), FL_EIO);
+}
+
+static void test_probe_bpb_hostile(void) {
+  static memdev m;
+  fl_bdev d;
+  fl_probe_result r;
+  for (int cas = 0; cas < 5; cas++) {
+    mem_init(&d, &m);
+    uint8_t *b = m.data;
+    b[11] = 0x00; b[12] = 0x02; /* 512 o/secteur */
+    b[13] = 1; b[14] = 1; b[15] = 0; b[16] = 2;
+    b[19] = 0x00; b[20] = 0x08; /* 2048 secteurs */
+    b[22] = 8;
+    b[510] = 0x55; b[511] = 0xAA;
+    if (cas == 0) b[13] = 0;               /* secteurs/cluster = 0 */
+    if (cas == 1) { b[11] = 0; b[12] = 0; } /* octets/secteur = 0 */
+    if (cas == 2) b[16] = 0;               /* 0 FAT */
+    if (cas == 3) { b[19] = 10; b[20] = 0; } /* total <= métadonnées */
+    if (cas == 4) b[13] = 3;               /* pas une puissance de 2 */
+    TT_ASSERT_EQ(fl_probe(&d, &r), FL_OK);
+    TT_ASSERT_EQ(r.content, FL_CONTENT_UNKNOWN);
+  }
+}
+
 static void test_noms(void) {
   TT_ASSERT_STR_EQ(fl_content_name(FL_CONTENT_LUKS2), "LUKS2");
   TT_ASSERT_STR_EQ(fl_content_name(FL_CONTENT_EXFAT), "exFAT");
@@ -120,6 +171,8 @@ int main(void) {
   TT_RUN(test_probe_autres);
   TT_RUN(test_probe_inconnu);
   TT_RUN(test_probe_minuscule);
+  TT_RUN(test_probe_erreur_es);
+  TT_RUN(test_probe_bpb_hostile);
   TT_RUN(test_noms);
   TT_MAIN_END();
 }
