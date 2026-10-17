@@ -7,3 +7,9 @@
 
 # Images disque de test (volumineuses, générées par script)
 *.img
+
+# Sorties de compilation
+build/
+
+# Artefacts de cryptsetup reencrypt
+tools/fixtures/LUKS-*
