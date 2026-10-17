@@ -30,6 +30,10 @@ set(FL_SOURCES
   src/probe/probe.c
   src/crypto/fl_crypto.c
   src/crypto/sector_cipher.c
+  src/luks/luks.c
+  src/luks/luks1.c
+  src/luks/af.c
+  src/luks/crypt_bdev.c
 )
 
 add_library(fluluks STATIC ${FL_SOURCES})
@@ -66,4 +70,5 @@ if(FL_TESTS)
   fl_add_test(test_partition)
   fl_add_test(test_probe)
   fl_add_test(test_crypto)
+  fl_add_test(test_luks1)
 endif()
