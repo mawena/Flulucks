@@ -42,5 +42,7 @@ int fl_b64_decode(const char *in, uint8_t *out, size_t outmax, size_t *outlen);
 /* Lit l'en-tête LUKS2 (primaire ou secondaire) et remplit l. */
 int fl_luks2_open(struct fl_luks *l, bool primary_ok);
 /* primary_ok = magie et version du primaire corrects ; sinon, sans en-tête secondaire valide -> FL_ENOTSUP. */
+/* Plus grande mémoire Argon2 (Kio) des slots LUKS2 utilisables ; 0 si PBKDF2 seulement. */
+uint32_t fl_luks2_max_kdf_memory_kib(const struct fl_luks *l);
 
 #endif

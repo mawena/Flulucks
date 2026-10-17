@@ -102,6 +102,17 @@ if(FL_TESTS)
   fl_add_test(test_usb)
   target_sources(test_usb PRIVATE tests/support/fake_msc.c)
 
+  # Cœur du pont JNI sans jni.h (poignées, JSON) : aussi testé sur PC. Sur Android, ces mêmes
+  # fichiers sont compilés dans fluluks_jni (cmake/android.cmake).
+  add_library(fl_jnicore STATIC jni/json_out.c jni/handles.c)
+  target_include_directories(fl_jnicore PUBLIC jni)
+  target_link_libraries(fl_jnicore PUBLIC fluluks)
+  target_compile_options(fl_jnicore PRIVATE -Wall -Wextra -Werror)
+  fl_add_test(test_json_out)
+  target_link_libraries(test_json_out PRIVATE fl_jnicore)
+  fl_add_test(test_handles)
+  target_link_libraries(test_handles PRIVATE fl_jnicore)
+
   add_test(NAME test_cli COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli.sh $<TARGET_FILE:fluluks-cli>)
   set_tests_properties(test_cli PROPERTIES
     ENVIRONMENT "FL_FIXTURES=${CMAKE_BINARY_DIR}/fixtures"

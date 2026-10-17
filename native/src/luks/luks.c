@@ -43,6 +43,12 @@ int fl_luks_version(const fl_luks *l) { return l ? l->version : 0; }
 
 const char *fl_luks_cipher(const fl_luks *l) { return l ? l->cipher : NULL; }
 
+int fl_luks_max_kdf_memory_kib(const fl_luks *l, uint32_t *out) {
+  if (!l || !out) return FL_EINVAL;
+  *out = l->version == 2 && l->impl ? fl_luks2_max_kdf_memory_kib(l) : 0; /* LUKS1 : PBKDF2 seulement */
+  return FL_OK;
+}
+
 int fl_luks_unlock(fl_luks *l, const void *pass, size_t passlen, fl_bdev **decrypted) {
   if (!decrypted) return FL_EINVAL;
   *decrypted = NULL;

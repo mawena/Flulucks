@@ -2,6 +2,7 @@
 #define FLULUKS_LUKS_H
 
 #include <stddef.h>
+#include <stdint.h>
 
 #include "fluluks/blockdev.h"
 
@@ -19,6 +20,10 @@ int fl_luks_open(fl_bdev *dev, fl_luks **out);
 int fl_luks_version(const fl_luks *l);
 /* Ex. "aes-xts-plain64". Valable jusqu'à fl_luks_close. */
 const char *fl_luks_cipher(const fl_luks *l);
+/* Plus grande mémoire Argon2 (Kio) parmi les keyslots utilisables (pris en charge, de priorité non nulle,
+ * liés au segment), pour vérifier avant le déverrouillage que la mémoire suffit. 0 si tous ces slots
+ * utilisent PBKDF2 (et toujours pour LUKS1). FL_EINVAL si l ou out est NULL (*out inchangé). */
+int fl_luks_max_kdf_memory_kib(const fl_luks *l, uint32_t *out);
 /* Essaie chaque keyslot actif ; FL_EBADPASS si aucun ne convient (*decrypted = NULL).
  * Le bdev rendu emprunte `dev` et possède sa propre copie de la clé maître (mémoire
  * sécurisée). Ordre de fermeture : fl_bdev_close(decrypted), puis fl_luks_close(l),

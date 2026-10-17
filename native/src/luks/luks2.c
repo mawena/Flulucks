@@ -224,6 +224,18 @@ static int luks2_unlock(struct fl_luks *l, const void *pass, size_t passlen, fl_
   return rc;
 }
 
+uint32_t fl_luks2_max_kdf_memory_kib(const struct fl_luks *l) {
+  const luks2 *x = l->impl;
+  uint32_t m = 0;
+  for (int i = 0; i < x->nslots; i++) {
+    const l2_slot *s = &x->slots[i];
+    /* mêmes critères que luks2_unlock : seuls les slots réellement essayés comptent */
+    if (!s->supported || s->priority == 0 || s->digest < 0 || s->kdf == L2_KDF_PBKDF2) continue;
+    if (s->memory > m) m = s->memory;
+  }
+  return m;
+}
+
 static void luks2_destroy(struct fl_luks *l) {
   if (l->impl) fl_memzero(l->impl, sizeof(luks2));
   free(l->impl);
