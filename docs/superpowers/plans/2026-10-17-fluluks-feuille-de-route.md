@@ -23,28 +23,31 @@ dans le même commit que le travail.
 - [x] T10 — Outil `fluluks-cli` + lecture du vrai disque sur PC *(vrai disque lu le 2026-10-17 : `/dev/sdb1` LUKS2 aes-xts-plain64 déverrouillé, racine ext4 listée ; déverrouillage + montage + listage en 5,1 s sur le vrai disque (build Release, PC), mesure sur téléphone en phase 2)*
 - [x] Fusion `feature/moteur-natif-lecture` → `develop`
 
-### Phase 2 — Android en lecture : jalon « mon disque dans VLC »
-- [ ] Plan de la phase 2 écrit
-- [ ] *(tâches détaillées à l'écriture du plan : SDK/NDK et projet Flutter, JNI, USB Bulk-Only/SCSI,
-      cache de blocs, service au premier plan, DocumentsProvider en lecture, écrans Disques et
-      Déverrouillage, essai sur clé sacrifiée puis sur le vrai disque en lecture)*
+### Phase 2 — Android en lecture : jalon « mon disque dans VLC » ([plan](2026-10-17-phase2-android-lecture.md))
+- [x] Plan de la phase 2 écrit
+- [ ] *(utilisateur)* Libérer au moins 10 Gio sur `/` (7,5 Gio libres le 2026-10-17)
+- [ ] T1 — Environnement Android (SDK 36, NDK 28.2, licences acceptées par l'utilisateur)
+- [ ] T2 — Moteur natif portable Android (`fl_memzero`, `extern "C"`) + tests natifs sur le téléphone
+- [ ] T3 — Périphérique bloc USB (Bulk-Only Transport + SCSI)
+- [ ] T4 — Cache de blocs avec lecture anticipée
+- [ ] T5 — Projet Flutter et intégration native Gradle
+- [ ] T6 — Couche JNI à poignées et moteur Kotlin
+- [ ] T7 — Détection USB, gestionnaire de volumes, service au premier plan
+- [ ] T8 — DocumentsProvider en lecture seule
+- [ ] T9 — Interface Flutter (Disques, Déverrouillage) et pont Pigeon
+- [ ] T10 — Essais sur le Pixel : clé sacrifiée, puis vrai disque en lecture
+- [ ] Fusion `feature/android-lecture` → `develop`
 - [ ] Version `v0.1.0` (branche `release/0.1.0` → `main`)
-- Reports de la phase 1 à intégrer au plan de la phase 2 (revue finale) :
-  - [ ] **En premier :** remplacer `explicit_bzero` par un `fl_memzero` portable (Bionic ne l'a qu'à partir
-        de l'API 28, la spec vise minSdk 26) et corriger la contrainte globale du plan.
-  - [ ] Gardes `extern "C"` dans les en-têtes publics (JNI).
-  - [ ] `make_fixtures.sh` : la garde anti-`rm -rf` bloque la régénération après un échec (marqueur posé
-        au début) ; aligner la version cmake du README (3.20).
-  - [ ] Mesurer le déverrouillage sur le téléphone en build natif Release (4,4 s sur PC ; 53 s en Debug+ASan).
-  - [ ] Vérifier la mémoire disponible avant un Argon2 gourmand ; rappel de progression / annulation.
-  - [ ] `fl_probe` : signaler LUKS2 quand seul l'en-tête secondaire est valide (aujourd'hui seul le CLI
-        contourne).
-  - [ ] Disques à secteurs logiques de 4096 (certains boîtiers USB) : message clair ou lecture-modification-écriture.
-  - [ ] Noms de 255 octets non ouvrables (bug lwext4) ; extents non écrits et lectures à cheval trou/données
-        à tester ; `MAX_DIR_STEPS` sous verrou global trop grand ; liens symboliques (politique du provider).
-  - [ ] JNI : noms de fichiers en `byte[]` (pas `NewStringUTF`, emoji), phrase de passe en `byte[]` ;
-        `abiFilters` arm64-v8a (+ x86_64 émulateur) ; natif compilé en -O2.
-  - [ ] Tests manquants : GPT hostile, 4K, surrogates, boucle EBR, sha512, corruptions LUKS1, label LUKS2.
+- Reports de la phase 1 (revue finale) et où ils sont traités :
+  - `explicit_bzero` → `fl_memzero`, gardes `extern "C"`, garde `make_fixtures.sh`, cmake 3.20 du README → T2
+  - Mesure du déverrouillage sur le téléphone → T2 (tests natifs) et T10 (application)
+  - Mémoire disponible avant Argon2 → T7 ; rappel de progression / annulation → phase 6
+  - LUKS2 dont seul l'en-tête secondaire est valide → T6 (`scan`, `primary_damaged`)
+  - Disques à secteurs logiques de 4096 → T3 (`test_usb_4k`) ; LUKS1 sur disque 4Kn → phase 6
+  - JNI en `byte[]`, phrase de passe en octets, `abiFilters`, natif en -O2 → T5/T6
+  - Liens symboliques : listés mais non ouverts par le provider → T8
+  - Noms de 255 octets (lwext4), extents non écrits, `MAX_DIR_STEPS`, tests manquants (GPT hostile,
+    surrogates, boucle EBR, sha512, corruptions LUKS1, label LUKS2) → phase 3 (avant toute écriture)
 
 ### Phase 3 — ext4 en écriture
 - [ ] Plan de la phase 3 écrit
