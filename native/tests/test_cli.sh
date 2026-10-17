@@ -70,9 +70,20 @@ run enoent cat "$FX/ext4-plain.img" 0 /nexiste/pas
 run nopf ls "$FX/gpt-luks2.img" 1 / --pass-file "$TMP/absent"
 [ "$RC" -eq 1 ] || fail "pass-file absent : code $RC"
 
-# EPIPE : pas de plantage
-RC=0; "$CLI" cat "$FX/whole-luks1-xts.img" 0 /gros.bin --pass-file "$FX/pass.txt" 2>"$TMP/pipe.err" | head -c 10 >/dev/null || true
-! grep -qi "sanitizer\|Segmentation" "$TMP/pipe.err" || fail "EPIPE : plantage"
+# EPIPE : sortie 1 (SIGPIPE ignoré), pas de plantage ; PIPESTATUS absent de sh -> sous-shell
+( r=0; "$CLI" cat "$FX/whole-luks1-xts.img" 0 /gros.bin --pass-file "$FX/pass.txt" 2>"$TMP/pipe.err" >&3 || r=$?; echo $r >"$TMP/pipe.rc" ) 3>&1 | head -c 10 >/dev/null
+[ "$(cat "$TMP/pipe.rc")" = 1 ] || fail "EPIPE : code $(cat "$TMP/pipe.rc") (attendu 1)"
+! grep -qi "sanitizer\|Segmentation\|runtime error" "$TMP/pipe.err" || fail "EPIPE : plantage"
+
+# fichier de phrase de passe avec \n final : pris tel quel, donc refusé
+printf 'motdepasse-FluLuks\n' >"$TMP/pass-nl.txt"
+run nl ls "$FX/gpt-luks2.img" 1 / --pass-file "$TMP/pass-nl.txt"
+[ "$RC" -eq 1 ] || fail "pass-file avec \\n : code $RC (attendu 1)"
+[ "$(cat "$TMP/nl.err")" = "fluluks-cli: phrase de passe incorrecte" ] || fail "pass-file avec \\n : stderr"
+
+# parts LUKS1
+run p1 parts "$FX/whole-luks1-xts.img"
+grep -q "LUKS1 aes-xts-plain64" "$TMP/p1.out" || fail "parts LUKS1"
 
 # jamais de phrase de passe dans les sorties
 for f in "$TMP"/*.out "$TMP"/*.err; do

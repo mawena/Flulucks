@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200809L
+#define _GNU_SOURCE
 /* fluluks-cli : lecture seule d'une image ou d'un disque LUKS/ext4, sans root pour les images. */
 #include <errno.h>
 #include <fcntl.h>
@@ -8,8 +8,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <termios.h>
 #include <unistd.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 
 #include "fluluks/blockdev.h"
 #include "fluluks/error.h"
@@ -51,12 +55,20 @@ static void secret_wipe(secret *s) {
 }
 
 static int read_pass_file(const char *path, secret *s) {
-  FILE *f = fopen(path, "rb");
-  if (!f) return fail_msg("impossible d'ouvrir le fichier de phrase de passe");
-  size_t n = fread(s->buf, 1, PASS_MAX + 1, f);
-  bool err = ferror(f) != 0;
-  fclose(f);
-  if (err) return fail_msg("lecture du fichier de phrase de passe impossible");
+  int fd = open(path, O_RDONLY | O_CLOEXEC);
+  if (fd < 0) return fail_msg("impossible d'ouvrir le fichier de phrase de passe");
+  size_t n = 0;
+  while (n < PASS_MAX + 1) {
+    ssize_t r = read(fd, s->buf + n, PASS_MAX + 1 - n);
+    if (r < 0 && errno == EINTR) continue;
+    if (r < 0) {
+      close(fd);
+      return fail_msg("lecture du fichier de phrase de passe impossible");
+    }
+    if (r == 0) break;
+    n += (size_t)r;
+  }
+  close(fd);
   if (n > PASS_MAX) return fail_msg("fichier de phrase de passe trop grand (8192 octets au plus)");
   s->len = n;
   return 0;
@@ -75,16 +87,20 @@ static int read_pass_tty(secret *s) {
   }
   raw = old;
   raw.c_lflag &= (tcflag_t)~(ECHO | ECHONL);
-  struct sigaction sa, old_int, old_term;
+  struct sigaction sa, old_int, old_term, old_hup, old_quit;
   memset(&sa, 0, sizeof sa);
   sa.sa_handler = on_sigint; /* sans SA_RESTART : read() rend EINTR */
   sigemptyset(&sa.sa_mask);
   g_sigint = 0;
   sigaction(SIGINT, &sa, &old_int);
   sigaction(SIGTERM, &sa, &old_term);
+  sigaction(SIGHUP, &sa, &old_hup);
+  sigaction(SIGQUIT, &sa, &old_quit);
   if (tcsetattr(fd, TCSAFLUSH, &raw) != 0) {
     sigaction(SIGINT, &old_int, NULL);
     sigaction(SIGTERM, &old_term, NULL);
+    sigaction(SIGHUP, &old_hup, NULL);
+    sigaction(SIGQUIT, &old_quit, NULL);
     close(fd);
     return fail_msg("impossible de couper l'écho du terminal");
   }
@@ -93,8 +109,8 @@ static int read_pass_tty(secret *s) {
   (void)w;
   size_t n = 0;
   int rc = 0;
+  char c = 0;
   for (;;) {
-    char c;
     ssize_t r = read(fd, &c, 1);
     if (r < 0 && errno == EINTR) { rc = -1; break; }
     if (r < 0) { rc = -2; break; }
@@ -102,11 +118,14 @@ static int read_pass_tty(secret *s) {
     if (n >= PASS_MAX) { rc = -3; break; }
     s->buf[n++] = (unsigned char)c;
   }
+  explicit_bzero(&c, 1);
   tcsetattr(fd, TCSAFLUSH, &old);
   w = write(fd, "\n", 1);
   (void)w;
   sigaction(SIGINT, &old_int, NULL);
   sigaction(SIGTERM, &old_term, NULL);
+  sigaction(SIGHUP, &old_hup, NULL);
+  sigaction(SIGQUIT, &old_quit, NULL);
   close(fd);
   if (rc == -1 || g_sigint) return fail_msg("interrompu");
   if (rc == -2) return fail_msg("lecture du terminal impossible");
@@ -162,7 +181,8 @@ static int cmd_parts(const char *path) {
       }
       fl_bdev_close(sl);
     }
-    unsigned long long mo = (unsigned long long)(((unsigned __int128)p->sector_count * c.disk->sector_size) / 1000000u);
+    unsigned long long mo = (unsigned long long)((p->sector_count / 1000000u) * c.disk->sector_size +
+                         (p->sector_count % 1000000u) * c.disk->sector_size / 1000000u);
     printf("%u\t%llu\t%llu\t%s\t%s\t%s%s\n", (unsigned)p->index, (unsigned long long)p->first_lba, mo,
            fl_content_name(pr.content), pr.label, fl_content_supported(pr.content) ? "oui" : "non", extra);
   }
@@ -286,6 +306,11 @@ static int cmd_cat(ctx *c, const char *path) {
 }
 
 int main(int argc, char **argv) {
+  struct rlimit nocore = {0, 0};
+  setrlimit(RLIMIT_CORE, &nocore);
+#ifdef __linux__
+  prctl(PR_SET_DUMPABLE, 0, 0, 0, 0);
+#endif
   signal(SIGPIPE, SIG_IGN);
   if (argc < 3) return usage();
   const char *cmd = argv[1];
