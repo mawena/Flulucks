@@ -39,7 +39,14 @@ set(FL_SOURCES
   src/luks/crypt_bdev.c
   src/fs/fs.c
   src/fs/ext4_glue.c
+  src/usb/bot.c
+  src/usb/scsi.c
+  src/usb/usb_bdev.c
 )
+# Transport usbdevfs : Linux et Android seulement.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR ANDROID)
+  list(APPEND FL_SOURCES src/usb/usbdevfs_transport.c)
+endif()
 
 add_library(fluluks STATIC ${FL_SOURCES})
 target_include_directories(fluluks PUBLIC include PRIVATE src)
@@ -83,6 +90,8 @@ if(FL_TESTS)
   fl_add_test(test_luks2)
   fl_add_test(test_luks2_lent LABELS lent)
   fl_add_test(test_ext4)
+  fl_add_test(test_usb)
+  target_sources(test_usb PRIVATE tests/support/fake_msc.c)
 
   add_test(NAME test_cli COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli.sh $<TARGET_FILE:fluluks-cli>)
   set_tests_properties(test_cli PROPERTIES

@@ -15,7 +15,11 @@ typedef enum {
   FL_ENOTDIR = -10,
   FL_EISDIR = -11,
   FL_ENOTEMPTY = -12,
-  FL_ENOSPC = -13
+  FL_ENOSPC = -13,
+  FL_ENODEV = -14,    /* disque débranché */
+  FL_ETIMEDOUT = -15, /* le disque ne répond pas */
+  FL_ESTALL = -16,    /* transfert USB bloqué (interne au transport USB) */
+  FL_EBUSY = -17      /* volume occupé */
 } fl_err;
 
 /* Message lisible pour un code d'erreur. Jamais NULL ; code inconnu -> "erreur inconnue". */

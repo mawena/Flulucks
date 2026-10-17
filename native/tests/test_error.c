@@ -7,6 +7,10 @@ static void test_strerror(void) {
   TT_ASSERT_STR_EQ(fl_strerror(12345), "erreur inconnue");
   TT_ASSERT_STR_EQ(fl_strerror(FL_OK), "succès");
   TT_ASSERT_STR_EQ(fl_strerror(FL_ENOSPC), "plus d'espace disponible");
+  TT_ASSERT_STR_EQ(fl_strerror(FL_ENODEV), "disque débranché");
+  TT_ASSERT_STR_EQ(fl_strerror(FL_ETIMEDOUT), "le disque ne répond pas");
+  TT_ASSERT_STR_EQ(fl_strerror(FL_ESTALL), "transfert USB bloqué");
+  TT_ASSERT_STR_EQ(fl_strerror(FL_EBUSY), "volume occupé");
 }
 
 static void test_secure(void) {
