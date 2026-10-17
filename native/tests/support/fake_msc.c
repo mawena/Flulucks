@@ -29,7 +29,10 @@ struct fake_msc {
   bool fail_armed, failing;
   unsigned fail_left;
   int fail_err;
-  unsigned stall_data, bad_csw, not_ready;
+  unsigned stall_data, bad_csw, not_ready, zlp_csw;
+  uint8_t nr_asc, nr_ascq;
+  bool need_start, zlp_pending, bogus_on;
+  uint32_t bogus_residue;
   bool sense_armed;
   uint8_t next_key, next_asc, next_ascq;
 
@@ -39,6 +42,7 @@ struct fake_msc {
   uint8_t *data;
   uint32_t data_len, data_pos, expect;
   uint32_t tag;
+  uint8_t op; /* code d'opération de la commande en cours */
   uint8_t status;
   uint8_t key, asc, ascq; /* sens courant */
 
@@ -96,9 +100,13 @@ static bool media_fault(fake_msc *m) {
     check_condition(m, m->next_key, m->next_asc, m->next_ascq);
     return true;
   }
+  if (m->need_start) {
+    check_condition(m, 0x02, 0x04, 0x02);
+    return true;
+  }
   if (m->not_ready) {
     m->not_ready--;
-    check_condition(m, 0x02, 0x04, 0x01);
+    check_condition(m, 0x02, m->nr_asc, m->nr_ascq);
     return true;
   }
   return false;
@@ -209,6 +217,10 @@ static void exec_cdb(fake_msc *m, const uint8_t *cdb, uint8_t cdblen, bool dir_i
     case 0x35: /* SYNCHRONIZE CACHE(10) */
     case 0x1E: /* PREVENT ALLOW MEDIUM REMOVAL */
       break;
+    case 0x1B: /* START STOP UNIT */
+      memcpy(m->s.start_stop, cdb, cdblen < 6 ? cdblen : 6);
+      if ((cdb[4] & 0x03) == 0x01) m->need_start = false; /* START=1, LOEJ=0 */
+      break;
     default:
     illegal:
       check_condition(m, 0x05, 0x20, 0x00);
@@ -222,7 +234,6 @@ static void exec_cdb(fake_msc *m, const uint8_t *cdb, uint8_t cdblen, bool dir_i
 }
 
 static int fake_bulk_out(void *ctx, const void *buf, size_t len, unsigned timeout_ms) {
-  (void)timeout_ms;
   fake_msc *m = ctx;
   enter(m);
   int rc;
@@ -242,6 +253,12 @@ static int fake_bulk_out(void *ctx, const void *buf, size_t len, unsigned timeou
     } else {
       if (m->fail_armed) m->fail_left--;
       m->s.commands++;
+      m->op = c[15];
+      m->s.tmo_cbw[m->op] = timeout_ms;
+      if (m->zlp_csw) {
+        m->zlp_csw--;
+        m->zlp_pending = true;
+      }
       m->tag = rd32le(c + 4);
       m->expect = rd32le(c + 8);
       bool dir_in = (c[12] & 0x80) != 0;
@@ -267,6 +284,7 @@ static int fake_bulk_out(void *ctx, const void *buf, size_t len, unsigned timeou
       rc = 31;
     }
   } else if (m->st == ST_DATA_OUT) {
+    m->s.tmo_data[m->op] = timeout_ms;
     uint32_t left = m->expect - m->data_pos;
     uint32_t n = len < left ? (uint32_t)len : left;
     m->data_pos += n; /* absorbé, jamais écrit */
@@ -281,7 +299,6 @@ static int fake_bulk_out(void *ctx, const void *buf, size_t len, unsigned timeou
 }
 
 static int fake_bulk_in(void *ctx, void *buf, size_t len, unsigned timeout_ms) {
-  (void)timeout_ms;
   fake_msc *m = ctx;
   enter(m);
   int rc;
@@ -290,6 +307,7 @@ static int fake_bulk_in(void *ctx, void *buf, size_t len, unsigned timeout_ms) {
   } else if (m->need_reset || m->halt_in) {
     rc = FL_ESTALL;
   } else if (m->st == ST_DATA_IN) {
+    m->s.tmo_data[m->op] = timeout_ms;
     if (m->stall_this) {
       m->stall_this = false;
       m->halt_in = true; /* rien envoyé : le CSW annoncera un résidu complet */
@@ -304,14 +322,19 @@ static int fake_bulk_in(void *ctx, void *buf, size_t len, unsigned timeout_ms) {
       rc = (int)n;
     }
   } else if (m->st == ST_CSW) {
-    if (len < 13) {
+    m->s.tmo_csw[m->op] = timeout_ms;
+    if (m->zlp_pending) {
+      m->zlp_pending = false; /* paquet de longueur nulle : le CSW suit */
+      m->s.zlps++;
+      rc = 0;
+    } else if (len < 13) {
       rc = FL_EIO; /* débordement */
     } else {
       uint8_t *c = buf;
       wr32le(c, m->bad_csw ? 0xDEADBEEFu : CSW_SIG);
       if (m->bad_csw) m->bad_csw--;
       wr32le(c + 4, m->tag);
-      wr32le(c + 8, m->expect - m->data_pos);
+      wr32le(c + 8, m->bogus_on && m->expect ? m->bogus_residue : m->expect - m->data_pos);
       c[12] = m->status;
       m->st = ST_CBW;
       rc = 13;
@@ -351,7 +374,7 @@ static int fake_bot_reset(void *ctx) {
     rc = m->fail_err;
   } else {
     m->s.resets++;
-    m->need_reset = m->halt_in = m->halt_out = m->stall_this = false;
+    m->need_reset = m->halt_in = m->halt_out = m->stall_this = m->zlp_pending = false;
     m->st = ST_CBW;
     m->data_len = m->data_pos = m->expect = 0;
   }
@@ -406,7 +429,18 @@ void fake_msc_fail_after(fake_msc *m, unsigned n, int err) {
 }
 void fake_msc_stall_next_data(fake_msc *m) { m->stall_data++; }
 void fake_msc_bad_csw_next(fake_msc *m) { m->bad_csw++; }
-void fake_msc_not_ready(fake_msc *m, unsigned k) { m->not_ready = k; }
+void fake_msc_not_ready(fake_msc *m, unsigned k) { fake_msc_not_ready_sense(m, k, 0x04, 0x01); }
+void fake_msc_not_ready_sense(fake_msc *m, unsigned k, uint8_t asc, uint8_t ascq) {
+  m->not_ready = k;
+  m->nr_asc = asc;
+  m->nr_ascq = ascq;
+}
+void fake_msc_require_start(fake_msc *m) { m->need_start = true; }
+void fake_msc_zlp_before_csw(fake_msc *m, unsigned k) { m->zlp_csw = k; }
+void fake_msc_bogus_residue(fake_msc *m, uint32_t residue) {
+  m->bogus_on = true;
+  m->bogus_residue = residue;
+}
 void fake_msc_sense_next(fake_msc *m, uint8_t key, uint8_t asc, uint8_t ascq) {
   m->sense_armed = true;
   m->next_key = key;

@@ -22,6 +22,10 @@ typedef struct {
   unsigned calls;          /* appels de transport, quels qu'ils soient */
   uint32_t max_read_xfer;  /* plus grande longueur de données d'un READ */
   unsigned violations;     /* appels concurrents détectés (verrou absent côté hôte) */
+  unsigned zlps;           /* paquets de longueur nulle envoyés à la place du CSW */
+  uint8_t start_stop[6];   /* dernier CDB START STOP UNIT reçu */
+  /* Délai (ms) du dernier transfert de chaque phase, par code d'opération de la commande. */
+  unsigned tmo_cbw[256], tmo_data[256], tmo_csw[256];
 } fake_msc_stats;
 
 /* Image ouverte en lecture seule, blocs de 512 octets. */
@@ -40,6 +44,16 @@ void fake_msc_bad_csw_next(fake_msc *m);
 /* Les k prochaines commandes d'accès au support (TUR, READ CAPACITY, READ) échouent
  * avec NOT READY / « becoming ready » (02/04/01). */
 void fake_msc_not_ready(fake_msc *m, unsigned k);
+/* Idem avec un ASC/ASCQ choisi (sens 02/asc/ascq), sans effet de START STOP UNIT. */
+void fake_msc_not_ready_sense(fake_msc *m, unsigned k, uint8_t asc, uint8_t ascq);
+/* Disque arrêté : les commandes d'accès au support échouent avec 02/04/02 (« initializing
+ * command required ») jusqu'à un START STOP UNIT avec START=1 et LOEJ=0. */
+void fake_msc_require_start(fake_msc *m);
+/* Les k prochains CSW sont précédés d'un paquet de longueur nulle (pont bavard). */
+void fake_msc_zlp_before_csw(fake_msc *m, unsigned k);
+/* Pont au résidu fantaisiste : tout CSW d'une commande avec phase de données annonce ce résidu,
+ * alors que toutes les données sont envoyées. */
+void fake_msc_bogus_residue(fake_msc *m, uint32_t residue);
 /* La prochaine commande d'accès au support échoue avec ce sens. */
 void fake_msc_sense_next(fake_msc *m, uint8_t key, uint8_t asc, uint8_t ascq);
 /* Taille de bloc logique (toute valeur non nulle : les valeurs hostiles sont permises). */

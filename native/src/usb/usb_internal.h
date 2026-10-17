@@ -19,7 +19,8 @@ typedef struct {
 /* Horloge réelle (CLOCK_MONOTONIC, nanosleep). */
 extern const fl_usb_clock fl_usb_real_clock;
 
-#define FL_USB_XFER_TIMEOUT_MS 5000u   /* délai par transfert bulk */
+#define FL_USB_XFER_TIMEOUT_MS 5000u   /* délai par transfert bulk (CBW, commandes courtes) */
+#define FL_USB_MEDIA_TIMEOUT_MS 30000u /* données et CSW de READ(10)/(16) et START STOP UNIT */
 #define FL_USB_READY_BUDGET_MS 20000u  /* attente maximale d'un disque « pas prêt » */
 #define FL_USB_READY_POLL_MS 200u      /* intervalle entre deux essais */
 #define FL_USB_MAX_XFER 65536u         /* au plus 64 Kio de données par commande */
@@ -30,14 +31,17 @@ typedef struct {
   fl_usb_clock clk;
   uint8_t lun;
   uint32_t tag;
-  bool dead; /* FL_ENODEV vu : plus rien n'est envoyé */
+  bool dead;           /* FL_ENODEV vu : plus rien n'est envoyé */
+  bool ignore_residue; /* résidu du CSW fantaisiste (heuristique de Linux) : on compte les octets reçus */
 } fl_usb_dev;
 
 enum { FL_BOT_NONE = 0, FL_BOT_IN = 1, FL_BOT_OUT = 2 };
 
 /* Une commande BOT complète (CBW → données → CSW) avec reprise (bot_reset) et un réessai.
  * FL_OK : *status = 0 (succès) ou 1 (échec de commande : REQUEST SENSE à faire),
- * *done = octets de données réellement transférés (<= len, résidu pris en compte).
+ * *done = octets de données réellement transférés (<= len, résidu pris en compte sauf si
+ * u->ignore_residue). Délais : CBW FL_USB_XFER_TIMEOUT_MS ; données et CSW
+ * FL_USB_MEDIA_TIMEOUT_MS pour READ(10)/(16) et START STOP UNIT, FL_USB_XFER_TIMEOUT_MS sinon.
  * Sinon fl_err (FL_ENODEV marque le périphérique mort). */
 int fl_bot_exec(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, void *buf, uint32_t len,
                 uint32_t *done, uint8_t *status);
@@ -47,7 +51,9 @@ uint8_t fl_scsi_build_read(uint64_t lba, uint32_t n, uint8_t cdb[16]);
 
 /* INQUIRY ; FL_ENOTSUP si ce n'est pas un périphérique à accès direct. */
 int fl_scsi_inquiry(fl_usb_dev *u);
-/* TEST UNIT READY, réessayé tant que le disque n'est pas prêt (budget FL_USB_READY_BUDGET_MS). */
+/* TEST UNIT READY, réessayé tant que le disque n'est pas prêt (budget FL_USB_READY_BUDGET_MS).
+ * NOT READY 04/02 (« initializing command required ») : un seul START STOP UNIT (START=1), puis
+ * l'attente reprend. NOT READY 04/03 (intervention manuelle) ou 3A (support absent) : échec immédiat. */
 int fl_scsi_wait_ready(fl_usb_dev *u);
 /* READ CAPACITY(10), puis (16) si 0xFFFFFFFF. Taille de bloc vérifiée. */
 int fl_scsi_read_capacity(fl_usb_dev *u, uint64_t *blocks, uint32_t *block_size);

@@ -66,7 +66,7 @@ static int command(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, v
   return rc != FL_OK ? rc : CHECK;
 }
 
-enum { A_FAIL, A_RETRY, A_WAIT };
+enum { A_FAIL, A_RETRY, A_WAIT, A_START };
 
 static int classify(const sense_t *s, int *err) {
   *err = FL_EIO;
@@ -76,8 +76,11 @@ static int classify(const sense_t *s, int *err) {
     case 0x06: /* UNIT ATTENTION (support changé, remise à zéro…) */
     case 0x0B: /* ABORTED COMMAND */
       return A_RETRY;
-    case 0x02: /* NOT READY ; « support absent » ne se règle pas en attendant */
-      return s->asc == 0x3A ? A_FAIL : A_WAIT;
+    case 0x02: /* NOT READY */
+      if (s->asc == 0x3A) return A_FAIL; /* support absent : ne se règle pas en attendant */
+      if (s->asc == 0x04 && s->ascq == 0x03) return A_FAIL; /* intervention manuelle requise : idem */
+      if (s->asc == 0x04 && s->ascq == 0x02) return A_START; /* « initializing command required » */
+      return A_WAIT;
     case 0x07: /* DATA PROTECT */
       *err = FL_EROFS;
       return A_FAIL;
@@ -86,13 +89,26 @@ static int classify(const sense_t *s, int *err) {
   }
 }
 
+/* START STOP UNIT avec START=1, LOEJ=0, IMMED=0 : demande au disque de démarrer. Aucune donnée
+ * n'est écrite sur le support ; la commande n'est envoyée QU'EN RÉPONSE au sens NOT READY 04/02.
+ * Son issue importe peu (l'attente TEST UNIT READY tranche), sauf un débranchement. */
+static int start_unit(fl_usb_dev *u) {
+  uint8_t cdb[6] = {0x1B, 0x00, 0, 0, 0x01, 0};
+  sense_t s;
+  uint32_t got = 0;
+  int rc = command(u, cdb, sizeof cdb, FL_BOT_NONE, NULL, 0, &got, &s);
+  return rc == FL_ENODEV ? FL_ENODEV : FL_OK;
+}
+
 /* Exécute une commande avec réessais : immédiats (UNIT ATTENTION, transfert court…) au plus
  * FL_USB_QUICK_RETRIES fois, après attente tant que NOT READY, dans FL_USB_READY_BUDGET_MS.
+ * NOT READY 04/02 : un seul START STOP UNIT par appel, puis l'attente reprend.
  * Succès seulement si au moins `need` octets de données sont arrivés. */
 static int run(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, void *buf, uint32_t len, uint32_t need,
                uint32_t *got_out) {
   uint64_t deadline = u->clk.now_ms(u->clk.ctx) + FL_USB_READY_BUDGET_MS;
   int quick = 0;
+  bool started = false;
   for (;;) {
     sense_t s;
     uint32_t got = 0;
@@ -113,6 +129,15 @@ static int run(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, void 
       case A_RETRY:
         if (++quick > FL_USB_QUICK_RETRIES) return FL_EIO;
         continue;
+      case A_START:
+        if (!started) {
+          started = true;
+          rc = start_unit(u);
+          if (rc != FL_OK) return rc; /* FL_ENODEV */
+          continue;
+        }
+        /* déjà envoyé : on attend comme pour tout NOT READY */
+        /* fall through */
       default: {
         uint64_t now = u->clk.now_ms(u->clk.ctx);
         if (now >= deadline) return FL_ETIMEDOUT;

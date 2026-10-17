@@ -28,11 +28,25 @@ static int chk(fl_usb_dev *u, int rc, size_t asked) {
   return rc;
 }
 
-static int t_out(fl_usb_dev *u, const void *buf, size_t len) {
-  return chk(u, u->t.bulk_out(u->t.ctx, buf, len, FL_USB_XFER_TIMEOUT_MS), len);
+static int t_out(fl_usb_dev *u, const void *buf, size_t len, unsigned tmo) {
+  return chk(u, u->t.bulk_out(u->t.ctx, buf, len, tmo), len);
 }
-static int t_in(fl_usb_dev *u, void *buf, size_t len) {
-  return chk(u, u->t.bulk_in(u->t.ctx, buf, len, FL_USB_XFER_TIMEOUT_MS), len);
+static int t_in(fl_usb_dev *u, void *buf, size_t len, unsigned tmo) {
+  return chk(u, u->t.bulk_in(u->t.ctx, buf, len, tmo), len);
+}
+
+/* Délai des phases données et CSW. Un disque lent (rotation, reprise d'erreur interne) peut mettre
+ * bien plus de 5 s à rendre une lecture, et START STOP UNIT (IMMED=0) ne rend son CSW qu'une fois le
+ * disque lancé. Le CBW garde 5 s ; un débranchement (ENODEV, ESHUTDOWN) reste signalé aussitôt. */
+static unsigned phase_timeout(uint8_t op) {
+  switch (op) {
+    case 0x28: /* READ(10) */
+    case 0x88: /* READ(16) */
+    case 0x1B: /* START STOP UNIT */
+      return FL_USB_MEDIA_TIMEOUT_MS;
+    default:
+      return FL_USB_XFER_TIMEOUT_MS;
+  }
 }
 static int t_clear(fl_usb_dev *u, bool in) { return chk(u, u->t.clear_halt(u->t.ctx, in), 0); }
 
@@ -56,13 +70,14 @@ static int bot_once(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, 
   cbw[14] = cdblen;
   memcpy(cbw + 15, cdb, cdblen);
 
-  int rc = t_out(u, cbw, sizeof cbw);
+  unsigned tmo = phase_timeout(cdb[0]);
+  int rc = t_out(u, cbw, sizeof cbw, FL_USB_XFER_TIMEOUT_MS);
   if (rc != CBW_LEN) return rc >= 0 ? soft(FL_EIO, cause) : soft(rc, cause);
 
   /* Phase de données. */
   uint32_t n = 0;
   if (len > 0) {
-    rc = dir == FL_BOT_IN ? t_in(u, buf, len) : t_out(u, buf, len);
+    rc = dir == FL_BOT_IN ? t_in(u, buf, len, tmo) : t_out(u, buf, len, tmo);
     if (rc >= 0) {
       n = (uint32_t)rc;
     } else if (rc == FL_ESTALL) {
@@ -74,25 +89,40 @@ static int bot_once(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, 
     }
   }
 
-  /* CSW ; un blocage à ce stade se lève une fois, puis on relit. */
+  /* CSW. Certains ponts ajoutent un paquet de longueur nulle après les données : il arrive à la
+   * place du CSW, qu'on relit alors une fois (comme usb-storage de Linux). Un blocage à ce stade se
+   * lève une fois, puis on relit. */
   uint8_t csw[CSW_LEN];
-  rc = t_in(u, csw, CSW_LEN);
+  rc = t_in(u, csw, CSW_LEN, tmo);
+  if (rc == 0) rc = t_in(u, csw, CSW_LEN, tmo);
   if (rc == FL_ESTALL) {
     rc = t_clear(u, true);
     if (rc != FL_OK) return soft(rc, cause);
-    rc = t_in(u, csw, CSW_LEN);
+    rc = t_in(u, csw, CSW_LEN, tmo);
   }
   if (rc < 0) return soft(rc, cause);
   if (rc != CSW_LEN) return soft(FL_EIO, cause);
 
   uint32_t residue = rd32le(csw + 8);
   uint8_t st = csw[12];
-  if (rd32le(csw) != CSW_SIG || rd32le(csw + 4) != tag || st > 2 || residue > len) return soft(FL_EIO, cause);
+  if (rd32le(csw) != CSW_SIG || rd32le(csw + 4) != tag || st > 2) return soft(FL_EIO, cause);
   if (st == 2) return soft(FL_EIO, cause); /* erreur de phase */
 
-  /* Données utiles : ce qui a été reçu, borné par ce que le résidu annonce. */
-  uint32_t claimed = len - residue;
-  *done = n < claimed ? n : claimed;
+  /* Heuristique de Linux (usb-storage) : un INQUIRY de 36 octets ou un READ CAPACITY(10) de 8 octets
+   * réussi, reçu en entier, mais avec un résidu non nul, trahit un pont dont le résidu est
+   * fantaisiste. On ne le lit plus jamais : seuls comptent les octets réellement reçus. */
+  if (!u->ignore_residue && st == 0 && residue != 0 && dir == FL_BOT_IN && n == len &&
+      ((cdb[0] == 0x12 && len == 36) || (cdb[0] == 0x25 && len == 8)))
+    u->ignore_residue = true;
+
+  if (u->ignore_residue) {
+    *done = n; /* n <= len (chk) */
+  } else {
+    /* Données utiles : ce qui a été reçu, borné par ce que le résidu annonce. */
+    if (residue > len) return soft(FL_EIO, cause);
+    uint32_t claimed = len - residue;
+    *done = n < claimed ? n : claimed;
+  }
   *status = st;
   return FL_OK;
 }

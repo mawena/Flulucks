@@ -102,6 +102,41 @@ static int pile_hello(fl_bdev *disk, char *out, size_t cap, int64_t *n) {
   return rc;
 }
 
+/* Codes d'opération SCSI qui écrivent (ou modifient) le support : aucun ne doit jamais partir. */
+static const uint8_t OPS_ECRITURE[] = {
+    0x04, /* FORMAT UNIT */           0x07, /* REASSIGN BLOCKS */     0x0A, /* WRITE(6) */
+    0x15, /* MODE SELECT(6) */        0x2A, /* WRITE(10) */           0x2E, /* WRITE AND VERIFY(10) */
+    0x35, /* SYNCHRONIZE CACHE(10) */ 0x3B, /* WRITE BUFFER */        0x3F, /* WRITE LONG(10) */
+    0x41, /* WRITE SAME(10) */        0x42, /* UNMAP */               0x55, /* MODE SELECT(10) */
+    0x89, /* COMPARE AND WRITE */     0x8A, /* WRITE(16) */           0x8E, /* WRITE AND VERIFY(16) */
+    0x91, /* SYNCHRONIZE CACHE(16) */ 0x93, /* WRITE SAME(16) */      0xAA, /* WRITE(12) */
+    0xAE, /* WRITE AND VERIFY(12) */
+};
+
+static unsigned ecritures_vues(const fake_msc_stats *s) {
+  unsigned n = s->writes;
+  for (size_t i = 0; i < sizeof OPS_ECRITURE; i++) n += s->op[OPS_ECRITURE[i]];
+  return n;
+}
+
+/* Commandes reçues hors du jeu de lecture (TUR, REQUEST SENSE, INQUIRY, READ CAPACITY(10)/(16),
+ * READ(10)/(16)) ; START STOP UNIT n'est toléré que si `start_permis`. */
+static unsigned hors_lecture(const fake_msc_stats *s, bool start_permis) {
+  unsigned n = 0;
+  for (unsigned op = 0; op < 256; op++) {
+    switch (op) {
+      case 0x00: case 0x03: case 0x12: case 0x25: case 0x9E: case 0x28: case 0x88:
+        break;
+      case 0x1B:
+        if (!start_permis) n += s->op[op];
+        break;
+      default:
+        n += s->op[op];
+    }
+  }
+  return n;
+}
+
 /* ---------- tests ---------- */
 
 static void test_usb_capacite(void) {
@@ -117,6 +152,8 @@ static void test_usb_capacite(void) {
   TT_ASSERT_EQ(s->op[0x00], 1); /* TEST UNIT READY */
   TT_ASSERT_EQ(s->op[0x25], 1); /* READ CAPACITY(10) */
   TT_ASSERT_EQ(s->op[0x9E], 0); /* pas de READ CAPACITY(16) */
+  TT_ASSERT_EQ(s->op[0x1B], 0); /* disque prêt : jamais de START STOP UNIT */
+  TT_ASSERT_EQ(hors_lecture(s, false), 0);
   fl_bdev_close(d);
   fake_msc_free(m);
 }
@@ -179,6 +216,8 @@ static void test_usb_disque_lent(void) {
   TT_ASSERT_EQ(s->op[0x03], 5); /* un REQUEST SENSE par refus */
   TT_ASSERT_EQ(g_h.sleeps, 5);
   TT_ASSERT(g_h.now < FL_USB_READY_BUDGET_MS);
+  TT_ASSERT_EQ(s->op[0x1B], 0); /* 04/01 « becoming ready » : on attend, sans START */
+  TT_ASSERT_EQ(hors_lecture(s, false), 0);
   fl_bdev_close(d);
   fake_msc_free(m);
 }
@@ -192,6 +231,197 @@ static void test_usb_disque_jamais_pret(void) {
   TT_ASSERT(d == NULL);
   TT_ASSERT(g_h.now >= FL_USB_READY_BUDGET_MS);
   TT_ASSERT(g_h.now <= FL_USB_READY_BUDGET_MS + FL_USB_READY_POLL_MS);
+  TT_ASSERT_EQ(fake_msc_stats_get(m)->op[0x1B], 0);
+  fake_msc_free(m);
+}
+
+/* Disque arrêté (02/04/02) : un START STOP UNIT (START=1, LOEJ=0, IMMED=0), puis l'ouverture réussit. */
+static void test_usb_demarrage(void) {
+  const char *img = "gpt-luks2.img";
+  fake_msc *m = faux(img);
+  TT_ASSERT(m != NULL);
+  fake_msc_require_start(m);
+  fl_bdev *d = NULL;
+  TT_ASSERT_EQ(ouvrir_usb(m, true, &d), FL_OK);
+  fake_msc_stats *s = fake_msc_stats_get(m);
+  TT_ASSERT_EQ(s->op[0x1B], 1);
+  TT_ASSERT_EQ(s->start_stop[0], 0x1B);
+  TT_ASSERT_EQ(s->start_stop[1] & 0x01, 0); /* IMMED=0 */
+  TT_ASSERT_EQ(s->start_stop[4], 0x01);     /* START=1, LOEJ=0 */
+  TT_ASSERT_EQ(s->op[0x00], 2);             /* TUR refusé, START, TUR accepté */
+  TT_ASSERT_EQ(d->sector_count, taille(img) / 512);
+  uint8_t a[4096], b[4096];
+  TT_ASSERT_EQ(fl_bdev_read(d, 0, 8, a), FL_OK);
+  TT_ASSERT_EQ(lire_ref(img, 0, sizeof b, b), 0);
+  TT_ASSERT_MEM_EQ(a, b, sizeof a);
+  TT_ASSERT_EQ(ecritures_vues(s), 0);
+  TT_ASSERT_EQ(hors_lecture(s, true), 0);
+  fl_bdev_close(d);
+  fake_msc_free(m);
+
+  /* START sans effet : envoyé UNE seule fois, puis attente ordinaire jusqu'au délai. */
+  m = faux(img);
+  TT_ASSERT(m != NULL);
+  fake_msc_not_ready_sense(m, 1000000, 0x04, 0x02);
+  d = (fl_bdev *)1;
+  TT_ASSERT_EQ(ouvrir_usb(m, true, &d), FL_ETIMEDOUT);
+  TT_ASSERT(d == NULL);
+  s = fake_msc_stats_get(m);
+  TT_ASSERT_EQ(s->op[0x1B], 1);
+  TT_ASSERT(g_h.now >= FL_USB_READY_BUDGET_MS);
+  TT_ASSERT_EQ(ecritures_vues(s), 0);
+  TT_ASSERT_EQ(hors_lecture(s, true), 0);
+  fake_msc_free(m);
+}
+
+/* 02/04/03 « intervention manuelle requise » : échec immédiat, sans attente ni START. */
+static void test_usb_intervention_manuelle(void) {
+  fake_msc *m = faux("gpt-luks2.img");
+  TT_ASSERT(m != NULL);
+  fake_msc_not_ready_sense(m, 1000000, 0x04, 0x03);
+  fl_bdev *d = (fl_bdev *)1;
+  TT_ASSERT_EQ(ouvrir_usb(m, true, &d), FL_EIO);
+  TT_ASSERT(d == NULL);
+  TT_ASSERT_EQ(g_h.sleeps, 0);
+  TT_ASSERT_EQ(g_h.now, 0);
+  fake_msc_stats *s = fake_msc_stats_get(m);
+  TT_ASSERT_EQ(s->op[0x00], 1);
+  TT_ASSERT_EQ(s->op[0x1B], 0);
+  TT_ASSERT_EQ(ecritures_vues(s), 0);
+  TT_ASSERT_EQ(hors_lecture(s, false), 0);
+  fake_msc_free(m);
+}
+
+/* Paquet de longueur nulle à la place du CSW : relu une fois, sans reprise. */
+static void test_usb_csw_paquet_vide(void) {
+  const char *img = "gpt-luks2.img";
+  fake_msc *m = faux(img);
+  TT_ASSERT(m != NULL);
+  fake_msc_zlp_before_csw(m, 3); /* INQUIRY, TUR, READ CAPACITY */
+  fl_bdev *d = NULL;
+  TT_ASSERT_EQ(ouvrir_usb(m, true, &d), FL_OK);
+  fake_msc_stats *s = fake_msc_stats_get(m);
+  TT_ASSERT_EQ(s->zlps, 3);
+  TT_ASSERT_EQ(s->resets, 0);
+  static uint8_t a[64 * KIB], b[64 * KIB];
+  fake_msc_reset_stats(m);
+  fake_msc_zlp_before_csw(m, 1);
+  TT_ASSERT_EQ(fl_bdev_read(d, 2048, 128, a), FL_OK);
+  TT_ASSERT_EQ(lire_ref(img, 2048ull * 512, sizeof b, b), 0);
+  TT_ASSERT_MEM_EQ(a, b, sizeof a);
+  TT_ASSERT_EQ(s->zlps, 1);
+  TT_ASSERT_EQ(s->resets, 0);
+  TT_ASSERT_EQ(s->op[0x28], 1);
+  TT_ASSERT_EQ(ecritures_vues(s), 0);
+  fl_bdev_close(d);
+  fake_msc_free(m);
+}
+
+/* Pont qui annonce un résidu non nul en envoyant toutes les données : détecté sur INQUIRY,
+ * ensuite seuls les octets reçus comptent. */
+static void test_usb_residu_fantaisiste(void) {
+  const char *img = "gpt-luks2.img";
+  static const uint32_t residus[] = {8, 0x10000}; /* plausible, puis plus grand que la demande */
+  static uint8_t a[64 * KIB], b[64 * KIB];
+  TT_ASSERT_EQ(lire_ref(img, 2048ull * 512, sizeof b, b), 0);
+  for (size_t i = 0; i < 2; i++) {
+    fake_msc *m = faux(img);
+    TT_ASSERT(m != NULL);
+    fake_msc_bogus_residue(m, residus[i]);
+    fl_bdev *d = NULL;
+    TT_ASSERT_EQ(ouvrir_usb(m, true, &d), FL_OK);
+    TT_ASSERT_EQ(d->sector_count, taille(img) / 512);
+    fake_msc_stats *s = fake_msc_stats_get(m);
+    TT_ASSERT_EQ(s->op[0x25], 1); /* READ CAPACITY(10) accepté du premier coup */
+    TT_ASSERT_EQ(s->resets, 0);
+    fake_msc_reset_stats(m);
+    memset(a, 0, sizeof a);
+    TT_ASSERT_EQ(fl_bdev_read(d, 2048, 128, a), FL_OK);
+    TT_ASSERT_MEM_EQ(a, b, sizeof a);
+    TT_ASSERT_EQ(s->op[0x28], 1);
+    TT_ASSERT_EQ(ecritures_vues(s), 0);
+    TT_ASSERT_EQ(hors_lecture(s, false), 0);
+    fl_bdev_close(d);
+    fake_msc_free(m);
+  }
+}
+
+/* Au niveau BOT : l'heuristique ne se déclenche que sur un INQUIRY(36) ou READ CAPACITY(10)
+ * complet, réussi, au résidu non nul. */
+static void test_usb_residu_heuristique(void) {
+  fake_msc *m = faux("gpt-luks2.img");
+  TT_ASSERT(m != NULL);
+  fl_usb_dev u;
+  memset(&u, 0, sizeof u);
+  u.t = *fake_msc_transport(m);
+  u.clk = g_clk;
+  uint8_t inq[6] = {0x12, 0, 0, 0, 36, 0}, rc10[10] = {0x25}, r[36];
+  uint32_t done = 0;
+  uint8_t st = 0;
+  /* périphérique honnête : rien ne change */
+  TT_ASSERT_EQ(fl_bot_exec(&u, inq, sizeof inq, FL_BOT_IN, r, sizeof r, &done, &st), FL_OK);
+  TT_ASSERT_EQ(done, 36);
+  TT_ASSERT(!u.ignore_residue);
+  /* un READ CAPACITY(10) suffit aussi à le détecter */
+  fake_msc_bogus_residue(m, 8);
+  TT_ASSERT_EQ(fl_bot_exec(&u, rc10, sizeof rc10, FL_BOT_IN, r, 8, &done, &st), FL_OK);
+  TT_ASSERT_EQ(st, 0);
+  TT_ASSERT_EQ(done, 8);
+  TT_ASSERT(u.ignore_residue);
+  fake_msc_free(m);
+
+  /* INQUIRY d'une autre longueur : pas de détection, le résidu est respecté */
+  m = faux("gpt-luks2.img");
+  TT_ASSERT(m != NULL);
+  memset(&u, 0, sizeof u);
+  u.t = *fake_msc_transport(m);
+  u.clk = g_clk;
+  fake_msc_bogus_residue(m, 4);
+  inq[4] = 32;
+  TT_ASSERT_EQ(fl_bot_exec(&u, inq, sizeof inq, FL_BOT_IN, r, 32, &done, &st), FL_OK);
+  TT_ASSERT_EQ(done, 28);
+  TT_ASSERT(!u.ignore_residue);
+  fake_msc_free(m);
+}
+
+/* Délais : CBW 5 s ; données et CSW 30 s pour READ(10)/(16), 5 s pour les autres commandes. */
+static void test_usb_delais_par_phase(void) {
+  fake_msc *m = faux("gpt-luks2.img");
+  TT_ASSERT(m != NULL);
+  fl_bdev *d = NULL;
+  TT_ASSERT_EQ(ouvrir_usb(m, true, &d), FL_OK);
+  uint8_t a[512];
+  TT_ASSERT_EQ(fl_bdev_read(d, 0, 1, a), FL_OK);
+  fake_msc_stats *s = fake_msc_stats_get(m);
+  TT_ASSERT_EQ(s->tmo_cbw[0x28], FL_USB_XFER_TIMEOUT_MS);
+  TT_ASSERT_EQ(s->tmo_data[0x28], FL_USB_MEDIA_TIMEOUT_MS);
+  TT_ASSERT_EQ(s->tmo_csw[0x28], FL_USB_MEDIA_TIMEOUT_MS);
+  TT_ASSERT_EQ(s->tmo_cbw[0x12], FL_USB_XFER_TIMEOUT_MS);
+  TT_ASSERT_EQ(s->tmo_data[0x12], FL_USB_XFER_TIMEOUT_MS);
+  TT_ASSERT_EQ(s->tmo_csw[0x12], FL_USB_XFER_TIMEOUT_MS);
+  TT_ASSERT_EQ(s->tmo_csw[0x00], FL_USB_XFER_TIMEOUT_MS);
+  TT_ASSERT_EQ(s->tmo_data[0x25], FL_USB_XFER_TIMEOUT_MS);
+  TT_ASSERT_EQ(FL_USB_XFER_TIMEOUT_MS, 5000u);
+  TT_ASSERT_EQ(FL_USB_MEDIA_TIMEOUT_MS, 30000u);
+  fl_bdev_close(d);
+
+  /* READ(16), envoyé directement */
+  fl_usb_dev u;
+  memset(&u, 0, sizeof u);
+  u.t = *fake_msc_transport(m);
+  u.clk = g_clk;
+  uint8_t c16[16];
+  TT_ASSERT_EQ(fl_scsi_build_read(0x100000000ull, 1, c16), 16);
+  memset(c16 + 2, 0, 8); /* LBA 0 en READ(16) */
+  uint32_t done = 0;
+  uint8_t st = 0;
+  TT_ASSERT_EQ(fl_bot_exec(&u, c16, 16, FL_BOT_IN, a, sizeof a, &done, &st), FL_OK);
+  TT_ASSERT_EQ(st, 0);
+  TT_ASSERT_EQ(done, 512);
+  TT_ASSERT_EQ(s->tmo_cbw[0x88], FL_USB_XFER_TIMEOUT_MS);
+  TT_ASSERT_EQ(s->tmo_data[0x88], FL_USB_MEDIA_TIMEOUT_MS);
+  TT_ASSERT_EQ(s->tmo_csw[0x88], FL_USB_MEDIA_TIMEOUT_MS);
+  TT_ASSERT_EQ(ecritures_vues(s), 0);
   fake_msc_free(m);
 }
 
@@ -363,6 +593,8 @@ static void test_usb_pile_complete(void) {
   TT_ASSERT_EQ(n, 16);
   TT_ASSERT_MEM_EQ(buf, "Bonjour FluLuks\n", 16);
   TT_ASSERT_EQ(fake_msc_stats_get(m)->writes, 0);
+  TT_ASSERT_EQ(ecritures_vues(fake_msc_stats_get(m)), 0);
+  TT_ASSERT_EQ(hors_lecture(fake_msc_stats_get(m), false), 0);
   fl_bdev_close(d);
   fake_msc_free(m);
 }
@@ -521,6 +753,12 @@ int main(void) {
   TT_RUN(test_usb_lecture_identique);
   TT_RUN(test_usb_disque_lent);
   TT_RUN(test_usb_disque_jamais_pret);
+  TT_RUN(test_usb_demarrage);
+  TT_RUN(test_usb_intervention_manuelle);
+  TT_RUN(test_usb_csw_paquet_vide);
+  TT_RUN(test_usb_residu_fantaisiste);
+  TT_RUN(test_usb_residu_heuristique);
+  TT_RUN(test_usb_delais_par_phase);
   TT_RUN(test_usb_blocage);
   TT_RUN(test_usb_csw_invalide);
   TT_RUN(test_usb_disparition);
