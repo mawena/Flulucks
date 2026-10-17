@@ -29,6 +29,22 @@ dans le même commit que le travail.
       cache de blocs, service au premier plan, DocumentsProvider en lecture, écrans Disques et
       Déverrouillage, essai sur clé sacrifiée puis sur le vrai disque en lecture)*
 - [ ] Version `v0.1.0` (branche `release/0.1.0` → `main`)
+- Reports de la phase 1 à intégrer au plan de la phase 2 (revue finale) :
+  - [ ] **En premier :** remplacer `explicit_bzero` par un `fl_memzero` portable (Bionic ne l'a qu'à partir
+        de l'API 28, la spec vise minSdk 26) et corriger la contrainte globale du plan.
+  - [ ] Gardes `extern "C"` dans les en-têtes publics (JNI).
+  - [ ] `make_fixtures.sh` : la garde anti-`rm -rf` bloque la régénération après un échec (marqueur posé
+        au début) ; aligner la version cmake du README (3.20).
+  - [ ] Mesurer le déverrouillage sur le téléphone en build natif Release (4,4 s sur PC ; 53 s en Debug+ASan).
+  - [ ] Vérifier la mémoire disponible avant un Argon2 gourmand ; rappel de progression / annulation.
+  - [ ] `fl_probe` : signaler LUKS2 quand seul l'en-tête secondaire est valide (aujourd'hui seul le CLI
+        contourne).
+  - [ ] Disques à secteurs logiques de 4096 (certains boîtiers USB) : message clair ou lecture-modification-écriture.
+  - [ ] Noms de 255 octets non ouvrables (bug lwext4) ; extents non écrits et lectures à cheval trou/données
+        à tester ; `MAX_DIR_STEPS` sous verrou global trop grand ; liens symboliques (politique du provider).
+  - [ ] JNI : noms de fichiers en `byte[]` (pas `NewStringUTF`, emoji), phrase de passe en `byte[]` ;
+        `abiFilters` arm64-v8a (+ x86_64 émulateur) ; natif compilé en -O2.
+  - [ ] Tests manquants : GPT hostile, 4K, surrogates, boucle EBR, sha512, corruptions LUKS1, label LUKS2.
 
 ### Phase 3 — ext4 en écriture
 - [ ] Plan de la phase 3 écrit
