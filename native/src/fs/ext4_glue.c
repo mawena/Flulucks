@@ -35,7 +35,7 @@ static uint32_t g_counter; /* protégé par g_lock */
 
 #define MP_CAP 24                 /* "/fl4294967295/" + NUL tient largement */
 #define FULL_CAP (MP_CAP + 4096)  /* point de montage + chemin validé (≤ 4095 octets) */
-#define MAX_DIR_STEPS (1u << 24)  /* garde-fou contre un dossier hostile interminable */
+#define MAX_DIR_STEPS (1u << 24)  /* entrées ignorées consécutives au plus avant FL_ECORRUPT */
 
 typedef struct {
   struct ext4_blockdev bd;
@@ -222,7 +222,8 @@ static int e_stat(fl_fs *fs, const char *path, fl_stat *out) {
   return FL_OK;
 }
 
-/* Entrée suivante utilisable (sous g_lock). FL_OK et *fin = true en fin de dossier. */
+/* Entrée suivante utilisable (sous g_lock). FL_OK et *fin = true en fin de dossier.
+ * Plus de MAX_DIR_STEPS entrées ignorées d'affilée → FL_ECORRUPT. */
 static int next_entry(ext4_vol *v, ext4_dir *d, fl_dirent *e, bool *fin) {
   for (uint32_t steps = 0; steps < MAX_DIR_STEPS; steps++) {
     const ext4_direntry *de = NULL;
@@ -304,7 +305,11 @@ static int e_open(fl_fs *fs, const char *path, int flags, fl_file **out) {
     else if (t != EXT4_INODE_MODE_FILE) rc = FL_ENOTSUP; /* pas de suivi de lien en phase 1 */
   }
   if (rc == FL_OK) rc = map_err(ext4_fopen2(&h->f, full, O_RDONLY));
-  if (rc == FL_OK) v->open_files++;
+  if (rc == FL_OK) {
+    uint64_t sz = ext4_fsize(&h->f);
+    h->size = sz < v->max_bytes ? sz : v->max_bytes;
+    v->open_files++;
+  }
   pthread_mutex_unlock(&g_lock);
 
   if (rc != FL_OK) {
@@ -312,7 +317,6 @@ static int e_open(fl_fs *fs, const char *path, int flags, fl_file **out) {
     free(h);
     return rc;
   }
-  h->size = ext4_fsize(&h->f) < v->max_bytes ? ext4_fsize(&h->f) : v->max_bytes;
   f->fs = fs;
   f->flags = flags;
   f->priv = h;
