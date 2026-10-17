@@ -27,6 +27,7 @@ set(FL_SOURCES
   src/part/gpt.c
   src/part/mbr.c
   src/part/partition.c
+  src/probe/probe.c
 )
 
 add_library(fluluks STATIC ${FL_SOURCES})
@@ -61,4 +62,5 @@ if(FL_TESTS)
   fl_add_test(test_error)
   fl_add_test(test_blockdev)
   fl_add_test(test_partition)
+  fl_add_test(test_probe)
 endif()
