@@ -22,10 +22,13 @@ void fl_json_reset(fl_json *j) {
   j->comma = false;
 }
 
+void fl_json_set_max(fl_json *j, size_t max) { j->max = max > FL_JSON_MAX ? FL_JSON_MAX : max; }
+
 /* Réserve n octets (+ NUL final). */
 static bool reserve(fl_json *j, size_t n) {
   if (j->err) return false;
-  if (n > FL_JSON_MAX || j->len > FL_JSON_MAX - n) {
+  size_t lim = j->max ? j->max : FL_JSON_MAX;
+  if (n > lim || j->len > lim - n) {
     j->err = FL_ENOMEM;
     return false;
   }

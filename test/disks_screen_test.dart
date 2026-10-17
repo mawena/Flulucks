@@ -69,6 +69,30 @@ void main() {
     expect(api.permissionRequests, ['d1']);
   });
 
+  testWidgets("erreur fixe sans permission : pas d'Autoriser l'accès", (tester) async {
+    final api = FakeHostApi()
+      ..disks = [
+        DiskMsg(
+            id: 'd1', name: 'X', sizeBytes: 1, hasPermission: false,
+            error: "Ce boîtier USB n'est pas pris en charge (UAS seulement)", partitions: [])
+      ];
+    await pump(tester, api);
+    expect(find.text("Ce boîtier USB n'est pas pris en charge (UAS seulement)"), findsOneWidget);
+    expect(find.text("Autoriser l'accès"), findsNothing);
+    expect(find.text('Analyse du disque…'), findsNothing);
+    expect(api.permissionRequests, isEmpty);
+  });
+
+  testWidgets('disque en cours d\'analyse : « Analyse du disque… »', (tester) async {
+    await pump(
+      tester,
+      FakeHostApi()
+        ..disks = [DiskMsg(id: 'd1', name: 'X', sizeBytes: 0, hasPermission: true, partitions: [])],
+    );
+    expect(find.text('Analyse du disque…'), findsOneWidget);
+    expect(find.text("Autoriser l'accès"), findsNothing);
+  });
+
   testWidgets('avertissement needsRecovery', (tester) async {
     final v = volume()..needsRecovery = true;
     await pump(

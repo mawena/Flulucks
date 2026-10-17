@@ -572,8 +572,9 @@ int fj_list(int64_t vol, const char *path, fl_json *out) {
   if (rc == FL_OK) {
     if (l.n > 1) qsort(l.v, l.n, sizeof *l.v, lent_cmp);
     fl_json_reset(out);
+    fl_json_set_max(out, FL_JSON_LIST_MAX); /* au-delà : FL_ENOMEM, message habituel */
     fl_json_arr_begin(out);
-    for (size_t i = 0; i < l.n; i++) entry_json(out, l.v[i].name, strlen(l.v[i].name), &l.v[i].st);
+    for (size_t i = 0; i < l.n && out->err == FL_OK; i++) entry_json(out, l.v[i].name, strlen(l.v[i].name), &l.v[i].st);
     fl_json_arr_end(out);
     rc = out->err;
   }

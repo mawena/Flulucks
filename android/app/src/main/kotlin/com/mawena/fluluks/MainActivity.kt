@@ -33,6 +33,12 @@ class MainActivity : FlutterActivity() {
         requestNotificationPermission()
     }
 
+    /** Un démarrage du service refusé en arrière-plan est retenté au retour au premier plan. */
+    override fun onResume() {
+        super.onResume()
+        VolumeManager.ensureService()
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         handleUsbIntent(intent)

@@ -9,8 +9,8 @@
  * par U+FFFD, une fois par sous-partie maximale (comme l'algorithme recommandé par Unicode).
  * La sortie est donc toujours de l'UTF-8 valide.
  *
- * En cas d'échec d'allocation ou de dépassement de FL_JSON_MAX, j->err passe à FL_ENOMEM et les
- * écritures suivantes sont ignorées. */
+ * En cas d'échec d'allocation ou de dépassement du plafond (FL_JSON_MAX, ou celui de
+ * fl_json_set_max), j->err passe à FL_ENOMEM et les écritures suivantes sont ignorées. */
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -21,18 +21,23 @@ extern "C" {
 #endif
 
 #define FL_JSON_MAX (64u * 1024u * 1024u)
+/* Plafond dédié de `list` : un dossier énorme rend FL_ENOMEM plutôt qu'un tableau Java géant. */
+#define FL_JSON_LIST_MAX (16u * 1024u * 1024u)
 
 typedef struct {
   char *buf;   /* terminé par NUL quand len > 0 */
   size_t len, cap;
+  size_t max;  /* plafond de len ; 0 = FL_JSON_MAX */
   int err;     /* FL_OK ou FL_ENOMEM */
   bool comma;  /* une virgule doit précéder le prochain élément */
 } fl_json;
 
 void fl_json_init(fl_json *j);
 void fl_json_free(fl_json *j);
-/* Vide le contenu (garde la mémoire) et remet err à FL_OK. */
+/* Vide le contenu (garde la mémoire et le plafond) et remet err à FL_OK. */
 void fl_json_reset(fl_json *j);
+/* Plafond de la sortie, borné à FL_JSON_MAX (0 = FL_JSON_MAX). */
+void fl_json_set_max(fl_json *j, size_t max);
 
 void fl_json_obj_begin(fl_json *j);
 void fl_json_obj_end(fl_json *j);

@@ -96,11 +96,34 @@ static void test_limite(void) {
   fl_json_free(&j);
 }
 
+static void test_limite_dediee(void) {
+  fl_json j;
+  fl_json_init(&j);
+  fl_json_set_max(&j, FL_JSON_LIST_MAX);
+  TT_ASSERT_EQ(j.max, 16u * 1024u * 1024u);
+  static char gros[1u << 20];
+  memset(gros, 'b', sizeof gros);
+  fl_json_arr_begin(&j);
+  int n = 0;
+  for (; n < 70 && j.err == FL_OK; n++) fl_json_str(&j, gros, sizeof gros);
+  TT_ASSERT_EQ(j.err, FL_ENOMEM);
+  TT_ASSERT_EQ(n, 16); /* 15 chaînes de 1 Mio tiennent, la 16e déborde */
+  TT_ASSERT(j.len <= FL_JSON_LIST_MAX);
+  fl_json_error(&j, FL_ENOMEM); /* la réponse d'erreur passe, le plafond reste */
+  TT_ASSERT_EQ(j.err, FL_OK);
+  TT_ASSERT_STR_EQ(j.buf, "{\"err\":-3}");
+  TT_ASSERT_EQ(j.max, FL_JSON_LIST_MAX);
+  fl_json_set_max(&j, (size_t)FL_JSON_MAX * 2); /* borné au plafond global */
+  TT_ASSERT_EQ(j.max, FL_JSON_MAX);
+  fl_json_free(&j);
+}
+
 int main(void) {
   TT_RUN(test_guillemets_et_controle);
   TT_RUN(test_utf8_invalide);
   TT_RUN(test_utf8_valide_conserve);
   TT_RUN(test_structure);
   TT_RUN(test_limite);
+  TT_RUN(test_limite_dediee);
   TT_MAIN_END();
 }

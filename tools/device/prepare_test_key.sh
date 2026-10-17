@@ -73,12 +73,24 @@ SIZE="$(lsblk -bdno SIZE "$DEV" | head -n1 | tr -d ' ')"
 case "$SIZE" in ''|*[!0-9]*) die "taille illisible pour $DEV" ;; esac
 [ "$SIZE" -le "$MAX_BYTES" ] || die "« $DEV » fait $SIZE octets, plus que la limite de $MAX_BYTES (256 Go)"
 
-# Montages / swap : disque et tous ses enfants (récursif).
+# Points de montage du disque et de tous ses enfants, un par ligne (lignes vides comprises).
+# MOUNTPOINTS (util-linux >= 2.37) les donne tous ; sinon repli sur MOUNTPOINT. Échec des deux : code 1.
+list_mountpoints() {
+  local out
+  if out="$(lsblk -nro MOUNTPOINTS "$1" 2>/dev/null)"; then printf '%s\n' "$out" | tr ' ' '\n'; return 0; fi
+  if out="$(lsblk -nro MOUNTPOINT "$1" 2>/dev/null)"; then printf '%s\n' "$out"; return 0; fi
+  return 1
+}
+
+# Montages / swap : disque et tous ses enfants (récursif). Un échec de lsblk n'est jamais avalé.
+MPS="$(list_mountpoints "$DEV")" || die "impossible de lister les points de montage de $DEV (lsblk)"
 while IFS= read -r mp; do
   [ -z "$mp" ] || die "$DEV ou l'une de ses partitions est monté ($mp)"
-done < <(lsblk -nro MOUNTPOINTS "$DEV" 2>/dev/null | tr ' ' '\n')
-if lsblk -nro FSTYPE "$DEV" | grep -qx swap; then die "$DEV contient de l'espace d'échange (swap)"; fi
-for n in $(lsblk -nro NAME "$DEV"); do
+done <<< "$MPS"
+FSTYPES="$(lsblk -nro FSTYPE "$DEV")" || die "impossible de lire les systèmes de fichiers de $DEV (lsblk)"
+if printf '%s\n' "$FSTYPES" | grep -qx swap; then die "$DEV contient de l'espace d'échange (swap)"; fi
+NAMES="$(lsblk -nro NAME "$DEV")" || die "impossible de lister les partitions de $DEV (lsblk)"
+for n in $NAMES; do
   if [ -r /proc/swaps ] && awk 'NR>1{print $1}' /proc/swaps | grep -qx "/dev/$n"; then
     die "/dev/$n est utilisé comme swap"
   fi

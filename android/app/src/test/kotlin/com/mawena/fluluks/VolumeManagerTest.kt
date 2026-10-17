@@ -22,6 +22,7 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
     var openFiles = 0
     val events = mutableListOf<String>()
     var statfsFails = false
+    var label = "MonDisque"
     private var next = 100L
 
     override fun version() = "fake"
@@ -45,7 +46,7 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
         return if (!force && openFiles > 0) EngineError.FL_EBUSY else 0
     }
     override fun statfs(vol: Long) = if (statfsFails) """{"total":""".toByteArray() else
-        """{"total":1000,"free":400,"label":"MonDisque","read_only":true,"ro_reason":"lecture seule","needs_recovery":false}""".toByteArray()
+        """{"total":1000,"free":400,"label":"$label","read_only":true,"ro_reason":"lecture seule","needs_recovery":false}""".toByteArray()
     override fun stat(vol: Long, path: ByteArray) = ByteArray(0)
     override fun list(vol: Long, path: ByteArray) = ByteArray(0)
     override fun openFile(vol: Long, path: ByteArray): Long { openFiles++; return next++ }
@@ -108,8 +109,47 @@ class VolumeManagerTest {
         assertTrue(engine.events.isEmpty())
     }
 
-    @Test fun titleIsFilesystemLabelThenPartitionIndex() = runBlocking {
+    @Test fun titleIsFilesystemLabelThenDiskSize() = runBlocking {
         assertEquals("MonDisque", VolumeManager.unlock(disk, 1, "secret".toByteArray()).title)
+        engine.label = "  "
+        assertEquals("Disque 0,3 Mo", VolumeManager.mountPlain(disk, 2).title) // partition de 262 144 octets
+        assertEquals("Disque 512,1 Go", VolumeManager.defaultTitle("", 512_110_190_592))
+        assertEquals("Photos", VolumeManager.defaultTitle("Photos", 512_110_190_592))
+    }
+
+    /** Mêmes valeurs que Fr.humanSize (Dart, test/disks_screen_test.dart). */
+    @Test fun humanSizeMatchesDartRule() {
+        assertEquals("taille inconnue", VolumeManager.humanSize(-1))
+        assertEquals("1,5 Go", VolumeManager.humanSize(1_500_000_000))
+        assertEquals("250,0 Mo", VolumeManager.humanSize(250_000_000))
+        assertEquals("2,0 Go", VolumeManager.humanSize(2_000_000_000))
+        assertEquals("0,0 Mo", VolumeManager.humanSize(0))
+        assertEquals("1,0 Go", VolumeManager.humanSize(1_000_000_000))
+        assertEquals("1000,0 Mo", VolumeManager.humanSize(999_999_999))
+        assertEquals("512,1 Go", VolumeManager.humanSize(512_110_190_592))
+        assertEquals("9223372036,9 Go", VolumeManager.humanSize(Long.MAX_VALUE))
+    }
+
+    @Test fun serviceRetriedWhileVolumesOpenAndNotRunning() = runBlocking {
+        var running = false
+        var starts = 0
+        VolumeManager.setServiceHooksForTests({ running }, { starts++ })
+        VolumeManager.ensureService()
+        assertEquals(0, starts) // aucun volume : rien à protéger
+        val v = VolumeManager.unlock(disk, 1, "secret".toByteArray())
+        assertEquals(1, starts) // publication des volumes
+        VolumeManager.ensureService() // ex. MainActivity.onResume après un refus en arrière-plan
+        assertEquals(2, starts)
+        running = true
+        VolumeManager.ensureService()
+        VolumeManager.mountPlain(disk, 2)
+        assertEquals(2, starts) // service en route : idempotent
+        running = false
+        VolumeManager.eject(v.id)
+        assertEquals(3, starts) // il reste un volume ouvert
+        VolumeManager.ejectAll()
+        VolumeManager.ensureService()
+        assertEquals(3, starts)
     }
 
     @Test fun statfsFailureUnmountsHandle() = runBlocking {

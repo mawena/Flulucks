@@ -137,6 +137,7 @@ static void test_lecture_plain(void) {
   cJSON *r = json_de(fj_list(v, "/", &j), &j);
   TT_ASSERT(r != NULL);
   TT_ASSERT(cJSON_IsArray(r));
+  TT_ASSERT_EQ(j.max, FL_JSON_LIST_MAX); /* plafond dédié de list */
   int vu_hello = 0, vu_emoji = 0;
   const char *prec = "";
   for (cJSON *e = r->child; e; e = e->next) {

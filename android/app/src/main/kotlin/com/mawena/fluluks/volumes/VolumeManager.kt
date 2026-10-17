@@ -24,6 +24,8 @@ import com.mawena.fluluks.engine.VolumeStat
 import com.mawena.fluluks.service.VolumeService
 import com.mawena.fluluks.usb.UsbDisks
 import org.json.JSONException
+import java.math.BigDecimal
+import java.math.RoundingMode
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
 import java.util.concurrent.ExecutorService
@@ -65,6 +67,10 @@ object VolumeManager {
     private val dispatcher get() = exec.asCoroutineDispatcher()
 
     @Volatile private var availMem: () -> Long = { Long.MAX_VALUE }
+
+    /** Service au premier plan : état et démarrage, injectables pour les tests JVM. */
+    @Volatile private var serviceRunning: () -> Boolean = { VolumeService.running }
+    @Volatile private var serviceStarter: (() -> Unit)? = null
     @Volatile private var appContext: Context? = null
     @Volatile private var usbManager: UsbManager? = null
 
@@ -167,6 +173,13 @@ object VolumeManager {
         diskEntries.clear(); mounts.clear(); mountOrder.clear()
         counter.set(0); imageCounter.set(0); sessionToken = newSessionToken()
         _disks.value = emptyList(); _volumes.value = emptyList()
+        serviceRunning = { false }; serviceStarter = null
+    }
+
+    /** Remplace l'observation et le démarrage du service au premier plan (tests JVM). */
+    @VisibleForTesting
+    fun setServiceHooksForTests(running: () -> Boolean, start: () -> Unit) {
+        serviceRunning = running; serviceStarter = start
     }
 
     // ---------------------------------------------------------------- USB
@@ -232,6 +245,10 @@ object VolumeManager {
             publishDisks(); return
         }
         conn.setInterface(bot.intf)
+        // L'ouverture (jusqu'à 20 s pour un disque lent à démarrer) puis l'analyse prennent du temps :
+        // l'interface affiche « Analyse du disque… » en attendant.
+        entry.state = DiskState(id, name, 0, true, null, null)
+        publishDisks()
         val h = engine.openUsb(conn.fileDescriptor, bot.intf.id, bot.epIn.address, bot.epOut.address)
         if (h < 0) {
             conn.releaseInterface(bot.intf); conn.close()
@@ -304,7 +321,7 @@ object VolumeManager {
             } catch (t: Throwable) {
                 engine.unmount(vol, true); throw t // la poignée ne doit jamais fuir
             }
-            val title = stat.label.ifBlank { "Partition $partIndex" } // les index GPT/MBR sont déjà 1-based
+            val title = defaultTitle(stat.label, part.sizeBytes)
             val state = VolumeState(
                 id = "v" + sessionToken + "-" + counter.incrementAndGet(), diskId = diskId, partIndex = partIndex, title = title,
                 totalBytes = stat.totalBytes, freeBytes = stat.freeBytes,
@@ -334,6 +351,22 @@ object VolumeManager {
         mountOrder.remove(volumeId)
         val rc = engine.unmount(m.handle, true) // éjection = toujours de force
         if (rc < 0) Log.w(TAG, "unmount($volumeId) : code $rc")
+    }
+
+    /** Titre d'un volume : son étiquette, sinon « Disque <taille> » (taille de la partition). */
+    internal fun defaultTitle(label: String, sizeBytes: Long): String =
+        label.ifBlank { "Disque " + humanSize(sizeBytes) }
+
+    /**
+     * Taille décimale en Go ou Mo, virgule française, une décimale (ex. « 512,1 Go ») : même règle que
+     * Fr.humanSize côté Dart (division en double, puis arrondi exact à une décimale, moitié vers le haut).
+     */
+    fun humanSize(bytes: Long): String {
+        if (bytes < 0) return "taille inconnue" // disque hostile : u64 > 2^63
+        val isGo = bytes >= 1_000_000_000L
+        val value = bytes / (if (isGo) 1e9 else 1e6)
+        val text = BigDecimal(value).setScale(1, RoundingMode.HALF_UP).toPlainString().replace('.', ',')
+        return "$text ${if (isGo) "Go" else "Mo"}"
     }
 
     fun volume(id: String): VolumeState? = mounts[id]?.state
@@ -373,21 +406,30 @@ object VolumeManager {
     }
 
     private fun publishVolumes() {
-        val before = _volumes.value.size
         val list = mountOrder.mapNotNull { mounts[it]?.state }
         _volumes.value = list
+        ensureService()
         val ctx = appContext ?: return
-        if (before == 0 && list.isNotEmpty()) {
-            try {
-                ContextCompat.startForegroundService(ctx, Intent(ctx, VolumeService::class.java))
-            } catch (e: Exception) { // ex. démarrage interdit en arrière-plan : les volumes restent ouverts
-                Log.w(TAG, "service non démarré : ${e.javaClass.simpleName}")
-            }
-        }
         try {
             ctx.contentResolver.notifyChange(DocumentsContract.buildRootsUri(AUTHORITY), null)
         } catch (e: Exception) {
             Log.w(TAG, "notifyChange : ${e.javaClass.simpleName}")
+        }
+    }
+
+    /**
+     * Démarre le service au premier plan si des volumes sont ouverts et qu'il ne tourne pas. Idempotent.
+     * Appelé à chaque publication des volumes et depuis MainActivity.onResume : un démarrage refusé
+     * (application en arrière-plan) est ainsi retenté dès que c'est de nouveau possible.
+     */
+    fun ensureService() {
+        if (_volumes.value.isEmpty() || serviceRunning()) return
+        serviceStarter?.let { it(); return }
+        val ctx = appContext ?: return
+        try {
+            ContextCompat.startForegroundService(ctx, Intent(ctx, VolumeService::class.java))
+        } catch (e: Exception) { // ex. démarrage interdit en arrière-plan : les volumes restent ouverts
+            Log.w(TAG, "service non démarré : ${e.javaClass.simpleName}")
         }
     }
 

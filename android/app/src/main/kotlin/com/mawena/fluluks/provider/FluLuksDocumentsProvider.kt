@@ -45,8 +45,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         val cursor = MatrixCursor(cols)
         val disks = VolumeManager.disks.value
         for (v in VolumeManager.volumes.value) {
-            val encrypted = disks.firstOrNull { it.id == v.diskId }
-                ?.scan?.parts?.firstOrNull { it.index == v.partIndex }?.encrypted == true
+            val part = disks.firstOrNull { it.id == v.diskId }?.scan?.parts?.firstOrNull { it.index == v.partIndex }
             val row = cursor.newRow()
             for (c in cols) {
                 when (c) {
@@ -54,7 +53,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
                     Root.COLUMN_FLAGS -> row.add(c, Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_IS_CHILD)
                     Root.COLUMN_ICON -> row.add(c, R.drawable.ic_disk)
                     Root.COLUMN_TITLE -> row.add(c, v.title)
-                    Root.COLUMN_SUMMARY -> row.add(c, if (encrypted) "Chiffré (LUKS2) — lecture seule" else "Lecture seule")
+                    Root.COLUMN_SUMMARY -> row.add(c, RootSummary.of(part))
                     Root.COLUMN_DOCUMENT_ID -> row.add(c, DocumentIds.encode(v.id, "/"))
                     Root.COLUMN_AVAILABLE_BYTES -> row.add(c, v.freeBytes)
                     Root.COLUMN_CAPACITY_BYTES -> row.add(c, v.totalBytes)
@@ -174,6 +173,9 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
     } catch (e: Exception) {
         Log.w(TAG, "$op : ${e.javaClass.simpleName}")
         throw FileNotFoundException("Erreur interne du fournisseur")
+    } catch (e: OutOfMemoryError) { // dossier énorme : l'erreur va au client, le processus survit
+        Log.w(TAG, "$op : mémoire insuffisante")
+        throw FileNotFoundException(OUT_OF_MEMORY)
     }
 
     /** Rappel de lecture d'un fichier ; exécuté sur le fil partagé "fluluks-io", donc sérialisé. */
@@ -227,6 +229,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
     companion object {
         private const val TAG = "FluLuksProvider"
         private const val VOLUME_CLOSED = "Volume fermé"
+        private const val OUT_OF_MEMORY = "Mémoire insuffisante"
         private const val CHUNK = 128 * 1024
 
         private val ioHandler: Handler by lazy { Handler(HandlerThread("fluluks-io").also { it.start() }.looper) }

@@ -59,7 +59,8 @@ class _DiskCard extends StatelessWidget {
             Text(Fr.humanSize(disk.sizeBytes), style: theme.textTheme.bodySmall),
             if (disk.error != null)
               Text(disk.error!, style: TextStyle(color: theme.colorScheme.error)),
-            if (!disk.hasPermission)
+            // Une erreur fixe (UAS seul, interface occupée…) ne se règle pas en accordant l'accès.
+            if (!disk.hasPermission && disk.error == null)
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: FilledButton(
