@@ -15,6 +15,11 @@ class DocumentIdsTest {
         assertEquals("v1" to "/a:b", DocumentIds.decode("v1:/a:b")) // seul le premier « : » sépare
     }
 
+    @Test fun sessionVolumeIdFormat() {
+        val id = "v0123456789abcdef-12"
+        assertEquals(id to "/x", DocumentIds.decode(DocumentIds.encode(id, "/x")))
+    }
+
     @Test fun rejectsMalformed() {
         for (bad in listOf(
             "v1:../x", "v1:relatif", "v1:/a//b", "pasdedeuxpoints", "", ":/x", "v1:", "v1:/a/../b",

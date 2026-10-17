@@ -15,6 +15,7 @@ import android.provider.DocumentsContract
 import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.core.content.ContextCompat
+import com.mawena.fluluks.provider.DocumentIds
 import com.mawena.fluluks.engine.Engine
 import com.mawena.fluluks.engine.EngineError
 import com.mawena.fluluks.engine.NativeEngine
@@ -90,6 +91,25 @@ object VolumeManager {
     private val mounts = ConcurrentHashMap<String, MountEntry>()
     private val mountOrder = ArrayList<String>() // exécuteur seulement
     private val counter = AtomicInteger(0)
+
+    /**
+     * Jeton de session : 64 bits aléatoires, propres à ce processus. Les identifiants de volume en
+     * dépendent, donc un identifiant de document gardé d'un processus précédent (autorisation
+     * persistante) ne peut jamais désigner un autre disque. Des identifiants stables (UUID LUKS +
+     * partition) sont une décision volontairement reportée à une phase ultérieure.
+     */
+    @Volatile private var sessionToken: String = newSessionToken()
+
+    private fun newSessionToken(): String {
+        val b = ByteArray(8).also { java.security.SecureRandom().nextBytes(it) }
+        return b.joinToString("") { "%02x".format(it) }
+    }
+
+    /** Simule un redémarrage du processus : nouveau jeton, compteur remis à zéro. */
+    @VisibleForTesting
+    fun newSessionForTests() {
+        sessionToken = newSessionToken(); counter.set(0)
+    }
     private val imageCounter = AtomicInteger(0)
     private var initialized = false
 
@@ -145,7 +165,7 @@ object VolumeManager {
         executorOverride = executor
         this.availMem = availMem
         diskEntries.clear(); mounts.clear(); mountOrder.clear()
-        counter.set(0); imageCounter.set(0)
+        counter.set(0); imageCounter.set(0); sessionToken = newSessionToken()
         _disks.value = emptyList(); _volumes.value = emptyList()
     }
 
@@ -286,7 +306,7 @@ object VolumeManager {
             }
             val title = stat.label.ifBlank { "Partition $partIndex" } // les index GPT/MBR sont déjà 1-based
             val state = VolumeState(
-                id = "v" + counter.incrementAndGet(), diskId = diskId, partIndex = partIndex, title = title,
+                id = "v" + sessionToken + "-" + counter.incrementAndGet(), diskId = diskId, partIndex = partIndex, title = title,
                 totalBytes = stat.totalBytes, freeBytes = stat.freeBytes,
                 needsRecovery = stat.needsRecovery, roReason = stat.roReason,
             )
@@ -310,6 +330,7 @@ object VolumeManager {
 
     private fun unmountLocked(volumeId: String) {
         val m = mounts.remove(volumeId) ?: return
+        notifyVolumeGone(volumeId)
         mountOrder.remove(volumeId)
         val rc = engine.unmount(m.handle, true) // éjection = toujours de force
         if (rc < 0) Log.w(TAG, "unmount($volumeId) : code $rc")
@@ -365,6 +386,18 @@ object VolumeManager {
         }
         try {
             ctx.contentResolver.notifyChange(DocumentsContract.buildRootsUri(AUTHORITY), null)
+        } catch (e: Exception) {
+            Log.w(TAG, "notifyChange : ${e.javaClass.simpleName}")
+        }
+    }
+
+    /** Les vues de dossiers ouvertes sur ce volume se rafraîchissent (leurs curseurs observent cet URI). */
+    private fun notifyVolumeGone(volumeId: String) {
+        val ctx = appContext ?: return
+        try {
+            ctx.contentResolver.notifyChange(
+                DocumentsContract.buildChildDocumentsUri(AUTHORITY, DocumentIds.encode(volumeId, "/")), null,
+            )
         } catch (e: Exception) {
             Log.w(TAG, "notifyChange : ${e.javaClass.simpleName}")
         }

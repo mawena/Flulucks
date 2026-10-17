@@ -2,13 +2,13 @@ package com.mawena.fluluks.provider
 
 import android.database.Cursor
 import android.database.MatrixCursor
-import android.os.Build
 import android.os.CancellationSignal
 import android.os.Handler
 import android.os.HandlerThread
 import android.os.ParcelFileDescriptor
 import android.os.ProxyFileDescriptorCallback
 import android.os.storage.StorageManager
+import android.provider.DocumentsContract
 import android.provider.DocumentsContract.Document
 import android.provider.DocumentsContract.Root
 import android.provider.DocumentsProvider
@@ -57,7 +57,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
                     Root.COLUMN_SUMMARY -> row.add(c, if (encrypted) "Chiffré (LUKS2) — lecture seule" else "Lecture seule")
                     Root.COLUMN_DOCUMENT_ID -> row.add(c, DocumentIds.encode(v.id, "/"))
                     Root.COLUMN_AVAILABLE_BYTES -> row.add(c, v.freeBytes)
-                    CAPACITY_COLUMN -> row.add(c, v.totalBytes)
+                    Root.COLUMN_CAPACITY_BYTES -> row.add(c, v.totalBytes)
                 }
             }
         }
@@ -70,7 +70,10 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         val (vol, path) = resolve(documentId)
         val st = FsStat.parse(NativeEngine.stat(vol.handle, path.toByteArray(Charsets.UTF_8)))
         val cols = docColumns(projection)
-        MatrixCursor(cols).also { addRow(it, cols, documentId!!, if (path == "/") vol.state.title else st.name, st.type, st.size, st.mtime) }
+        MatrixCursor(cols).also {
+            addRow(it, cols, documentId!!, if (path == "/") vol.state.title else st.name, st.type, st.size, st.mtime)
+            observe(it, vol.state.id)
+        }
     }
 
     override fun queryChildDocuments(
@@ -80,14 +83,28 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         val entries = DirEntry.parseList(NativeEngine.list(vol.handle, path.toByteArray(Charsets.UTF_8)))
         val cols = docColumns(projection)
         val cursor = MatrixCursor(cols, entries.size)
+        observe(cursor, vol.state.id)
+        var skipped = 0
         for (e in entries) {
             // un nom du disque qui ne forme pas un identifiant valide n'est pas adressable : on l'omet
             if (e.name.isEmpty() || e.name == "." || e.name == ".." || e.name.indexOf('/') >= 0 || e.name.indexOf('\u0000') >= 0) continue
+            // TODO : identifiants en octets bruts pour les noms non UTF-8 (phase ultérieure). En phase 2 ils
+            // arrivent avec U+FFFD et deux noms distincts pourraient s'aliaser : on les omet.
+            if (e.name.indexOf('\uFFFD') >= 0) { skipped++; continue }
             val id = DocumentIds.encode(vol.state.id, DocumentIds.child(path, e.name))
             if (DocumentIds.decode(id) == null) continue
             addRow(cursor, cols, id, e.name, e.type, e.size, e.mtime)
         }
+        if (skipped > 0) Log.i(TAG, "$skipped nom(s) non UTF-8 omis")
         cursor
+    }
+
+    /** Tous les curseurs d'un volume observent l'URI des enfants de sa racine : l'éjection les rafraîchit. */
+    private fun observe(c: MatrixCursor, volumeId: String) {
+        c.setNotificationUri(
+            context!!.contentResolver,
+            DocumentsContract.buildChildDocumentsUri(VolumeManager.AUTHORITY, DocumentIds.encode(volumeId, "/")),
+        )
     }
 
     override fun isChildDocument(parentDocumentId: String?, documentId: String?): Boolean {
@@ -132,7 +149,11 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
             when (col) {
                 Document.COLUMN_DOCUMENT_ID -> row.add(col, id)
                 Document.COLUMN_DISPLAY_NAME -> row.add(col, name)
-                Document.COLUMN_MIME_TYPE -> row.add(col, if (type == FileType.DIR) Document.MIME_TYPE_DIR else MimeTypes.forName(name))
+                Document.COLUMN_MIME_TYPE -> row.add(col, when (type) {
+                    FileType.DIR -> Document.MIME_TYPE_DIR
+                    FileType.FILE -> MimeTypes.forName(name)
+                    else -> MimeTypes.DEFAULT // lien ou autre : non ouvrable, ne doit pas ressembler à un média
+                })
                 Document.COLUMN_SIZE -> row.add(col, size)
                 Document.COLUMN_LAST_MODIFIED -> row.add(col, mtime * 1000)
                 Document.COLUMN_FLAGS -> row.add(col, 0)
@@ -161,6 +182,9 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         private var bytesRead = 0L
         private var readNanos = 0L
         private var chunk: ByteArray? = null
+        private var warned = false
+        private val openedNanos = System.nanoTime()
+        private val chunkSize = maxOf(1L, minOf(size, CHUNK.toLong())).toInt()
 
         override fun onGetSize(): Long = size
 
@@ -171,11 +195,11 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
             var done = 0
             try {
                 while (done < size) {
-                    val want = minOf(size - done, CHUNK)
-                    val buf = chunk ?: ByteArray(CHUNK).also { chunk = it }
+                    val want = minOf(size - done, chunkSize)
+                    val buf = chunk ?: ByteArray(chunkSize).also { chunk = it }
                     val n = NativeEngine.pread(file, offset + done, buf, want)
                     if (n < 0) {
-                        Log.w(TAG, "pread : code $n")
+                        if (!warned) { warned = true; Log.w(TAG, "pread : code $n") } // une fois par fichier
                         throw ErrnoException("pread", if (n == EngineError.FL_ENODEV) OsConstants.ENXIO else OsConstants.EIO)
                     }
                     if (n == 0) break // fin de fichier
@@ -194,15 +218,16 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
             if (!released.compareAndSet(false, true)) return
             chunk = null
             NativeEngine.closeFile(file) // FL_EINVAL si le volume a été éjecté entre-temps : ignoré
-            Log.i("FluLuksPerf", "$bytesRead o en ${readNanos / 1_000_000} ms")
+            val readMs = maxOf(1L, readNanos / 1_000_000)
+            val totalMs = maxOf(1L, (System.nanoTime() - openedNanos) / 1_000_000)
+            Log.i("FluLuksPerf", "$bytesRead o en $readMs ms (lecture) / $totalMs ms (total)")
         }
     }
 
     companion object {
         private const val TAG = "FluLuksProvider"
         private const val VOLUME_CLOSED = "Volume fermé"
-        private const val CHUNK = 1 shl 20
-        private const val CAPACITY_COLUMN = "capacity_bytes" // Root.COLUMN_CAPACITY_BYTES, API 28
+        private const val CHUNK = 128 * 1024
 
         private val ioHandler: Handler by lazy { Handler(HandlerThread("fluluks-io").also { it.start() }.looper) }
 
@@ -216,17 +241,14 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
                 Root.COLUMN_ROOT_ID, Root.COLUMN_FLAGS, Root.COLUMN_ICON, Root.COLUMN_TITLE,
                 Root.COLUMN_SUMMARY, Root.COLUMN_DOCUMENT_ID, Root.COLUMN_AVAILABLE_BYTES,
             ))
-            if (Build.VERSION.SDK_INT >= 28) add(CAPACITY_COLUMN)
+            add(Root.COLUMN_CAPACITY_BYTES) // depuis l'API 24
         }.toTypedArray()
 
         private fun docColumns(projection: Array<out String>?) = pick(projection, DOC_COLUMNS)
         private fun rootColumns(projection: Array<out String>?) = pick(projection, ROOT_COLUMNS)
 
-        /** Sous-ensemble demandé des colonnes gérées (hostile : inconnues et doublons ignorés) ; défaut = tout. */
-        private fun pick(projection: Array<out String>?, supported: Array<String>): Array<String> {
-            if (projection == null) return supported
-            val chosen = projection.filter { it in supported }.distinct()
-            return if (chosen.isEmpty()) supported else chosen.toTypedArray()
-        }
+        /** Schéma standard : la projection demandée telle quelle (colonnes inconnues = null), sinon tout. */
+        private fun pick(projection: Array<out String>?, supported: Array<String>): Array<String> =
+            if (projection == null || projection.isEmpty()) supported else Array(projection.size) { projection[it] }
     }
 }

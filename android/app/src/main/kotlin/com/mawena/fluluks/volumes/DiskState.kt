@@ -12,7 +12,7 @@ data class DiskState(
     val error: String?,
 )
 
-/** `id` = "v" + compteur. */
+/** `id` = "v" + jeton de session + "-" + compteur. */
 data class VolumeState(
     val id: String,
     val diskId: String,

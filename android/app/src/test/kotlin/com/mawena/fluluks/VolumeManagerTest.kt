@@ -67,11 +67,11 @@ class VolumeManagerTest {
 
     @Test fun unlockPublishesVolume() = runBlocking {
         val v = VolumeManager.unlock(disk, 1, "secret".toByteArray())
-        assertEquals("v1", v.id)
+        assertTrue(Regex("v[0-9a-f]{16}-1").matches(v.id))
         assertEquals(1000L, v.totalBytes)
         assertEquals(listOf(v), VolumeManager.volumes.value)
-        assertEquals(v, VolumeManager.volume("v1"))
-        assertTrue(VolumeManager.nativeVolume("v1") > 0)
+        assertEquals(v, VolumeManager.volume(v.id))
+        assertTrue(VolumeManager.nativeVolume(v.id) > 0)
         assertEquals(0L, VolumeManager.nativeVolume("nope"))
     }
 

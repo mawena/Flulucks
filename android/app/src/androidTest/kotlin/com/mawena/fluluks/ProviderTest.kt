@@ -3,6 +3,7 @@ package com.mawena.fluluks
 import android.content.ContentResolver
 import android.database.Cursor
 import android.net.Uri
+import android.os.Build
 import android.provider.DocumentsContract
 import android.provider.DocumentsContract.Document
 import android.provider.DocumentsContract.Root
@@ -189,7 +190,7 @@ class ProviderTest {
     @Test fun unknownDocumentAfterRestart() {
         val uri = DocumentsContract.buildDocumentUri(auth, "v999:/hello.txt")
         try { cr.openFileDescriptor(uri, "r")?.close(); fail() } catch (e: FileNotFoundException) { }
-        // Binder ne transporte pas FileNotFoundException pour les requêtes : ContentResolver rend null
+        // DocumentsProvider.query attrape FileNotFoundException et rend un curseur null
         assertNull(cr.query(uri, null, null, null, null))
         assertNull(cr.query(DocumentsContract.buildChildDocumentsUri(auth, "v999:/"), null, null, null, null))
     }
@@ -204,15 +205,48 @@ class ProviderTest {
     }
 
     @Test fun isChildDocumentWholeComponents() {
-        val c = cr.acquireContentProviderClient(auth)!!
-        try {
+        if (Build.VERSION.SDK_INT < 29) return // DocumentsContract.isChildDocument(ContentResolver,…) : API 29
+        run {
             val call = { parent: String, doc: String ->
                 DocumentsContract.isChildDocument(cr, DocumentsContract.buildDocumentUri(auth, "$vol:$parent"), DocumentsContract.buildDocumentUri(auth, "$vol:$doc"))
             }
             assertTrue(call("/sous-dossier", "/sous-dossier/données.bin"))
             assertTrue(!call("/sous", "/sous-dossier/données.bin"))
             assertTrue(call("/", "/hello.txt"))
-        } finally { c.close() }
+        }
+    }
+
+    private fun relock(): String {
+        val part = VolumeManager.disks.value.first { it.id == diskId }.scan!!.parts.first { it.luks != null }
+        return runBlocking { VolumeManager.unlock(diskId!!, part.index, Fixtures.bytes("pass.txt")) }.id
+    }
+
+    private fun assertOldIdDead(oldId: String) {
+        val uri = DocumentsContract.buildDocumentUri(auth, "$oldId:/hello.txt")
+        try { cr.openFileDescriptor(uri, "r")?.close(); fail("ancien id ouvert") } catch (e: FileNotFoundException) { }
+        assertNull(cr.query(uri, null, null, null, null))
+    }
+
+    @Test fun reUnlockInSameSessionGivesNewId() {
+        val old = vol
+        VolumeManager.ejectAll()
+        waitFor("volumes vides") { VolumeManager.volumes.value.isEmpty() }
+        val fresh = relock()
+        assertTrue(fresh != old)
+        assertOldIdDead(old)
+        vol = fresh
+    }
+
+    @Test fun staleIdFromPreviousSession() {
+        val old = vol
+        VolumeManager.ejectAll()
+        waitFor("volumes vides") { VolumeManager.volumes.value.isEmpty() }
+        VolumeManager.newSessionForTests() // simule un redémarrage : compteur à zéro, nouveau jeton
+        val fresh = relock()
+        assertTrue("$fresh == $old", fresh != old)
+        assertOldIdDead(old)
+        vol = fresh
+        cr.openFileDescriptor(docUri("/hello.txt"), "r")!!.use { assertTrue(it.statSize >= 0) }
     }
 
     @Test fun ejectRemovesRoot() {
