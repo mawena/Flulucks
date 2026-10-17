@@ -14,7 +14,7 @@ dans le même commit que le travail.
 - [x] T1 — Squelette natif et dépendances
 - [x] T2 — Images de test (fixtures) + vérification par le noyau Linux *(vérification noyau sudo : à lancer par l'utilisateur en fin de phase)*
 - [x] T3 — Périphériques bloc (fichier, tranche)
-- [ ] T4 — Tables de partitions GPT / MBR
+- [x] T4 — Tables de partitions GPT / MBR
 - [ ] T5 — Détection du contenu des partitions
 - [ ] T6 — Briques cryptographiques
 - [ ] T7 — LUKS1

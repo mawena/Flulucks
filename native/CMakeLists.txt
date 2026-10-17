@@ -23,6 +23,10 @@ set(FL_SOURCES
   src/blockdev/blockdev.c
   src/blockdev/file_bdev.c
   src/blockdev/slice_bdev.c
+  src/part/crc32.c
+  src/part/gpt.c
+  src/part/mbr.c
+  src/part/partition.c
 )
 
 add_library(fluluks STATIC ${FL_SOURCES})
@@ -56,4 +60,5 @@ if(FL_TESTS)
 
   fl_add_test(test_error)
   fl_add_test(test_blockdev)
+  fl_add_test(test_partition)
 endif()
