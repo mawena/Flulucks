@@ -34,7 +34,7 @@ dans le même commit que le travail.
 - [x] T6 — Couche JNI à poignées et moteur Kotlin
 - [x] T7 — Détection USB, gestionnaire de volumes, service au premier plan
 - [x] T8 — DocumentsProvider en lecture seule
-- [ ] T9 — Interface Flutter (Disques, Déverrouillage) et pont Pigeon
+- [x] T9 — Interface Flutter (Disques, Déverrouillage) et pont Pigeon
 - [ ] T10 — Essais sur le Pixel : clé sacrifiée, puis vrai disque en lecture
 - [ ] Fusion `feature/android-lecture` → `develop`
 - [ ] Version `v0.1.0` (branche `release/0.1.0` → `main`)

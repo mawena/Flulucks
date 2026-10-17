@@ -7,9 +7,25 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Bundle
 import com.mawena.fluluks.volumes.VolumeManager
+import com.mawena.fluluks.bridge.HostApiImpl
 import io.flutter.embedding.android.FlutterActivity
+import io.flutter.embedding.engine.FlutterEngine
 
 class MainActivity : FlutterActivity() {
+    private var hostApi: HostApiImpl? = null
+
+    override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+        super.configureFlutterEngine(flutterEngine)
+        val messenger = flutterEngine.dartExecutor.binaryMessenger
+        hostApi = HostApiImpl(applicationContext, messenger).also { it.attach(messenger) }
+    }
+
+    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
+        hostApi?.detach(flutterEngine.dartExecutor.binaryMessenger)
+        hostApi = null
+        super.cleanUpFlutterEngine(flutterEngine)
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         VolumeManager.init(this)
