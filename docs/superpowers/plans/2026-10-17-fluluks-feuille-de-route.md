@@ -20,7 +20,7 @@ dans le même commit que le travail.
 - [x] T7 — LUKS1
 - [x] T8 — LUKS2
 - [x] T9 — ext4 en lecture + API fichiers unifiée
-- [x] T10 — Outil `fluluks-cli` + lecture du vrai disque sur PC *(vrai disque lu le 2026-10-17 : `/dev/sdb1` LUKS2 aes-xts-plain64 déverrouillé, racine ext4 listée ; déverrouillage 4,4 s en build Release sur PC, mesure sur téléphone en phase 2)*
+- [x] T10 — Outil `fluluks-cli` + lecture du vrai disque sur PC *(vrai disque lu le 2026-10-17 : `/dev/sdb1` LUKS2 aes-xts-plain64 déverrouillé, racine ext4 listée ; déverrouillage + montage + listage en 5,1 s sur le vrai disque (build Release, PC), mesure sur téléphone en phase 2)*
 - [x] Fusion `feature/moteur-natif-lecture` → `develop`
 
 ### Phase 2 — Android en lecture : jalon « mon disque dans VLC »
