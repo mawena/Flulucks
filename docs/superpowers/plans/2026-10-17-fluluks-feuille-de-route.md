@@ -29,7 +29,7 @@ dans le même commit que le travail.
 - [ ] T1 — Environnement Android (SDK 36, NDK 28.2, licences acceptées par l'utilisateur)
 - [ ] T2 — Moteur natif portable Android (`fl_memzero`, `extern "C"`) + tests natifs sur le téléphone
 - [x] T3 — Périphérique bloc USB (Bulk-Only Transport + SCSI)
-- [ ] T4 — Cache de blocs avec lecture anticipée
+- [x] T4 — Cache de blocs avec lecture anticipée
 - [ ] T5 — Projet Flutter et intégration native Gradle
 - [ ] T6 — Couche JNI à poignées et moteur Kotlin
 - [ ] T7 — Détection USB, gestionnaire de volumes, service au premier plan

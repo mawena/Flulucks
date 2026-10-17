@@ -23,6 +23,7 @@ set(FL_SOURCES
   src/blockdev/blockdev.c
   src/blockdev/file_bdev.c
   src/blockdev/slice_bdev.c
+  src/blockdev/cache_bdev.c
   src/part/crc32.c
   src/part/gpt.c
   src/part/mbr.c
@@ -90,6 +91,7 @@ if(FL_TESTS)
   fl_add_test(test_luks2)
   fl_add_test(test_luks2_lent LABELS lent)
   fl_add_test(test_ext4)
+  fl_add_test(test_cache)
   fl_add_test(test_usb)
   target_sources(test_usb PRIVATE tests/support/fake_msc.c)
 
