@@ -21,7 +21,6 @@ tools/fixtures/LUKS-*
 .packages
 .pub-cache/
 .pub/
-.metadata
 *.log
 android/.gradle/
 android/local.properties
