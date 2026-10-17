@@ -46,6 +46,10 @@ target_include_directories(fluluks PUBLIC include PRIVATE src)
 target_compile_options(fluluks PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 Threads::Threads)
 
+add_executable(fluluks-cli tools/fluluks_cli.c)
+target_link_libraries(fluluks-cli PRIVATE fluluks)
+target_compile_options(fluluks-cli PRIVATE -Wall -Wextra -Werror)
+
 if(FL_TESTS)
   enable_testing()
 
@@ -79,4 +83,9 @@ if(FL_TESTS)
   fl_add_test(test_luks2)
   fl_add_test(test_luks2_lent LABELS lent)
   fl_add_test(test_ext4)
+
+  add_test(NAME test_cli COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli.sh $<TARGET_FILE:fluluks-cli>)
+  set_tests_properties(test_cli PROPERTIES
+    ENVIRONMENT "FL_FIXTURES=${CMAKE_BINARY_DIR}/fixtures"
+    FIXTURES_REQUIRED fx)
 endif()
