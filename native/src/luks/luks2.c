@@ -225,7 +225,7 @@ static int luks2_unlock(struct fl_luks *l, const void *pass, size_t passlen, fl_
 }
 
 static void luks2_destroy(struct fl_luks *l) {
-  if (l->impl) explicit_bzero(l->impl, sizeof(luks2));
+  if (l->impl) fl_memzero(l->impl, sizeof(luks2));
   free(l->impl);
   l->impl = NULL;
 }

@@ -20,6 +20,7 @@ include(cmake/third_party.cmake)
 set(FL_SOURCES
   src/error.c
   src/secure.c
+  src/util/memzero.c
   src/blockdev/blockdev.c
   src/blockdev/file_bdev.c
   src/blockdev/slice_bdev.c

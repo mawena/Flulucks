@@ -5,7 +5,7 @@ contenant de l'ext4, sans root pour les images.
 
 ## Prérequis
 
-- cmake ≥ 3.22, ninja, gcc ou clang, git
+- cmake ≥ 3.20, ninja, gcc ou clang, git
 - python3 avec le paquet `cryptography` (génération des fixtures)
 - pour les fixtures : cryptsetup, e2fsprogs, dosfstools, ntfs-3g, gdisk/fdisk
 

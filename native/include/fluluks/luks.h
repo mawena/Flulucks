@@ -5,6 +5,10 @@
 
 #include "fluluks/blockdev.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct fl_luks fl_luks;
 
 /* Lit et valide l'en-tête. FL_ENOTSUP si ce n'est pas du LUKS (ou version inconnue),
@@ -22,5 +26,9 @@ const char *fl_luks_cipher(const fl_luks *l);
 int fl_luks_unlock(fl_luks *l, const void *pass, size_t passlen, fl_bdev **decrypted);
 /* Efface tout secret ; NULL accepté. */
 void fl_luks_close(fl_luks *l);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

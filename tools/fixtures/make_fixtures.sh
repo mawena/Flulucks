@@ -11,12 +11,13 @@ if [ -f "$OUT/.stamp" ] && [ "$(cat "$OUT/.stamp")" = "$STAMP" ]; then
   echo "fixtures à jour"; exit 0
 fi
 # Garde-fou : on n'efface que un dossier vide ou une sortie précédente de ce script.
-if [ -n "$(ls -A "$OUT")" ] && [ ! -f "$OUT/.stamp" ] && ! { [ -f "$OUT/pass.txt" ] && [ -d "$OUT/work" ]; }; then
+if [ -n "$(ls -A "$OUT")" ] && [ ! -f "$OUT/.stamp" ] && [ ! -f "$OUT/.fixtures-dir" ]; then
   echo "make_fixtures.sh : $OUT n'est pas vide et ne ressemble pas à un dossier de fixtures ; abandon" >&2
   exit 2
 fi
 rm -rf "$OUT"
 mkdir -p "$OUT/work"
+: > "$OUT/.fixtures-dir"   # marqueur posé en tout premier : une génération interrompue reste reprenable
 cd "$OUT"
 trap '[ -f "$OUT/.stamp" ] || rm -rf "$OUT/work"' EXIT
 PY="python3 -I"

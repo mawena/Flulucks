@@ -5,6 +5,7 @@
 #include "crypto/fl_crypto.h"
 #include "fluluks/error.h"
 #include "luks/luks_internal.h"
+#include "fluluks/secure.h"
 
 #define CHUNK_BYTES (1u << 20)
 
@@ -67,7 +68,7 @@ static int cb_write(fl_bdev *d, uint64_t lba, uint32_t count, const void *buf) {
     count -= n;
     in += (size_t)n * d->sector_size;
   }
-  explicit_bzero(tmp, (size_t)cs * d->sector_size);
+  fl_memzero(tmp, (size_t)cs * d->sector_size);
   free(tmp);
   return rc;
 }

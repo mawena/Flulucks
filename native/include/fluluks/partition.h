@@ -5,6 +5,10 @@
 #include <stdint.h>
 #include "fluluks/blockdev.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum { FL_PT_NONE = 0, FL_PT_MBR = 1, FL_PT_GPT = 2 } fl_pt_kind;
 
 typedef struct {
@@ -26,5 +30,9 @@ typedef struct {
 /* Analyse la table de partitions (GPT, MBR, MBR étendu). Sans table ou sans partition :
  * kind = FL_PT_NONE et une entrée d'index 0 couvrant tout le disque. */
 int fl_part_scan(fl_bdev *d, fl_part_table *out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

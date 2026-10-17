@@ -1,6 +1,10 @@
 #ifndef FLULUKS_ERROR_H
 #define FLULUKS_ERROR_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
   FL_OK = 0,
   FL_EIO = -1,
@@ -24,5 +28,9 @@ typedef enum {
 
 /* Message lisible pour un code d'erreur. Jamais NULL ; code inconnu -> "erreur inconnue". */
 const char *fl_strerror(int err);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

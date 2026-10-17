@@ -23,7 +23,7 @@
 #include "fluluks/probe.h"
 #include "fluluks/secure.h"
 
-#define PASS_MAX 8192u
+#define CLI_PASS_MAX 8192u
 #define CHUNK (1u << 20)
 
 static int fail_msg(const char *msg) {
@@ -44,12 +44,12 @@ static int usage(void) {
 /* ---- phrase de passe ---- */
 
 typedef struct {
-  unsigned char *buf; /* fl_secure_alloc(PASS_MAX + 1) */
+  unsigned char *buf; /* fl_secure_alloc(CLI_PASS_MAX + 1) */
   size_t len;
 } secret;
 
 static void secret_wipe(secret *s) {
-  if (s->buf) fl_secure_free(s->buf, PASS_MAX + 1);
+  if (s->buf) fl_secure_free(s->buf, CLI_PASS_MAX + 1);
   s->buf = NULL;
   s->len = 0;
 }
@@ -58,8 +58,8 @@ static int read_pass_file(const char *path, secret *s) {
   int fd = open(path, O_RDONLY | O_CLOEXEC);
   if (fd < 0) return fail_msg("impossible d'ouvrir le fichier de phrase de passe");
   size_t n = 0;
-  while (n < PASS_MAX + 1) {
-    ssize_t r = read(fd, s->buf + n, PASS_MAX + 1 - n);
+  while (n < CLI_PASS_MAX + 1) {
+    ssize_t r = read(fd, s->buf + n, CLI_PASS_MAX + 1 - n);
     if (r < 0 && errno == EINTR) continue;
     if (r < 0) {
       close(fd);
@@ -69,7 +69,7 @@ static int read_pass_file(const char *path, secret *s) {
     n += (size_t)r;
   }
   close(fd);
-  if (n > PASS_MAX) return fail_msg("fichier de phrase de passe trop grand (8192 octets au plus)");
+  if (n > CLI_PASS_MAX) return fail_msg("fichier de phrase de passe trop grand (8192 octets au plus)");
   s->len = n;
   return 0;
 }
@@ -115,10 +115,10 @@ static int read_pass_tty(secret *s) {
     if (r < 0 && errno == EINTR) { rc = -1; break; }
     if (r < 0) { rc = -2; break; }
     if (r == 0 || c == '\n') break;
-    if (n >= PASS_MAX) { rc = -3; break; }
+    if (n >= CLI_PASS_MAX) { rc = -3; break; }
     s->buf[n++] = (unsigned char)c;
   }
-  explicit_bzero(&c, 1);
+  fl_memzero(&c, 1);
   tcsetattr(fd, TCSAFLUSH, &old);
   w = write(fd, "\n", 1);
   (void)w;
@@ -230,7 +230,7 @@ static int open_fs(const char *path, const char *idx_s, const char *passfile, ct
     is_luks = true;
   }
   if (is_luks) {
-    secret s = {fl_secure_alloc(PASS_MAX + 1), 0};
+    secret s = {fl_secure_alloc(CLI_PASS_MAX + 1), 0};
     if (!s.buf) return fail_err(FL_ENOMEM);
     rc = passfile ? read_pass_file(passfile, &s) : read_pass_tty(&s);
     if (rc) { secret_wipe(&s); return rc; }
