@@ -27,6 +27,12 @@ int fl_part_scan(fl_bdev *d, fl_part_table *out) {
   rc = fl_bdev_read_bytes(d, 0, sizeof s0, s0);
   if (rc != FL_OK) return rc;
 
+  /* Un en-tête LUKS (sel LUKS1 sur 496-535) n'est jamais une table MBR. */
+  if (memcmp(s0, "LUKS\xBA\xBE", 6) == 0) {
+    make_none(d, out);
+    return FL_OK;
+  }
+
   if (s0[510] == 0x55 && s0[511] == 0xAA) {
     int protective = 0;
     for (int i = 0; i < 4; i++)
@@ -35,7 +41,9 @@ int fl_part_scan(fl_bdev *d, fl_part_table *out) {
       rc = fl_gpt_read(d, out);
       if (rc == FL_OK && out->count > 0) return FL_OK;
       if (rc != FL_OK && rc != FL_ECORRUPT) return rc;
-      memset(out, 0, sizeof *out); /* GPT inutilisable : repli sur les entrées MBR */
+      uint32_t skipped = out->skipped; /* GPT inutilisable : repli sur les entrées MBR */
+      memset(out, 0, sizeof *out);
+      out->skipped = skipped;
     }
     rc = fl_mbr_read(d, s0, out);
     if (rc != FL_OK) return rc;

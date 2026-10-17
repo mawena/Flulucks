@@ -1,6 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 #include <stdint.h>
 #include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
 #include "fluluks/blockdev.h"
 #include "fluluks/error.h"
 #include "fluluks/partition.h"
@@ -96,6 +98,32 @@ static void test_gpt_hors_bornes(void) {
   fl_bdev_close(d);
 }
 
+static void test_luks_sans_mbr(void) {
+  char path[] = "fl_test_luksmbr_XXXXXX";
+  static unsigned char img[1 << 20];
+  memset(img, 0, sizeof img);
+  memcpy(img, "LUKS\xBA\xBE", 6);
+  img[446 + 4] = 0x83;
+  img[446 + 8] = 1;
+  img[446 + 12] = 8;
+  img[510] = 0x55;
+  img[511] = 0xAA;
+  int fd = mkstemp(path);
+  TT_ASSERT(fd >= 0);
+  ssize_t w = write(fd, img, sizeof img);
+  close(fd);
+  TT_ASSERT(w == (ssize_t)sizeof img);
+  fl_bdev *d = NULL;
+  fl_part_table t;
+  TT_ASSERT_EQ(fl_file_bdev_open(path, 512, true, &d), FL_OK);
+  TT_ASSERT_EQ(fl_part_scan(d, &t), FL_OK);
+  TT_ASSERT_EQ(t.kind, FL_PT_NONE);
+  TT_ASSERT_EQ(t.count, 1);
+  TT_ASSERT_EQ(t.parts[0].sector_count, d->sector_count);
+  fl_bdev_close(d);
+  unlink(path);
+}
+
 int main(void) {
   TT_RUN(test_crc32);
   TT_RUN(test_gpt);
@@ -104,5 +132,6 @@ int main(void) {
   TT_RUN(test_sans_table);
   TT_RUN(test_gpt_secours);
   TT_RUN(test_gpt_hors_bornes);
+  TT_RUN(test_luks_sans_mbr);
   TT_MAIN_END();
 }

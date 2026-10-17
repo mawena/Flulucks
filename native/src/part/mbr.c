@@ -46,7 +46,8 @@ static int walk_extended(fl_bdev *d, uint64_t ext_start, uint64_t ext_len, fl_pa
       if (seen[i] == ebr_lba) return FL_OK; /* boucle */
     seen[n] = ebr_lba;
 
-    if (fl_bdev_read_bytes(d, ebr_lba * d->sector_size, sizeof ebr, ebr) != FL_OK) return FL_OK;
+    int rc = fl_bdev_read_bytes(d, ebr_lba * d->sector_size, sizeof ebr, ebr);
+    if (rc != FL_OK) return rc;
     if (ebr[510] != 0x55 || ebr[511] != 0xAA) return FL_OK;
 
     const uint8_t *e1 = ebr + 446, *e2 = ebr + 462;
@@ -61,6 +62,7 @@ static int walk_extended(fl_bdev *d, uint64_t ext_start, uint64_t ext_len, fl_pa
     rel = rd32(e2 + 8);
     if (rel == 0) return FL_OK;
   }
+  out->skipped++; /* limite de maillons atteinte */
   return FL_OK;
 }
 
