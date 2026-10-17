@@ -20,6 +20,9 @@ include(cmake/third_party.cmake)
 set(FL_SOURCES
   src/error.c
   src/secure.c
+  src/blockdev/blockdev.c
+  src/blockdev/file_bdev.c
+  src/blockdev/slice_bdev.c
 )
 
 add_library(fluluks STATIC ${FL_SOURCES})
@@ -52,4 +55,5 @@ if(FL_TESTS)
   endfunction()
 
   fl_add_test(test_error)
+  fl_add_test(test_blockdev)
 endif()

@@ -13,7 +13,7 @@ dans le même commit que le travail.
 - [x] Plan de la phase 1 écrit
 - [x] T1 — Squelette natif et dépendances
 - [x] T2 — Images de test (fixtures) + vérification par le noyau Linux *(vérification noyau sudo : à lancer par l'utilisateur en fin de phase)*
-- [ ] T3 — Périphériques bloc (fichier, tranche)
+- [x] T3 — Périphériques bloc (fichier, tranche)
 - [ ] T4 — Tables de partitions GPT / MBR
 - [ ] T5 — Détection du contenu des partitions
 - [ ] T6 — Briques cryptographiques
