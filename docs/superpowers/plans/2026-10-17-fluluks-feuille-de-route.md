@@ -12,7 +12,7 @@ dans le même commit que le travail.
 ### Phase 1 — Moteur natif en lecture, sur PC Linux ([plan](2026-10-17-phase1-moteur-natif-lecture.md))
 - [x] Plan de la phase 1 écrit
 - [x] T1 — Squelette natif et dépendances
-- [x] T2 — Images de test (fixtures) + vérification par le noyau Linux *(vérification noyau sudo : à lancer par l'utilisateur en fin de phase)*
+- [x] T2 — Images de test (fixtures) + vérification par le noyau Linux *(vérifié par le noyau le 2026-10-17 : 5 images « NOYAU OK »)*
 - [x] T3 — Périphériques bloc (fichier, tranche)
 - [x] T4 — Tables de partitions GPT / MBR
 - [x] T5 — Détection du contenu des partitions
@@ -20,7 +20,7 @@ dans le même commit que le travail.
 - [x] T7 — LUKS1
 - [x] T8 — LUKS2
 - [x] T9 — ext4 en lecture + API fichiers unifiée
-- [x] T10 — Outil `fluluks-cli` + lecture du vrai disque sur PC *(test du vrai disque : à lancer par l'utilisateur en fin de phase)*
+- [x] T10 — Outil `fluluks-cli` + lecture du vrai disque sur PC *(vrai disque lu le 2026-10-17 : `/dev/sdb1` LUKS2 aes-xts-plain64 déverrouillé, racine ext4 listée ; déverrouillage 4,4 s en build Release sur PC, mesure sur téléphone en phase 2)*
 - [ ] Fusion `feature/moteur-natif-lecture` → `develop`
 
 ### Phase 2 — Android en lecture : jalon « mon disque dans VLC »
