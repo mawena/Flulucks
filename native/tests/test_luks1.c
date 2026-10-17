@@ -113,14 +113,6 @@ static void test_luks1_pas_luks(void) {
   fl_bdev_close(d);
 }
 
-static void test_luks2_pas_encore(void) {
-  fl_bdev *d = ouvrir("whole-luks2-4k.img");
-  TT_ASSERT(d != NULL);
-  fl_luks *l = NULL;
-  TT_ASSERT_EQ(fl_luks_open(d, &l), FL_ENOTSUP);
-  fl_bdev_close(d);
-}
-
 /* Copie l'en-tête LUKS1 en mémoire, la corrompt, et vérifie le rejet. */
 typedef struct { uint8_t *buf; } membdev;
 static int mem_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
@@ -241,7 +233,6 @@ int main(void) {
   TT_RUN(test_af_merge_aller_retour);
   TT_RUN(test_crypt_bdev_ecriture_4k);
   TT_RUN(test_luks1_pas_luks);
-  TT_RUN(test_luks2_pas_encore);
   TT_RUN(test_luks1_corrompu);
   TT_RUN(test_luks1_mauvaise_phrase);
   TT_RUN(test_luks1_essiv);

@@ -26,7 +26,10 @@ int fl_luks_open(fl_bdev *dev, fl_luks **out) {
     case 1:
       rc = fl_luks1_parse(l, hdr);
       break;
-    default: /* LUKS2 : branché par la tâche 8 */
+    case 2:
+      rc = fl_luks2_open(l);
+      break;
+    default:
       rc = FL_ENOTSUP;
       break;
   }

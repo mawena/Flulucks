@@ -32,6 +32,9 @@ set(FL_SOURCES
   src/crypto/sector_cipher.c
   src/luks/luks.c
   src/luks/luks1.c
+  src/luks/luks2.c
+  src/luks/luks2_json.c
+  src/luks/b64.c
   src/luks/af.c
   src/luks/crypt_bdev.c
 )
@@ -71,4 +74,6 @@ if(FL_TESTS)
   fl_add_test(test_probe)
   fl_add_test(test_crypto)
   fl_add_test(test_luks1)
+  fl_add_test(test_luks2)
+  fl_add_test(test_luks2_lent LABELS lent)
 endif()
