@@ -30,9 +30,9 @@ target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4)
 if(FL_TESTS)
   enable_testing()
 
-  # Remplacé par le vrai générateur de fixtures en T2.
+  # Génère les images de test (sans root) ; idempotent grâce au fichier .stamp.
   add_test(NAME generate_fixtures
-           COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/fixtures)
+           COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../tools/fixtures/make_fixtures.sh ${CMAKE_BINARY_DIR}/fixtures)
   set_tests_properties(generate_fixtures PROPERTIES FIXTURES_SETUP fx)
 
   # fl_add_test(nom [LABELS l...]) : compile tests/<nom>.c, lie à fluluks, enregistre dans CTest.

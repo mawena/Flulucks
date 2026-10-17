@@ -12,7 +12,7 @@ dans le même commit que le travail.
 ### Phase 1 — Moteur natif en lecture, sur PC Linux ([plan](2026-10-17-phase1-moteur-natif-lecture.md))
 - [x] Plan de la phase 1 écrit
 - [x] T1 — Squelette natif et dépendances
-- [ ] T2 — Images de test (fixtures) + vérification par le noyau Linux
+- [x] T2 — Images de test (fixtures) + vérification par le noyau Linux *(vérification noyau sudo : à lancer par l'utilisateur en fin de phase)*
 - [ ] T3 — Périphériques bloc (fichier, tranche)
 - [ ] T4 — Tables de partitions GPT / MBR
 - [ ] T5 — Détection du contenu des partitions

@@ -10,3 +10,6 @@
 
 # Sorties de compilation
 build/
+
+# Artefacts de cryptsetup reencrypt
+tools/fixtures/LUKS-*
