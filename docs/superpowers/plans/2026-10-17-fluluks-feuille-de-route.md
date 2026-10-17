@@ -19,7 +19,7 @@ dans le même commit que le travail.
 - [x] T6 — Briques cryptographiques
 - [x] T7 — LUKS1
 - [x] T8 — LUKS2
-- [ ] T9 — ext4 en lecture + API fichiers unifiée
+- [x] T9 — ext4 en lecture + API fichiers unifiée
 - [ ] T10 — Outil `fluluks-cli` + lecture du vrai disque sur PC
 - [ ] Fusion `feature/moteur-natif-lecture` → `develop`
 

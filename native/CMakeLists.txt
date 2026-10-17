@@ -37,6 +37,8 @@ set(FL_SOURCES
   src/luks/b64.c
   src/luks/af.c
   src/luks/crypt_bdev.c
+  src/fs/fs.c
+  src/fs/ext4_glue.c
 )
 
 add_library(fluluks STATIC ${FL_SOURCES})
@@ -76,4 +78,5 @@ if(FL_TESTS)
   fl_add_test(test_luks1)
   fl_add_test(test_luks2)
   fl_add_test(test_luks2_lent LABELS lent)
+  fl_add_test(test_ext4)
 endif()
