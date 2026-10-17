@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Stockage de masse (classe 8). La sous-classe et le protocole sont vérifiés dans UsbDisks. -->
+    <usb-device class="8" />
+</resources>
