@@ -8,15 +8,16 @@
 # N'écrit que sous /data/local/tmp/fluluks/.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
-SERIAL="${1:?usage: run_native_tests.sh <serial> [--clean] [--no-build]}"; shift || true
-CLEAN=0; BUILD=1
+SERIAL=""; CLEAN=0; BUILD=1
 for a in "$@"; do
   case "$a" in
     --clean) CLEAN=1 ;;
     --no-build) BUILD=0 ;;
-    *) echo "option inconnue : $a" >&2; exit 2 ;;
+    -*) echo "option inconnue : $a" >&2; exit 2 ;;
+    *) [ -z "$SERIAL" ] || { echo "serial en double : $a" >&2; exit 2; }; SERIAL="$a" ;;
   esac
 done
+[ -n "$SERIAL" ] || { echo "usage: run_native_tests.sh <serial> [--clean] [--no-build]" >&2; exit 2; }
 ANDROID_HOME="${ANDROID_HOME:-$HOME/Android}"
 NDK="$ANDROID_HOME/ndk/28.2.13676358"
 ADB="$ANDROID_HOME/platform-tools/adb"; [ -x "$ADB" ] || ADB=adb
@@ -73,7 +74,8 @@ for t in "${TESTS[@]}"; do
   set -e
   secs=$(awk -v s="$start" -v e="$(date +%s.%N)" 'BEGIN{printf "%.1f", e - s}')
   code=$(printf '%s\n' "$out" | tr -d '\r' | sed -n 's/^__EXIT=//p' | tail -1)
-  printf '%s\n' "$out" | tr -d '\r' | grep -v '^__EXIT=' | tail -n 8
+  clean_out=$(printf '%s\n' "$out" | tr -d '\r' | { grep -v '^__EXIT=' || true; })
+  if [ "$code" = 0 ]; then printf '%s\n' "$clean_out" | tail -n 8; else printf '%s\n' "$clean_out" | tail -n 60; fi
   if [ "$code" = 0 ]; then SUMMARY+=("OK     $t  ${secs} s"); else SUMMARY+=("ECHEC  $t  (code ${code:-?}, ${secs} s)"); FAILED=1; fi
 done
 
