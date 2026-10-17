@@ -6,6 +6,10 @@ set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
 set(ENABLE_TESTING OFF CACHE BOOL "" FORCE)
 set(GEN_FILES OFF CACHE BOOL "" FORCE)
 set(MBEDTLS_FATAL_WARNINGS OFF CACHE BOOL "" FORCE)
+# Tables AES en ROM : sans cela mbedTLS les construit paresseusement au premier usage
+# (écriture de variables statiques non protégée -> course de données entre threads).
+# Le define est PUBLIC sur mbedcrypto : nos sources voient la même configuration.
+set(MBEDTLS_USER_CONFIG_FILE ${CMAKE_CURRENT_LIST_DIR}/mbedtls_user_config.h CACHE FILEPATH "" FORCE)
 add_subdirectory(${TP}/mbedtls ${CMAKE_CURRENT_BINARY_DIR}/mbedtls EXCLUDE_FROM_ALL)
 add_library(fl_mbedcrypto INTERFACE)
 target_link_libraries(fl_mbedcrypto INTERFACE mbedcrypto)
@@ -42,7 +46,7 @@ file(GLOB LWEXT4_UPSTREAM_FILES CONFIGURE_DEPENDS
   ${LWEXT4_UPSTREAM}/src/*.c ${LWEXT4_UPSTREAM}/include/*.h ${LWEXT4_UPSTREAM}/include/misc/*.h)
 list(SORT LWEXT4_UPSTREAM_FILES)
 if(NOT LWEXT4_UPSTREAM_FILES)
-  message(FATAL_ERROR "lwext4 absent : lancer « git submodule update --init »")
+  message(FATAL_ERROR "lwext4 absent : lancer « git submodule update --init --recursive »")
 endif()
 # Contenu des correctifs et des sources amont : toute modification relance la configuration.
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${LWEXT4_PATCHES} ${LWEXT4_UPSTREAM_FILES})

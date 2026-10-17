@@ -12,12 +12,14 @@
 #define SLOT_INACTIVE 0x0000DEADu
 #define MAX_STRIPES 65536u
 #define DIGEST_LEN 20
+#define MAX_PBKDF2_ITER (1u << 27) /* même plafond que LUKS2 : évite un déni de service par en-tête forgé */
 
 typedef struct {
   uint32_t iterations;
   uint8_t salt[32];
   uint32_t kmo; /* secteurs de 512 */
   uint32_t stripes;
+  bool unsupported; /* itérations au-dessus du plafond : slot non essayé */
 } slot1;
 
 typedef struct {
@@ -47,6 +49,7 @@ int fl_luks1_parse(struct fl_luks *l, const uint8_t *h) {
   if (key_bytes != 16 && key_bytes != 32 && key_bytes != 64) return FL_ECORRUPT;
   uint32_t digest_iter = be32(h + 164);
   if (digest_iter == 0) return FL_ECORRUPT;
+  if (digest_iter > MAX_PBKDF2_ITER) return FL_ENOTSUP;
   uint64_t size = fl_bdev_size_bytes(l->dev);
   uint64_t payload = (uint64_t)be32(h + 104) * 512;
   if (payload >= size) return FL_ECORRUPT;
@@ -68,6 +71,7 @@ int fl_luks1_parse(struct fl_luks *l, const uint8_t *h) {
     if (active == SLOT_INACTIVE) continue;
     if (active != SLOT_ACTIVE) continue; /* valeur inconnue : slot ignoré */
     slot1 sl;
+    sl.unsupported = false;
     sl.iterations = be32(s + 4);
     memcpy(sl.salt, s + 8, 32);
     sl.kmo = be32(s + 40);
@@ -82,6 +86,7 @@ int fl_luks1_parse(struct fl_luks *l, const uint8_t *h) {
       free(x);
       return FL_ECORRUPT;
     }
+    sl.unsupported = sl.iterations > MAX_PBKDF2_ITER;
     x->slots[x->nslots++] = sl;
   }
   size_t nl = strlen(name), ml = strlen(mode);
@@ -99,7 +104,7 @@ static bool ct_equal(const uint8_t *a, const uint8_t *b, size_t n) {
   return acc == 0;
 }
 
-/* FL_OK = bon slot (mk rempli) ; FL_EBADPASS = slot suivant ; autre = erreur fatale. */
+/* FL_OK = bon slot (mk rempli) ; FL_EBADPASS ou autre erreur = slot suivant (l'appelant classe les erreurs). */
 static int try_slot(const fl_luks *l, const luks1 *x, const slot1 *s, const void *pass, size_t passlen,
                     uint8_t *mk) {
   size_t kb = x->key_bytes;
@@ -135,16 +140,31 @@ out:
   return rc;
 }
 
+/* Pertinence d'une erreur de slot (même ordre que LUKS2) : mémoire > E/S > mauvaise phrase > autre. */
+static int err_rank(int rc) {
+  if (rc == FL_ENOMEM) return 4;
+  if (rc == FL_EIO) return 3;
+  if (rc == FL_EBADPASS) return 2;
+  return 1;
+}
+
 static int luks1_unlock(struct fl_luks *l, const void *pass, size_t passlen, fl_bdev **decrypted) {
   const luks1 *x = l->impl;
   uint8_t *mk = fl_secure_alloc(x->key_bytes);
   if (!mk) return FL_ENOMEM;
-  int rc = FL_EBADPASS;
+  int rc = FL_EBADPASS, best = 0;
+  bool ok = false;
   for (int i = 0; i < x->nslots; i++) {
-    rc = try_slot(l, x, &x->slots[i], pass, passlen, mk);
-    if (rc != FL_EBADPASS) break;
+    int r = x->slots[i].unsupported ? FL_ENOTSUP : try_slot(l, x, &x->slots[i], pass, passlen, mk);
+    if (r == FL_OK) {
+      ok = true;
+      break;
+    }
+    /* erreur d'un slot : on essaie les suivants, on rapporte la plus pertinente */
+    if (!best || err_rank(r) > err_rank(best)) best = r;
   }
-  if (rc == FL_OK) {
+  if (!ok && best) rc = best;
+  if (ok) {
     rc = fl_crypt_bdev_new(l->dev, x->payload_off, 0, l->cipher, mk, x->key_bytes, 512, false, 0, decrypted);
     if (rc != FL_OK) *decrypted = NULL;
   }

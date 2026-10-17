@@ -28,7 +28,9 @@ check() {
   cryptsetup open --readonly --key-file "$FX/$pass" "$dev" "$MAP" || return 1
   MNT="$(mktemp -d)"
   mount -o ro,noload "/dev/mapper/$MAP" "$MNT" || return 1
-  diff -r --exclude='clairsemé.bin' "$FX/tree" "$MNT" || return 1
+  # lost+found est créé par mkfs.ext4 et absent de tree/ : exclu de la comparaison, mais exigé.
+  [ -d "$MNT/lost+found" ] || return 1
+  diff -r --exclude='clairsemé.bin' --exclude='lost+found' "$FX/tree" "$MNT" || return 1
   [ "$(stat -c %s "$MNT/clairsemé.bin")" = 5368709120 ] || return 1
   [ "$(tail -c 11 "$MNT/clairsemé.bin")" = "FIN-FLULUKS" ] || return 1
 }

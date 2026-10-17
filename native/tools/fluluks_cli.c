@@ -170,6 +170,7 @@ static int cmd_parts(const char *path) {
     fl_probe_result pr;
     memset(&pr, 0, sizeof pr);
     char extra[96] = "";
+    const char *cname = NULL;
     if (fl_slice_bdev_new(c.disk, p->first_lba, p->sector_count, &sl) == FL_OK) {
       if (fl_probe(sl, &pr) != FL_OK) memset(&pr, 0, sizeof pr);
       if (pr.content == FL_CONTENT_LUKS1 || pr.content == FL_CONTENT_LUKS2) {
@@ -179,12 +180,22 @@ static int cmd_parts(const char *path) {
           fl_luks_close(l);
         }
       }
+      if (pr.content == FL_CONTENT_UNKNOWN) {
+        /* palliatif : en-tête LUKS2 principal abîmé mais secondaire valide */
+        fl_luks *l = NULL;
+        if (fl_luks_open(sl, &l) == FL_OK) {
+          cname = "LUKS2 (en-tête principal abîmé)";
+          pr.content = fl_luks_version(l) == 1 ? FL_CONTENT_LUKS1 : FL_CONTENT_LUKS2;
+          snprintf(extra, sizeof extra, "\tLUKS%d %s", fl_luks_version(l), fl_luks_cipher(l));
+          fl_luks_close(l);
+        }
+      }
       fl_bdev_close(sl);
     }
     unsigned long long mo = (unsigned long long)((p->sector_count / 1000000u) * c.disk->sector_size +
                          (p->sector_count % 1000000u) * c.disk->sector_size / 1000000u);
     printf("%u\t%llu\t%llu\t%s\t%s\t%s%s\n", (unsigned)p->index, (unsigned long long)p->first_lba, mo,
-           fl_content_name(pr.content), pr.label, fl_content_supported(pr.content) ? "oui" : "non", extra);
+           cname ? cname : fl_content_name(pr.content), pr.label, fl_content_supported(pr.content) ? "oui" : "non", extra);
   }
   free(t);
   ctx_close(&c);
@@ -211,8 +222,14 @@ static int open_fs(const char *path, const char *idx_s, const char *passfile, ct
   fl_probe_result pr;
   if ((e = fl_probe(c->slice, &pr)) != FL_OK) return fail_err(e);
   fl_bdev *target = c->slice;
-  if (pr.content == FL_CONTENT_LUKS1 || pr.content == FL_CONTENT_LUKS2) {
+  bool is_luks = pr.content == FL_CONTENT_LUKS1 || pr.content == FL_CONTENT_LUKS2;
+  if (is_luks) {
     if ((e = fl_luks_open(c->slice, &c->luks)) != FL_OK) return fail_err(e);
+  } else if (pr.content == FL_CONTENT_UNKNOWN && fl_luks_open(c->slice, &c->luks) == FL_OK) {
+    /* palliatif : magie de l'en-tête principal détruite, mais l'en-tête LUKS2 secondaire est valide */
+    is_luks = true;
+  }
+  if (is_luks) {
     secret s = {fl_secure_alloc(PASS_MAX + 1), 0};
     if (!s.buf) return fail_err(FL_ENOMEM);
     rc = passfile ? read_pass_file(passfile, &s) : read_pass_tty(&s);
@@ -225,6 +242,11 @@ static int open_fs(const char *path, const char *idx_s, const char *passfile, ct
   }
   if (pr.content != FL_CONTENT_EXT4) return fail_err(FL_ENOTSUP);
   if ((e = fl_fs_mount(target, FL_CONTENT_EXT4, false, &c->fs)) != FL_OK) return fail_err(e);
+  fl_statfs sf;
+  if (fl_fs_statfs(c->fs, &sf) == FL_OK && sf.needs_recovery)
+    fputs("fluluks-cli: attention : le journal du volume n'a pas été rejoué (volume mal démonté ou encore "
+          "ouvert ailleurs) ; le contenu peut être incomplet\n",
+          stderr);
   return 0;
 }
 

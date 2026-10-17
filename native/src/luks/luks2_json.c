@@ -1,4 +1,5 @@
 #define _DEFAULT_SOURCE
+#include <pthread.h>
 #include <string.h>
 
 #include "cJSON.h"
@@ -185,9 +186,17 @@ static int parse_segment(const cJSON *sg, uint64_t dev_size, luks2 *x) {
   return FL_OK;
 }
 
+/* cJSON 1.7.18 écrit une variable statique (global_error) à chaque analyse, succès compris
+ * (cJSON.c : ParseWithLengthOpts, remise à zéro puis copie en cas d'erreur) : deux ouvertures
+ * LUKS2 simultanées dans deux threads seraient une course de données. L'analyse est donc
+ * sérialisée par ce verrou ; le reste de cJSON (lecture de l'arbre) est sans état global. */
+static pthread_mutex_t cjson_parse_lock = PTHREAD_MUTEX_INITIALIZER;
+
 int fl_luks2_parse_json(const char *json, uint64_t dev_size, luks2 *x) {
   memset(x, 0, sizeof *x);
+  pthread_mutex_lock(&cjson_parse_lock);
   cJSON *root = cJSON_Parse(json);
+  pthread_mutex_unlock(&cjson_parse_lock);
   if (!root) return FL_ECORRUPT;
   int rc = FL_ECORRUPT;
   uint64_t ids[L2_MAX_SLOTS];

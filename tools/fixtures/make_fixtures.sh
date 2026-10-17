@@ -10,6 +10,11 @@ STAMP="$(cat "$HERE"/make_tree.py "$HERE"/luks_encrypt.py "$HERE"/craft.py "$HER
 if [ -f "$OUT/.stamp" ] && [ "$(cat "$OUT/.stamp")" = "$STAMP" ]; then
   echo "fixtures à jour"; exit 0
 fi
+# Garde-fou : on n'efface que un dossier vide ou une sortie précédente de ce script.
+if [ -n "$(ls -A "$OUT")" ] && [ ! -f "$OUT/.stamp" ] && ! { [ -f "$OUT/pass.txt" ] && [ -d "$OUT/work" ]; }; then
+  echo "make_fixtures.sh : $OUT n'est pas vide et ne ressemble pas à un dossier de fixtures ; abandon" >&2
+  exit 2
+fi
 rm -rf "$OUT"
 mkdir -p "$OUT/work"
 cd "$OUT"

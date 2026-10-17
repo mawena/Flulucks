@@ -85,6 +85,38 @@ run nl ls "$FX/gpt-luks2.img" 1 / --pass-file "$TMP/pass-nl.txt"
 run p1 parts "$FX/whole-luks1-xts.img"
 grep -q "LUKS1 aes-xts-plain64" "$TMP/p1.out" || fail "parts LUKS1"
 
+# en-tête LUKS2 principal abîmé (magie effacée) : repli sur l'en-tête secondaire
+cp "$FX/whole-luks2-4k.img" "$TMP/abime.img"
+dd if=/dev/zero of="$TMP/abime.img" bs=1 count=6 conv=notrunc 2>/dev/null
+run abime cat "$TMP/abime.img" 0 /hello.txt --pass-file "$FX/pass.txt"
+[ "$RC" -eq 0 ] || fail "en-tête abîmé : code $RC ($(cat "$TMP/abime.err"))"
+[ "$(cat "$TMP/abime.out")" = "Bonjour FluLuks" ] || fail "en-tête abîmé : contenu inattendu"
+run abimep parts "$TMP/abime.img"
+grep -q "LUKS2 (en-tête principal abîmé)" "$TMP/abimep.out" || fail "parts en-tête abîmé : $(cat "$TMP/abimep.out")"
+
+# journal non rejoué (bit incompat RECOVER + checksum du superbloc recalculé) : avertissement, sortie 0
+cp "$FX/ext4-plain.img" "$TMP/recover.img"
+python3 -I - "$TMP/recover.img" <<'PYEOF'
+import struct, sys
+def crc32c(data, crc=0xFFFFFFFF):
+    for b in data:
+        crc ^= b
+        for _ in range(8):
+            crc = (crc >> 1) ^ (0x82F63B78 if crc & 1 else 0)
+    return crc  # sans inversion finale, comme ext4
+f = open(sys.argv[1], "r+b")
+f.seek(1024); sb = bytearray(f.read(1024))
+inc = struct.unpack_from("<I", sb, 0x60)[0] | 0x4
+struct.pack_into("<I", sb, 0x60, inc)
+struct.pack_into("<I", sb, 0x3FC, crc32c(bytes(sb[:0x3FC])))
+f.seek(1024); f.write(sb); f.close()
+PYEOF
+run recov cat "$TMP/recover.img" 0 /hello.txt
+[ "$RC" -eq 0 ] || fail "journal non rejoué : code $RC ($(cat "$TMP/recov.err"))"
+grep -q "le journal du volume n'a pas été rejoué" "$TMP/recov.err" || fail "journal non rejoué : pas d'avertissement"
+run norecov cat "$FX/ext4-plain.img" 0 /hello.txt
+[ ! -s "$TMP/norecov.err" ] || fail "avertissement parasite : $(cat "$TMP/norecov.err")"
+
 # jamais de phrase de passe dans les sorties
 for f in "$TMP"/*.out "$TMP"/*.err; do
   case "$f" in "$TMP/bin.out"|"$TMP/gros.out") continue;; esac

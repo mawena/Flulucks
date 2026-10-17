@@ -168,7 +168,7 @@ static void test_b64(void) {
  * Aucune dépendance aux sels aléatoires des fixtures. --- */
 #define MEMCAP (32u * 1024 * 1024)
 #define LOADLEN (20u * 1024 * 1024) /* en-têtes, zones de clés, début du segment (16 Mio) */
-#define HDR 16384u                  /* hdr_size des fixtures ; secondaire à HDR */
+static size_t HDR = 16384;          /* hdr_size, relu dans l'en-tête binaire par mem_load ; secondaire à HDR */
 typedef struct {
   uint8_t *m;
   uint64_t fail_lo, fail_hi; /* secteurs en erreur d'E/S [lo, hi) */
@@ -193,6 +193,10 @@ static int mem_load(memimg *mi, const char *img) {
   if (!mi->m || fl_bdev_read_bytes(src, 0, (size_t)n, mi->m) != FL_OK) return -1;
   fl_bdev_close(src);
   mi->dev = (fl_bdev){&mem_ops, 512, MEMCAP / 512, true, mi};
+  uint64_t hs = 0; /* hdr_size : u64 big-endian à l'octet 8 (indépendant des défauts de cryptsetup) */
+  for (int i = 0; i < 8; i++) hs = (hs << 8) | mi->m[8 + i];
+  if (hs < 16384 || hs > (4u << 20) || (hs & 4095)) return -1;
+  HDR = (size_t)hs;
   return 0;
 }
 static void mem_free(memimg *mi) { free(mi->m); }
@@ -286,7 +290,21 @@ static void test_luks2_hostile(void) {
   TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.area.size", "\"999999999999\""), FL_ECORRUPT);
   TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.area.type", "\"journal\""), FL_ECORRUPT);
   TT_ASSERT_EQ(ouvrir_patche(img, "segments.0.offset", "\"999999999999\""), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "segments.0.offset", "\"16777217\""), FL_ECORRUPT);
+  {
+    /* décalage du segment lu dans le JSON de l'image (pas de valeur codée en dur) */
+    memimg mi;
+    TT_ASSERT_EQ(mem_load(&mi, img), 0);
+    cJSON *root = cJSON_Parse((const char *)mi.m + 4096);
+    TT_ASSERT(root != NULL);
+    cJSON *o = cJSON_GetObjectItemCaseSensitive(
+        cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(root, "segments"), "0"), "offset");
+    TT_ASSERT(cJSON_IsString(o));
+    char val[64];
+    snprintf(val, sizeof val, "\"%llu\"", (unsigned long long)strtoull(o->valuestring, NULL, 10) + 1);
+    cJSON_Delete(root);
+    mem_free(&mi);
+    TT_ASSERT_EQ(ouvrir_patche(img, "segments.0.offset", val), FL_ECORRUPT); /* non aligné */
+  }
   TT_ASSERT_EQ(ouvrir_patche(img, "segments.0.sector_size", "4097"), FL_ECORRUPT);
   TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.kdf.salt", "\"!!!\""), FL_ECORRUPT);
   TT_ASSERT_EQ(ouvrir_patche(img, "digests.0.iterations", "0"), FL_ECORRUPT);

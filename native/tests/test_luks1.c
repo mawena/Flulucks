@@ -142,6 +142,7 @@ static void mut_stripes(uint8_t *h) { h[208 + 44] = 0x7f; }
 static void mut_payload(uint8_t *h) { h[104] = 0x7f; }
 static void mut_cipher(uint8_t *h) { memset(h + 8, 'a', 32); }
 static void mut_iter(uint8_t *h) { memset(h + 208 + 4, 0, 4); }
+static void mut_digest_iter(uint8_t *h) { h[164] = 0x7f; }
 static void mut_kmo(uint8_t *h) { h[208 + 40] = 0x7f; }
 
 static void test_luks1_corrompu(void) {
@@ -151,6 +152,63 @@ static void test_luks1_corrompu(void) {
   corrompu(mut_cipher, FL_ECORRUPT);
   corrompu(mut_iter, FL_ECORRUPT);
   corrompu(mut_kmo, FL_ECORRUPT);
+  corrompu(mut_digest_iter, FL_ENOTSUP);
+}
+
+/* Lecture mémoire avec zone en échec (EIO) pour tester la poursuite après erreur de slot. */
+static uint64_t fail_lo, fail_hi;
+static int mem_read_fail(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
+  if (lba < fail_hi && lba + count > fail_lo) return FL_EIO;
+  return mem_read(d, lba, count, buf);
+}
+static const fl_bdev_ops mem_fail_ops = {mem_read_fail, NULL, NULL, NULL};
+
+/* mutation de l'en-tête : modifie le slot 0 (kmo / itérations) et active un slot 1 copie de l'original. */
+static void unlock_mute(int variante, const char *pass, size_t pl, int attendu) {
+  fl_bdev *src = ouvrir("whole-luks1-xts.img");
+  TT_ASSERT(src != NULL);
+  size_t cap = 4u * 1024 * 1024;
+  uint8_t *m = calloc(1, cap);
+  TT_ASSERT(m != NULL);
+  TT_ASSERT_EQ(fl_bdev_read_bytes(src, 0, 2u * 1024 * 1024, m), FL_OK);
+  fl_bdev_close(src);
+  uint8_t *s0 = m + 208, *s1 = m + 208 + 48;
+  int deuxslots = variante != 0;
+  if (deuxslots) memcpy(s1, s0, 48); /* slot 1 = bon slot d'origine */
+  if (variante == 0 || variante == 1) {
+    /* slot 0 : AF lue dans une zone en échec EIO */
+    uint32_t kmo = 3000;
+    s0[40] = (uint8_t)(kmo >> 24); s0[41] = (uint8_t)(kmo >> 16); s0[42] = (uint8_t)(kmo >> 8); s0[43] = (uint8_t)kmo;
+    fail_lo = 3000; fail_hi = 3500;
+  } else {
+    /* slot 0 : itérations au-dessus du plafond */
+    s0[4] = 0x7f;
+    fail_lo = fail_hi = 0;
+  }
+  fl_bdev dev = {&mem_fail_ops, 512, cap / 512, true, m};
+  fl_luks *l = NULL;
+  TT_ASSERT_EQ(fl_luks_open(&dev, &l), FL_OK);
+  fl_bdev *dec = NULL;
+  TT_ASSERT_EQ(fl_luks_unlock(l, pass, pl, &dec), attendu);
+  if (attendu == FL_OK) {
+    TT_ASSERT(dec != NULL);
+    fl_bdev_close(dec);
+  } else {
+    TT_ASSERT(dec == NULL);
+  }
+  fl_luks_close(l);
+  free(m);
+}
+
+static void test_luks1_poursuite_apres_erreur(void) {
+  char pass[256];
+  size_t n = lire_pass(pass, sizeof pass, "pass.txt");
+  TT_ASSERT(n > 0);
+  unlock_mute(0, pass, n, FL_EIO);        /* un seul slot, E/S en échec */
+  unlock_mute(1, pass, n, FL_OK);         /* slot 0 EIO, slot 1 bon : on continue */
+  unlock_mute(1, "faux", 4, FL_EIO);      /* EIO l'emporte sur EBADPASS */
+  unlock_mute(2, pass, n, FL_OK);         /* slot 0 au-dessus du plafond, slot 1 bon */
+  unlock_mute(2, "faux", 4, FL_EBADPASS); /* ENOTSUP < EBADPASS */
 }
 
 /* split AF local au test (spec LUKS) */
@@ -234,6 +292,7 @@ int main(void) {
   TT_RUN(test_crypt_bdev_ecriture_4k);
   TT_RUN(test_luks1_pas_luks);
   TT_RUN(test_luks1_corrompu);
+  TT_RUN(test_luks1_poursuite_apres_erreur);
   TT_RUN(test_luks1_mauvaise_phrase);
   TT_RUN(test_luks1_essiv);
   TT_RUN(test_luks1_xts_sha1);
