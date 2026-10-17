@@ -28,6 +28,8 @@ set(FL_SOURCES
   src/part/mbr.c
   src/part/partition.c
   src/probe/probe.c
+  src/crypto/fl_crypto.c
+  src/crypto/sector_cipher.c
 )
 
 add_library(fluluks STATIC ${FL_SOURCES})
@@ -48,7 +50,7 @@ if(FL_TESTS)
     cmake_parse_arguments(T "" "" "LABELS" ${ARGN})
     add_executable(${name} tests/${name}.c)
     target_link_libraries(${name} PRIVATE fluluks)
-    target_include_directories(${name} PRIVATE tests/support)
+    target_include_directories(${name} PRIVATE tests/support src)
     target_compile_options(${name} PRIVATE -Wall -Wextra -Werror)
     add_test(NAME ${name} COMMAND ${name})
     set_tests_properties(${name} PROPERTIES
@@ -63,4 +65,5 @@ if(FL_TESTS)
   fl_add_test(test_blockdev)
   fl_add_test(test_partition)
   fl_add_test(test_probe)
+  fl_add_test(test_crypto)
 endif()
