@@ -40,6 +40,16 @@
             android:name=".service.VolumeService"
             android:exported="false"
             android:foregroundServiceType="connectedDevice" />
+        <provider
+            android:name=".provider.FluLuksDocumentsProvider"
+            android:authorities="com.mawena.fluluks.documents"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

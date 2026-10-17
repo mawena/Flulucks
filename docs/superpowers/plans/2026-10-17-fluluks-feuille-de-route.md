@@ -33,7 +33,7 @@ dans le même commit que le travail.
 - [x] T5 — Projet Flutter et intégration native Gradle
 - [x] T6 — Couche JNI à poignées et moteur Kotlin
 - [x] T7 — Détection USB, gestionnaire de volumes, service au premier plan
-- [ ] T8 — DocumentsProvider en lecture seule
+- [x] T8 — DocumentsProvider en lecture seule
 - [ ] T9 — Interface Flutter (Disques, Déverrouillage) et pont Pigeon
 - [ ] T10 — Essais sur le Pixel : clé sacrifiée, puis vrai disque en lecture
 - [ ] Fusion `feature/android-lecture` → `develop`
