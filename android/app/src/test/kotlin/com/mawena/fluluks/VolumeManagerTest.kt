@@ -20,13 +20,15 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
     var lastPass: ByteArray? = null
     var expectedPass = "secret".toByteArray()
     var openFiles = 0
+    val events = mutableListOf<String>()
+    var statfsFails = false
     private var next = 100L
 
     override fun version() = "fake"
     override fun strerror(code: Int) = "erreur $code".toByteArray()
     override fun openImage(path: ByteArray) = next++
     override fun openUsb(fd: Int, iface: Int, epIn: Int, epOut: Int) = next++
-    override fun closeDisk(disk: Long): Int { closedDisks += disk; return 0 }
+    override fun closeDisk(disk: Long): Int { closedDisks += disk; events += "closeDisk"; return 0 }
     override fun scan(disk: Long) = """{"sector_size":512,"size":1048576,"table":"gpt","parts":[
         {"index":1,"first_lba":2048,"size":524288,"content":"LUKS2","label":"","uuid":"u1","supported":true,
          "luks":{"version":2,"cipher":"aes-xts-plain64","primary_damaged":false,"max_kdf_memory_kib":$kdfKib}},
@@ -39,10 +41,11 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
     }
     override fun unmount(vol: Long, force: Boolean): Int {
         unmounts += vol to force
+        events += if (force) "unmount(force)" else "unmount"
         return if (!force && openFiles > 0) EngineError.FL_EBUSY else 0
     }
-    override fun statfs(vol: Long) =
-        """{"total":1000,"free":400,"label":"x","read_only":true,"ro_reason":"lecture seule","needs_recovery":false}""".toByteArray()
+    override fun statfs(vol: Long) = if (statfsFails) """{"total":""".toByteArray() else
+        """{"total":1000,"free":400,"label":"MonDisque","read_only":true,"ro_reason":"lecture seule","needs_recovery":false}""".toByteArray()
     override fun stat(vol: Long, path: ByteArray) = ByteArray(0)
     override fun list(vol: Long, path: ByteArray) = ByteArray(0)
     override fun openFile(vol: Long, path: ByteArray): Long { openFiles++; return next++ }
@@ -84,11 +87,36 @@ class VolumeManagerTest {
         val v = VolumeManager.unlock(disk, 1, "secret".toByteArray())
         val handle = VolumeManager.nativeVolume(v.id)
         engine.openFile(handle, "/a".toByteArray())
-        VolumeManager.removeDiskForTests(disk)
+        VolumeManager.onUsbDetachedName(disk)
         assertEquals(listOf(handle to true), engine.unmounts)
+        assertEquals(listOf("unmount(force)", "closeDisk"), engine.events)
         assertEquals(1, engine.closedDisks.size)
         assertTrue(VolumeManager.volumes.value.isEmpty())
         assertTrue(VolumeManager.disks.value.isEmpty())
+    }
+
+    @Test fun unknownDeviceProducesNoDiskState() {
+        val before = VolumeManager.disks.value
+        VolumeManager.onUsbAttachedName("/dev/bus/usb/001/099") // absent de deviceList : intent forgé
+        assertEquals(before, VolumeManager.disks.value)
+    }
+
+    @Test fun detachOfUnknownNameDoesNothing() = runBlocking {
+        VolumeManager.unlock(disk, 1, "secret".toByteArray())
+        VolumeManager.onUsbDetachedName("inconnu")
+        assertEquals(1, VolumeManager.volumes.value.size)
+        assertTrue(engine.events.isEmpty())
+    }
+
+    @Test fun titleIsFilesystemLabelThenPartitionIndex() = runBlocking {
+        assertEquals("MonDisque", VolumeManager.unlock(disk, 1, "secret".toByteArray()).title)
+    }
+
+    @Test fun statfsFailureUnmountsHandle() = runBlocking {
+        engine.statfsFails = true
+        try { VolumeManager.mountPlain(disk, 2); fail("erreur attendue") } catch (_: Exception) {}
+        assertEquals(listOf("unmount(force)"), engine.events)
+        assertTrue(VolumeManager.volumes.value.isEmpty())
     }
 
     @Test fun ejectUnmountsWithForce() = runBlocking {

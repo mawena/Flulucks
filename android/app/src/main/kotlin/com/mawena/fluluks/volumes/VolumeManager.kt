@@ -22,6 +22,7 @@ import com.mawena.fluluks.engine.ScanResult
 import com.mawena.fluluks.engine.VolumeStat
 import com.mawena.fluluks.service.VolumeService
 import com.mawena.fluluks.usb.UsbDisks
+import org.json.JSONException
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executor
 import java.util.concurrent.ExecutorService
@@ -65,6 +66,9 @@ object VolumeManager {
     @Volatile private var availMem: () -> Long = { Long.MAX_VALUE }
     @Volatile private var appContext: Context? = null
     @Volatile private var usbManager: UsbManager? = null
+
+    /** Source des périphériques connus du système (deviceName -> UsbDevice) ; injectable pour les tests. */
+    @Volatile private var deviceList: () -> Map<String, UsbDevice> = { usbManager?.deviceList ?: emptyMap() }
 
     private val _disks = MutableStateFlow<List<DiskState>>(emptyList())
     private val _volumes = MutableStateFlow<List<VolumeState>>(emptyList())
@@ -114,11 +118,12 @@ object VolumeManager {
         }
         val filter = IntentFilter().apply {
             addAction(UsbManager.ACTION_USB_DEVICE_DETACHED)
+            addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED)
             addAction(ACTION_USB_PERMISSION)
         }
         ContextCompat.registerReceiver(app, receiver, filter, ContextCompat.RECEIVER_NOT_EXPORTED)
 
-        usb.deviceList.values.forEach { onUsbAttached(it) }
+        usb.deviceList.keys.toList().forEach { onUsbAttachedName(it) }
     }
 
     @Suppress("DEPRECATION")
@@ -129,7 +134,13 @@ object VolumeManager {
     /** Configuration pour les tests JVM : moteur factice, mémoire injectée, exécuteur synchrone. */
     @VisibleForTesting
     @Synchronized
-    fun resetForTests(engine: Engine, availMem: () -> Long = { Long.MAX_VALUE }, executor: Executor = Executor { it.run() }) {
+    fun resetForTests(
+        engine: Engine,
+        availMem: () -> Long = { Long.MAX_VALUE },
+        executor: Executor = Executor { it.run() },
+        devices: () -> Map<String, UsbDevice> = { emptyMap() },
+    ) {
+        deviceList = devices
         engineOverride = engine
         executorOverride = executor
         this.availMem = availMem
@@ -140,14 +151,26 @@ object VolumeManager {
 
     // ---------------------------------------------------------------- USB
 
-    fun onUsbAttached(device: UsbDevice) {
-        if (!UsbDisks.isMassStorageCandidate(device)) return
-        exec.execute { runSafely { attach(device) } }
+    /**
+     * L'UsbDevice d'un intent peut être forgé par une autre application : seul le nom est retenu, et
+     * l'objet utilisé est celui que le système renvoie dans `deviceList`.
+     */
+    fun onUsbAttached(device: UsbDevice) = onUsbAttachedName(device.deviceName)
+
+    internal fun onUsbAttachedName(name: String) {
+        exec.execute {
+            runSafely(name) {
+                val real = deviceList()[name] ?: return@runSafely // inconnu du système : ignoré
+                if (UsbDisks.isMassStorageCandidate(real)) attach(real)
+            }
+        }
     }
 
-    fun onUsbDetached(device: UsbDevice) {
-        val id = device.deviceName
-        exec.execute { runSafely { detach(id) } }
+    fun onUsbDetached(device: UsbDevice) = onUsbDetachedName(device.deviceName)
+
+    /** Seuls les disques connus sont concernés (un nom forgé ne fait rien). */
+    internal fun onUsbDetachedName(name: String) {
+        exec.execute { runSafely(name) { if (diskEntries.containsKey(name)) detach(name) } }
     }
 
     fun requestPermission(diskId: String) {
@@ -206,6 +229,8 @@ object VolumeManager {
             DiskState(id, name, scan.sizeBytes, perm, scan, null)
         } catch (e: EngineError) {
             DiskState(id, name, 0, perm, null, e.message)
+        } catch (e: JSONException) {
+            DiskState(id, name, 0, perm, null, "Réponse du moteur illisible")
         }
 
     /** Éjecte les volumes du disque (force), ferme la pile native, puis seulement la connexion USB. */
@@ -256,10 +281,10 @@ object VolumeManager {
             val vol = EngineError.check(engine.mount(entry.handle, partIndex, pass))
             val stat = try {
                 VolumeStat.parse(engine.statfs(vol))
-            } catch (e: EngineError) {
-                engine.unmount(vol, true); throw e
+            } catch (t: Throwable) {
+                engine.unmount(vol, true); throw t // la poignée ne doit jamais fuir
             }
-            val title = part.label.ifBlank { "Volume ${partIndex + 1}" }
+            val title = stat.label.ifBlank { "Partition $partIndex" } // les index GPT/MBR sont déjà 1-based
             val state = VolumeState(
                 id = "v" + counter.incrementAndGet(), diskId = diskId, partIndex = partIndex, title = title,
                 totalBytes = stat.totalBytes, freeBytes = stat.freeBytes,
@@ -275,11 +300,12 @@ object VolumeManager {
     }
 
     fun eject(volumeId: String) {
-        exec.execute { runSafely { unmountLocked(volumeId); publishVolumes() } }
+        val disk = mounts[volumeId]?.state?.diskId
+        exec.execute { runSafely(disk) { unmountLocked(volumeId); publishVolumes() } }
     }
 
     fun ejectAll() {
-        exec.execute { runSafely { mountOrder.toList().forEach { unmountLocked(it) }; publishVolumes() } }
+        exec.execute { runSafely(null) { mountOrder.toList().forEach { unmountLocked(it) }; publishVolumes() } }
     }
 
     private fun unmountLocked(volumeId: String) {
@@ -344,7 +370,16 @@ object VolumeManager {
         }
     }
 
-    private inline fun runSafely(block: () -> Unit) {
-        try { block() } catch (e: Exception) { Log.e(TAG, "opération moteur échouée : ${e.javaClass.simpleName}") }
+    /** Erreur inattendue : journalisée (classe seule) et publiée dans DiskState.error du disque concerné. */
+    private inline fun runSafely(diskId: String?, block: () -> Unit) {
+        try {
+            block()
+        } catch (e: Exception) {
+            val msg = "Erreur inattendue : ${e.javaClass.simpleName}"
+            Log.e(TAG, msg)
+            val entry = diskId?.let { diskEntries[it] } ?: return
+            entry.state = entry.state.copy(error = msg)
+            publishDisks()
+        }
     }
 }

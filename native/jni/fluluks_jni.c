@@ -76,20 +76,20 @@ static void zero_array(JNIEnv *env, jbyteArray a, jsize n) {
   }
 }
 
-JNIEXPORT jstring JNICALL JNI_FN(version)(JNIEnv *env, jclass clazz) {
-  (void)clazz;
+JNIEXPORT jstring JNICALL JNI_FN(version)(JNIEnv *env, jobject thiz) {
+  (void)thiz;
   /* Chaîne ASCII pure : NewStringUTF est sûr ici. */
   return (*env)->NewStringUTF(env, FL_JNI_VERSION);
 }
 
-JNIEXPORT jbyteArray JNICALL JNI_FN(strerror)(JNIEnv *env, jclass clazz, jint code) {
-  (void)clazz;
+JNIEXPORT jbyteArray JNICALL JNI_FN(strerror)(JNIEnv *env, jobject thiz, jint code) {
+  (void)thiz;
   const char *m = fl_strerror(code);
   return to_bytes(env, m, strlen(m));
 }
 
-JNIEXPORT jlong JNICALL JNI_FN(openImage)(JNIEnv *env, jclass clazz, jbyteArray path) {
-  (void)clazz;
+JNIEXPORT jlong JNICALL JNI_FN(openImage)(JNIEnv *env, jobject thiz, jbyteArray path) {
+  (void)thiz;
   int err = FL_OK;
   char *p = cstr_from(env, path, &err);
   if (!p) return err;
@@ -98,28 +98,28 @@ JNIEXPORT jlong JNICALL JNI_FN(openImage)(JNIEnv *env, jclass clazz, jbyteArray 
   return h;
 }
 
-JNIEXPORT jlong JNICALL JNI_FN(openUsb)(JNIEnv *env, jclass clazz, jint fd, jint iface, jint ep_in, jint ep_out) {
+JNIEXPORT jlong JNICALL JNI_FN(openUsb)(JNIEnv *env, jobject thiz, jint fd, jint iface, jint ep_in, jint ep_out) {
   (void)env;
-  (void)clazz;
+  (void)thiz;
   return fj_open_usb(fd, iface, ep_in, ep_out);
 }
 
-JNIEXPORT jint JNICALL JNI_FN(closeDisk)(JNIEnv *env, jclass clazz, jlong disk) {
+JNIEXPORT jint JNICALL JNI_FN(closeDisk)(JNIEnv *env, jobject thiz, jlong disk) {
   (void)env;
-  (void)clazz;
+  (void)thiz;
   return fj_close_disk(disk);
 }
 
-JNIEXPORT jbyteArray JNICALL JNI_FN(scan)(JNIEnv *env, jclass clazz, jlong disk) {
-  (void)clazz;
+JNIEXPORT jbyteArray JNICALL JNI_FN(scan)(JNIEnv *env, jobject thiz, jlong disk) {
+  (void)thiz;
   fl_json j;
   fl_json_init(&j);
   int rc = fj_scan(disk, &j);
   return json_result(env, rc, &j);
 }
 
-JNIEXPORT jlong JNICALL JNI_FN(mount)(JNIEnv *env, jclass clazz, jlong disk, jint part, jbyteArray pass) {
-  (void)clazz;
+JNIEXPORT jlong JNICALL JNI_FN(mount)(JNIEnv *env, jobject thiz, jlong disk, jint part, jbyteArray pass) {
+  (void)thiz;
   uint8_t *p = NULL;
   size_t plen = 0, alloc = 0;
   int err = FL_OK;
@@ -145,22 +145,22 @@ JNIEXPORT jlong JNICALL JNI_FN(mount)(JNIEnv *env, jclass clazz, jlong disk, jin
   return r;
 }
 
-JNIEXPORT jint JNICALL JNI_FN(unmount)(JNIEnv *env, jclass clazz, jlong vol, jboolean force) {
+JNIEXPORT jint JNICALL JNI_FN(unmount)(JNIEnv *env, jobject thiz, jlong vol, jboolean force) {
   (void)env;
-  (void)clazz;
+  (void)thiz;
   return fj_unmount(vol, force == JNI_TRUE);
 }
 
-JNIEXPORT jbyteArray JNICALL JNI_FN(statfs)(JNIEnv *env, jclass clazz, jlong vol) {
-  (void)clazz;
+JNIEXPORT jbyteArray JNICALL JNI_FN(statfs)(JNIEnv *env, jobject thiz, jlong vol) {
+  (void)thiz;
   fl_json j;
   fl_json_init(&j);
   int rc = fj_statfs(vol, &j);
   return json_result(env, rc, &j);
 }
 
-JNIEXPORT jbyteArray JNICALL JNI_FN(stat)(JNIEnv *env, jclass clazz, jlong vol, jbyteArray path) {
-  (void)clazz;
+JNIEXPORT jbyteArray JNICALL JNI_FN(stat)(JNIEnv *env, jobject thiz, jlong vol, jbyteArray path) {
+  (void)thiz;
   fl_json j;
   fl_json_init(&j);
   int rc = FL_OK;
@@ -170,8 +170,8 @@ JNIEXPORT jbyteArray JNICALL JNI_FN(stat)(JNIEnv *env, jclass clazz, jlong vol, 
   return json_result(env, rc, &j);
 }
 
-JNIEXPORT jbyteArray JNICALL JNI_FN(list)(JNIEnv *env, jclass clazz, jlong vol, jbyteArray path) {
-  (void)clazz;
+JNIEXPORT jbyteArray JNICALL JNI_FN(list)(JNIEnv *env, jobject thiz, jlong vol, jbyteArray path) {
+  (void)thiz;
   fl_json j;
   fl_json_init(&j);
   int rc = FL_OK;
@@ -181,8 +181,8 @@ JNIEXPORT jbyteArray JNICALL JNI_FN(list)(JNIEnv *env, jclass clazz, jlong vol, 
   return json_result(env, rc, &j);
 }
 
-JNIEXPORT jlong JNICALL JNI_FN(openFile)(JNIEnv *env, jclass clazz, jlong vol, jbyteArray path) {
-  (void)clazz;
+JNIEXPORT jlong JNICALL JNI_FN(openFile)(JNIEnv *env, jobject thiz, jlong vol, jbyteArray path) {
+  (void)thiz;
   int err = FL_OK;
   char *p = cstr_from(env, path, &err);
   if (!p) return err;
@@ -191,8 +191,8 @@ JNIEXPORT jlong JNICALL JNI_FN(openFile)(JNIEnv *env, jclass clazz, jlong vol, j
   return h;
 }
 
-JNIEXPORT jint JNICALL JNI_FN(pread)(JNIEnv *env, jclass clazz, jlong file, jlong offset, jbyteArray buf, jint len) {
-  (void)clazz;
+JNIEXPORT jint JNICALL JNI_FN(pread)(JNIEnv *env, jobject thiz, jlong file, jlong offset, jbyteArray buf, jint len) {
+  (void)thiz;
   if (!buf || len < 0 || offset < 0) return FL_EINVAL;
   if (len > (*env)->GetArrayLength(env, buf)) return FL_EINVAL;
   size_t n = (size_t)len < FJ_PREAD_MAX ? (size_t)len : FJ_PREAD_MAX;
@@ -205,8 +205,8 @@ JNIEXPORT jint JNICALL JNI_FN(pread)(JNIEnv *env, jclass clazz, jlong file, jlon
   return (jint)r; /* r <= FJ_PREAD_MAX ou fl_err */
 }
 
-JNIEXPORT jint JNICALL JNI_FN(closeFile)(JNIEnv *env, jclass clazz, jlong file) {
+JNIEXPORT jint JNICALL JNI_FN(closeFile)(JNIEnv *env, jobject thiz, jlong file) {
   (void)env;
-  (void)clazz;
+  (void)thiz;
   return fj_close_file(file);
 }

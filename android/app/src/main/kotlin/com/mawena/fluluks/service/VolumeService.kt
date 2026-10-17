@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.IBinder
 import android.util.Log
 import com.mawena.fluluks.MainActivity
+import com.mawena.fluluks.R
 import com.mawena.fluluks.volumes.VolumeManager
 import com.mawena.fluluks.volumes.VolumeState
 import kotlinx.coroutines.CoroutineScope
@@ -58,8 +59,10 @@ class VolumeService : Service() {
                 if (list.isEmpty()) {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                     if (lastStartId > 0) stopSelf(lastStartId) else stopSelf()
-                } else if (foregroundOk) {
-                    getSystemService(NotificationManager::class.java).notify(NOTIF_ID, buildNotification(list))
+                } else {
+                    // Idempotent (même id) : met à jour la notification et garantit l'état « premier plan »
+                    // même si un redémarrage a croisé un stopSelf en attente.
+                    foregroundOk = startAsForeground(buildNotification(list))
                 }
             }
         }
@@ -68,7 +71,15 @@ class VolumeService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         lastStartId = startId
         if (intent?.action == ACTION_EJECT_ALL) VolumeManager.ejectAll()
-        if (!foregroundOk) stopSelf(startId)
+        // Toute commande de démarrage doit être suivie de startForeground (startForegroundService).
+        val list = VolumeManager.volumes.value
+        foregroundOk = startAsForeground(buildNotification(list))
+        if (!foregroundOk || list.isEmpty()) {
+            // startForeground a été tenté avant l'arrêt ; stopSelf(startId) ne stoppe que si aucun
+            // démarrage plus récent n'est arrivé.
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf(startId)
+        }
         return START_NOT_STICKY
     }
 
@@ -121,7 +132,7 @@ class VolumeService : Service() {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.stat_sys_data_bluetooth)
+            .setSmallIcon(R.drawable.ic_disk)
             .setContentTitle("FluLuks")
             .setContentText(notificationText(volumes))
             .setContentIntent(open)
