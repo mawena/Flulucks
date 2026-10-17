@@ -26,7 +26,7 @@ dans le même commit que le travail.
 ### Phase 2 — Android en lecture : jalon « mon disque dans VLC » ([plan](2026-10-17-phase2-android-lecture.md))
 - [x] Plan de la phase 2 écrit
 - [ ] *(utilisateur)* Libérer au moins 10 Gio sur `/` (7,5 Gio libres le 2026-10-17)
-- [ ] T1 — Environnement Android (SDK 36, NDK 28.2, licences acceptées par l'utilisateur)
+- [x] T1 — Environnement Android (SDK 36, NDK 28.2, licences acceptées par l'utilisateur) *(flutter doctor affiche « license status unknown » : incompatibilité entre Flutter 3.41 et le nouvel Android CLI ; la compilation est vérifiée en T5)*
 - [ ] T2 — Moteur natif portable Android (`fl_memzero`, `extern "C"`) + tests natifs sur le téléphone
 - [x] T3 — Périphérique bloc USB (Bulk-Only Transport + SCSI)
 - [x] T4 — Cache de blocs avec lecture anticipée
