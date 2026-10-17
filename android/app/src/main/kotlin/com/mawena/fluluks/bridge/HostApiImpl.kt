@@ -9,6 +9,7 @@ import com.mawena.fluluks.volumes.DiskState
 import com.mawena.fluluks.volumes.VolumeManager
 import com.mawena.fluluks.volumes.VolumeState
 import io.flutter.plugin.common.BinaryMessenger
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -45,7 +46,7 @@ class HostApiImpl(
 
     override fun listVolumes(): List<VolumeMsg> = VolumeManager.volumes.value.map(::volumeMsg)
 
-    override fun requestPermission(diskId: String) = VolumeManager.requestPermission(diskId)
+    override fun requestPermission(diskId: String) = guarded { VolumeManager.requestPermission(diskId) }
 
     override fun unlock(
         diskId: String,
@@ -56,6 +57,8 @@ class HostApiImpl(
         scope.launch {
             val result = try {
                 Result.success(volumeMsg(VolumeManager.unlock(diskId, partIndex.toInt(), passphrase)))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Throwable) {
                 Result.failure(toFlutterError(e))
             } finally {
@@ -69,6 +72,8 @@ class HostApiImpl(
         scope.launch {
             val result = try {
                 Result.success(volumeMsg(VolumeManager.mountPlain(diskId, partIndex.toInt())))
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Throwable) {
                 Result.failure(toFlutterError(e))
             }
@@ -76,9 +81,9 @@ class HostApiImpl(
         }
     }
 
-    override fun eject(volumeId: String) = VolumeManager.eject(volumeId)
+    override fun eject(volumeId: String) = guarded { VolumeManager.eject(volumeId) }
 
-    override fun openInFiles(volumeId: String) {
+    override fun openInFiles(volumeId: String) = guarded {
         if (VolumeManager.volumes.value.none { it.id == volumeId }) {
             throw FlutterError(EngineError.FL_ENOENT.toString(), "Ce volume n'est plus ouvert")
         }
@@ -96,11 +101,24 @@ class HostApiImpl(
         }
     }
 
+    /** Toute exception d'une méthode synchrone devient une FlutterError française (jamais de trace). */
+    private inline fun guarded(block: () -> Unit) {
+        try {
+            block()
+        } catch (e: FlutterError) {
+            throw e
+        } catch (e: Throwable) {
+            throw toFlutterError(e)
+        }
+    }
+
     private fun toFlutterError(e: Throwable): FlutterError =
         if (e is EngineError) FlutterError(e.code.toString(), e.message)
         else FlutterError(EngineError.FL_EIO.toString(), "Erreur inattendue : l'opération a échoué")
 
     companion object {
+        const val MSG_NO_PARTITION = "Aucune partition reconnue"
+
         internal fun toMsgs(disks: List<DiskState>, volumes: List<VolumeState>) =
             disks.map { diskMsg(it, volumes) } to volumes.map(::volumeMsg)
 
@@ -109,7 +127,7 @@ class HostApiImpl(
             name = d.name,
             sizeBytes = d.sizeBytes,
             hasPermission = d.hasPermission,
-            error = d.error,
+            error = d.error ?: if (d.scan != null && d.scan.parts.isEmpty()) MSG_NO_PARTITION else null,
             partitions = d.scan?.parts?.map { p ->
                 PartitionMsg(
                     index = p.index.toLong(),

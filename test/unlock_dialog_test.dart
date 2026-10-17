@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -43,13 +42,24 @@ void main() {
     expect(tester.widget<FilledButton>(submit).onPressed, isNotNull);
   });
 
+  testWidgets('échec : tampon aussi mis à zéro', (tester) async {
+    final api = await openDialog(tester);
+    await tester.enterText(field, 'mauvaise');
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(api.passphraseCopy, isNotEmpty);
+    expect(api.passphraseRef!.every((b) => b == 0), isTrue);
+  });
+
   testWidgets('octets UTF-8 envoyés puis tampon mis à zéro', (tester) async {
     const phrase = 'mot de passe été ☀';
     final api = await openDialog(tester, correct: phrase);
     await tester.enterText(field, phrase);
     await tester.tap(submit);
     await tester.pumpAndSettle();
-    expect(api.passphraseCopy, utf8.encode(phrase));
+    expect(api.passphraseCopy, [
+      109, 111, 116, 32, 100, 101, 32, 112, 97, 115, 115, 101, 32, 195, 169, 116, 195, 169, 32, 226, 152, 128,
+    ]);
     expect(api.passphraseRef!.every((b) => b == 0), isTrue);
     expect(field, findsNothing); // dialogue fermé après succès
   });

@@ -49,6 +49,8 @@ class FakeHostApi implements HostApi {
   List<DiskMsg> disks = [];
   List<VolumeMsg> volumes = [];
   final ejected = <String>[];
+  final mounted = <(String, int)>[];
+  final permissionRequests = <String>[];
   Uint8List? passphraseRef;
   List<int>? passphraseCopy;
 
@@ -63,7 +65,7 @@ class FakeHostApi implements HostApi {
   Future<List<VolumeMsg>> listVolumes() async => volumes;
 
   @override
-  Future<void> requestPermission(String diskId) async {}
+  Future<void> requestPermission(String diskId) async => permissionRequests.add(diskId);
 
   @override
   Future<VolumeMsg> unlock(String diskId, int partIndex, Uint8List passphrase) async {
@@ -77,7 +79,10 @@ class FakeHostApi implements HostApi {
   }
 
   @override
-  Future<VolumeMsg> mountPlain(String diskId, int partIndex) async => volume();
+  Future<VolumeMsg> mountPlain(String diskId, int partIndex) async {
+    mounted.add((diskId, partIndex));
+    return volume();
+  }
 
   @override
   Future<void> eject(String volumeId) async => ejected.add(volumeId);

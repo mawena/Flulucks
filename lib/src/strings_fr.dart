@@ -29,7 +29,10 @@ class Fr {
   }
 
   /// Taille décimale en Go ou Mo, virgule française, une décimale (ex. « 1,5 Go »).
+  static const unknownSize = 'taille inconnue';
+
   static String humanSize(int bytes) {
+    if (bytes < 0) return unknownSize; // disque hostile : u64 > 2^63
     final isGo = bytes >= 1000000000;
     final value = bytes / (isGo ? 1e9 : 1e6);
     return '${value.toStringAsFixed(1).replaceAll('.', ',')} ${isGo ? 'Go' : 'Mo'}';

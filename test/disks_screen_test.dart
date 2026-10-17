@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluluks/src/app.dart';
+import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/state/app_state.dart';
 import 'package:fluluks/src/strings_fr.dart';
 
@@ -48,7 +49,56 @@ void main() {
     expect(api.ejected, ['v1']);
   });
 
+  testWidgets('partition en clair : Ouvrir appelle mountPlain', (tester) async {
+    final api = FakeHostApi()
+      ..disks = [disk([part(content: 'ext4', encrypted: false)])];
+    await pump(tester, api);
+    await tester.tap(find.text('Ouvrir'));
+    await tester.pump();
+    expect(api.mounted, [('d1', 1)]);
+  });
+
+  testWidgets('sans permission : Autoriser l\'accès', (tester) async {
+    final api = FakeHostApi()
+      ..disks = [
+        DiskMsg(id: 'd1', name: 'X', sizeBytes: 1, hasPermission: false, partitions: [])
+      ];
+    await pump(tester, api);
+    await tester.tap(find.text("Autoriser l'accès"));
+    await tester.pump();
+    expect(api.permissionRequests, ['d1']);
+  });
+
+  testWidgets('avertissement needsRecovery', (tester) async {
+    final v = volume()..needsRecovery = true;
+    await pump(
+      tester,
+      FakeHostApi()
+        ..disks = [disk([part(volumeId: 'v1')])]
+        ..volumes = [v],
+    );
+    expect(
+      find.text("Le volume n'a pas été démonté proprement : contenu possiblement incomplet"),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('disque analysé sans partition : erreur affichée', (tester) async {
+    await pump(
+      tester,
+      FakeHostApi()
+        ..disks = [
+          DiskMsg(
+              id: 'd1', name: 'X', sizeBytes: 1, hasPermission: true,
+              error: 'Aucune partition reconnue', partitions: [])
+        ],
+    );
+    expect(find.text('Aucune partition reconnue'), findsOneWidget);
+    expect(find.text('Analyse du disque…'), findsNothing);
+  });
+
   test('taille lisible', () {
+    expect(Fr.humanSize(-1), 'taille inconnue');
     expect(Fr.humanSize(1500000000), '1,5 Go');
     expect(Fr.humanSize(250000000), '250,0 Mo');
   });
