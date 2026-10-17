@@ -1,0 +1,9 @@
+# Fichiers d'environnement et de système
+.DS_Store
+*.swp
+.idea/
+.vscode/
+*.iml
+
+# Images disque de test (volumineuses, générées par script)
+*.img
