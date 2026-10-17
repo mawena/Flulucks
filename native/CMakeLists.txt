@@ -55,9 +55,15 @@ target_include_directories(fluluks PUBLIC include PRIVATE src)
 target_compile_options(fluluks PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 Threads::Threads)
 
-add_executable(fluluks-cli tools/fluluks_cli.c)
-target_link_libraries(fluluks-cli PRIVATE fluluks)
-target_compile_options(fluluks-cli PRIVATE -Wall -Wextra -Werror)
+if(NOT ANDROID)
+  add_executable(fluluks-cli tools/fluluks_cli.c)
+  target_link_libraries(fluluks-cli PRIVATE fluluks)
+  target_compile_options(fluluks-cli PRIVATE -Wall -Wextra -Werror)
+endif()
+
+if(ANDROID)
+  include(cmake/android.cmake)
+endif()
 
 if(FL_TESTS)
   enable_testing()
