@@ -42,7 +42,6 @@ typedef struct {
   pthread_mutex_t m;
   pthread_cond_t cv;
   uint64_t tick;
-  uint64_t last_end; /* secteur qui suit le dernier accès en lecture */
 } cache;
 
 /* m tenu. NULL si absent. */
@@ -78,9 +77,44 @@ static void unpin(cache *c, slot *s) {
   }
 }
 
-/* Copie [off, off+len) du bloc idx vers out. `seq` : un défaut de cache déclenche la lecture anticipée. */
-static int read_in_block(cache *c, uint64_t idx, size_t off, size_t len, uint8_t *out, int seq) {
-  slot *claimed[1 + FL_CACHE_READAHEAD];
+/* m tenu. Vrai si le bloc idx-1 est présent (prêt ou en chargement) : le flux est séquentiel. */
+static int prev_present(cache *c, uint64_t idx) { return idx > 0 && find(c, idx - 1) != NULL; }
+
+/* m tenu. Réserve un emplacement LOADING pour le bloc idx. */
+static void claim(slot *s, uint64_t idx) {
+  s->state = S_LOADING;
+  s->idx = idx;
+  s->refs = 0;
+  s->dead = s->stale = 0;
+}
+
+/* Lit n blocs consécutifs depuis idx en UN appel parent, recopie la part demandée du premier bloc vers out
+ * puis remplit les emplacements réservés. N'ajuste pas l'état des emplacements. */
+static int load_blocks(cache *c, uint64_t idx, uint32_t n, slot **claimed, size_t off, size_t len, uint8_t *out) {
+  uint64_t first = idx * c->spb;
+  uint64_t nsec = (uint64_t)n * c->spb;
+  if (nsec > c->parent->sector_count - first) nsec = c->parent->sector_count - first;
+  size_t bytes = (size_t)nsec * c->parent->sector_size;
+  uint8_t *tmp = malloc((size_t)n * c->block_bytes);
+  int rc = tmp ? fl_bdev_read(c->parent, first, (uint32_t)nsec, tmp) : FL_ENOMEM;
+  if (rc == FL_OK) {
+    memcpy(out, tmp + off, len);
+    for (uint32_t k = 0; k < n; k++) {
+      size_t boff = (size_t)k * c->block_bytes;
+      size_t blen = bytes - boff < c->block_bytes ? bytes - boff : c->block_bytes;
+      memcpy(slot_data(c, claimed[k]), tmp + boff, blen);
+    }
+  }
+  free(tmp);
+  return rc;
+}
+
+/* Copie [off, off+len) du bloc idx vers out. `*seq` : -1 inconnu, 0 non, 1 oui (flux séquentiel : un défaut
+ * de cache lit jusqu'à FL_CACHE_READAHEAD blocs en un appel). `req_left` : blocs restant à lire pour la
+ * requête, dont celui-ci ; sans flux séquentiel on ne lit jamais plus que ce que la requête demande. */
+static int read_in_block(cache *c, uint64_t idx, size_t off, size_t len, uint8_t *out, int *seq, int first_blk,
+                         uint64_t req_left) {
+  slot *claimed[FL_CACHE_READAHEAD];
   uint32_t n = 0;
 
   pthread_mutex_lock(&c->m);
@@ -105,22 +139,17 @@ static int read_in_block(cache *c, uint64_t idx, size_t off, size_t len, uint8_t
       pthread_cond_wait(&c->cv, &c->m);
       continue;
     }
-    uint32_t want = seq ? 1 + FL_CACHE_READAHEAD : 1;
-    if (idx + want > c->total_blk) want = (uint32_t)(c->total_blk - idx);
+    if (*seq < 0) *seq = first_blk ? prev_present(c, idx) : 0;
+    uint64_t want = *seq ? FL_CACHE_READAHEAD : (req_left < FL_CACHE_READAHEAD ? req_left : FL_CACHE_READAHEAD);
+    if (want > c->total_blk - idx) want = c->total_blk - idx;
+    claim(v, idx);
     claimed[0] = v;
-    v->state = S_LOADING;
-    v->idx = idx;
-    v->refs = 0;
-    v->dead = v->stale = 0;
     n = 1;
     while (n < want) { /* blocs consécutifs absents du cache, tant qu'il reste des emplacements */
       if (find(c, idx + n)) break;
       slot *w = victim(c);
       if (!w) break;
-      w->state = S_LOADING;
-      w->idx = idx + n;
-      w->refs = 0;
-      w->dead = w->stale = 0;
+      claim(w, idx + n);
       claimed[n++] = w;
     }
     break;
@@ -128,21 +157,20 @@ static int read_in_block(cache *c, uint64_t idx, size_t off, size_t len, uint8_t
   pthread_mutex_unlock(&c->m);
 
   /* Lecture parent hors verrou, en un seul appel. */
-  uint64_t first = idx * c->spb;
-  uint64_t nsec = (uint64_t)n * c->spb;
-  if (nsec > c->parent->sector_count - first) nsec = c->parent->sector_count - first;
-  size_t bytes = (size_t)nsec * c->parent->sector_size;
-  uint8_t *tmp = malloc((size_t)n * c->block_bytes);
-  int rc = tmp ? fl_bdev_read(c->parent, first, (uint32_t)nsec, tmp) : FL_ENOMEM;
-  if (rc == FL_OK) {
-    memcpy(out, tmp + off, len);
-    for (uint32_t k = 0; k < n; k++) {
-      size_t boff = (size_t)k * c->block_bytes;
-      size_t blen = bytes - boff < c->block_bytes ? bytes - boff : c->block_bytes;
-      memcpy(slot_data(c, claimed[k]), tmp + boff, blen);
+  int rc = load_blocks(c, idx, n, claimed, off, len, out);
+  if (rc != FL_OK && n > 1) {
+    /* Une erreur dans un bloc spéculatif ne doit pas faire échouer le bloc demandé : on libère les
+     * réservations anticipées puis on relit le bloc demandé seul. */
+    pthread_mutex_lock(&c->m);
+    for (uint32_t k = 1; k < n; k++) {
+      claimed[k]->state = S_FREE;
+      claimed[k]->stale = 0;
     }
+    pthread_cond_broadcast(&c->cv);
+    pthread_mutex_unlock(&c->m);
+    n = 1;
+    rc = load_blocks(c, idx, 1, claimed, off, len, out);
   }
-  free(tmp);
 
   pthread_mutex_lock(&c->m);
   for (uint32_t k = 0; k < n; k++) {
@@ -163,19 +191,16 @@ static int read_in_block(cache *c, uint64_t idx, size_t off, size_t len, uint8_t
 static int cache_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
   cache *c = d->priv;
   const uint32_t ss = d->sector_size;
-  pthread_mutex_lock(&c->m);
-  int seq = lba == c->last_end;
-  c->last_end = lba + count;
-  pthread_mutex_unlock(&c->m);
-
   uint8_t *out = buf;
   uint64_t cur = lba;
   uint32_t left = count;
+  int seq = -1;
   while (left) {
     uint64_t idx = cur / c->spb;
     uint32_t off = (uint32_t)(cur % c->spb);
     uint32_t n = c->spb - off < left ? c->spb - off : left;
-    int rc = read_in_block(c, idx, (size_t)off * ss, (size_t)n * ss, out, seq || cur != lba);
+    uint64_t req_blocks = (cur + left - 1) / c->spb - idx + 1;
+    int rc = read_in_block(c, idx, (size_t)off * ss, (size_t)n * ss, out, &seq, cur == lba, req_blocks);
     if (rc != FL_OK) return rc;
     out += (size_t)n * ss;
     cur += n;
@@ -187,6 +212,9 @@ static int cache_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
 static int cache_write(fl_bdev *d, uint64_t lba, uint32_t count, const void *buf) {
   cache *c = d->priv;
   const uint32_t ss = d->sector_size;
+  /* NB : deux écritures concurrentes qui se recouvrent peuvent laisser le parent et le cache dans des
+   * ordres différents. Avant la phase 3, il faut un verrou d'ordonnancement des écritures (ou les
+   * sérialiser côté appelant). */
   int rc = fl_bdev_write(c->parent, lba, count, buf);
   /* Si le parent échoue, l'écriture a pu être partielle : les blocs touchés sont invalidés ci-dessous. */
   uint64_t end = lba + count; /* exclusif */
@@ -256,7 +284,6 @@ int fl_cache_bdev_new(fl_bdev *parent, uint32_t block_bytes, uint32_t nblocks, f
   c->nblocks = nblocks;
   c->spb = block_bytes / parent->sector_size;
   c->total_blk = parent->sector_count / c->spb + (parent->sector_count % c->spb ? 1 : 0);
-  c->last_end = UINT64_MAX; /* aucun accès précédent */
   pthread_mutex_init(&c->m, NULL);
   pthread_cond_init(&c->cv, NULL);
   d->ops = &cache_ops;

@@ -9,7 +9,8 @@
 extern "C" {
 #endif
 
-/* Nombre de blocs lus en plus du bloc manquant lors d'une lecture séquentielle (en un seul appel parent). */
+/* Nombre maximal de blocs (bloc manquant compris) lus en un seul appel parent lors d'une lecture séquentielle :
+ * un défaut sur le bloc i est séquentiel si le bloc i-1 est en cache ou en chargement. */
 #define FL_CACHE_READAHEAD 4u
 /* Taille maximale d'un bloc de cache. */
 #define FL_CACHE_MAX_BLOCK_BYTES (1024u * 1024u)
