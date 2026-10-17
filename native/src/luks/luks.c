@@ -15,23 +15,20 @@ int fl_luks_open(fl_bdev *dev, fl_luks **out) {
   if (fl_bdev_size_bytes(dev) < sizeof hdr) return FL_ENOTSUP;
   int rc = fl_bdev_read_bytes(dev, 0, sizeof hdr, hdr);
   if (rc != FL_OK) return rc;
-  if (memcmp(hdr, k_magic, sizeof k_magic) != 0) return FL_ENOTSUP;
+  bool magic_ok = memcmp(hdr, k_magic, sizeof k_magic) == 0;
   int version = (hdr[6] << 8) | hdr[7];
 
   fl_luks *l = calloc(1, sizeof *l);
   if (!l) return FL_ENOMEM;
   l->dev = dev;
-  l->version = version;
-  switch (version) {
-    case 1:
-      rc = fl_luks1_parse(l, hdr);
-      break;
-    case 2:
-      rc = fl_luks2_open(l);
-      break;
-    default:
-      rc = FL_ENOTSUP;
-      break;
+  if (magic_ok && version == 1) {
+    l->version = 1;
+    rc = fl_luks1_parse(l, hdr);
+  } else {
+    /* LUKS2, ou primaire illisible (magie/version abîmées) : l'en-tête secondaire peut le sauver.
+     * ENOTSUP seulement si aucun en-tête SKUL valide n'existe. */
+    l->version = 2;
+    rc = fl_luks2_open(l, magic_ok && version == 2);
   }
   if (rc != FL_OK) {
     fl_luks_close(l);

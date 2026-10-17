@@ -68,10 +68,10 @@ static int load_hdr(fl_bdev *dev, uint64_t off, bool secondary, hdr_img *out) {
 
 static const fl_luks_ops luks2_ops;
 
-int fl_luks2_open(struct fl_luks *l) {
+int fl_luks2_open(struct fl_luks *l, bool primary_ok) {
   hdr_img pri, sec;
   int rp = load_hdr(l->dev, 0, false, &pri);
-  if (rp == FL_ENOMEM || rp == FL_EIO) return rp;
+  if (rp == FL_ENOMEM) return rp;
 
   /* l'en-tête secondaire se trouve à hdr_size ; sinon on essaie les décalages usuels */
   uint64_t offs[1 + sizeof k_sec_offsets / sizeof k_sec_offsets[0]];
@@ -87,12 +87,14 @@ int fl_luks2_open(struct fl_luks *l) {
     if (!dup) offs[no++] = k_sec_offsets[i];
   }
   int rs = FL_ECORRUPT;
+  bool io_error = rp == FL_EIO;
   memset(&sec, 0, sizeof sec);
   for (size_t i = 0; i < no; i++) {
     rs = load_hdr(l->dev, offs[i], true, &sec);
-    if (rs == FL_OK || rs == FL_ENOMEM || rs == FL_EIO) break;
+    if (rs == FL_OK || rs == FL_ENOMEM) break;
+    if (rs == FL_EIO) io_error = true; /* un secteur illisible n'interdit pas les autres décalages */
   }
-  if (rs == FL_ENOMEM || rs == FL_EIO) {
+  if (rs == FL_ENOMEM) {
     free(pri.buf);
     return rs;
   }
@@ -108,13 +110,23 @@ int fl_luks2_open(struct fl_luks *l) {
   } else if (rs == FL_OK) {
     order[n++] = &sec;
   }
-  int rc = rp == FL_ENOTSUP ? FL_ENOTSUP : FL_ECORRUPT;
-  luks2 *x = calloc(1, sizeof *x);
-  if (!x) rc = FL_ENOMEM;
+  int rc;
+  if (n > 0)
+    rc = FL_ECORRUPT;
+  else if (rp == FL_ENOTSUP)
+    rc = FL_ENOTSUP;
+  else if (io_error)
+    rc = FL_EIO;
+  else
+    rc = primary_ok ? FL_ECORRUPT : FL_ENOTSUP;
+  luks2 *x = n ? calloc(1, sizeof *x) : NULL;
+  if (n && !x) rc = FL_ENOMEM;
   for (int i = 0; x && i < n; i++) {
     const char *json = (const char *)order[i]->buf + BIN_HDR;
     rc = fl_luks2_parse_json(json, fl_bdev_size_bytes(l->dev), x);
-    if (rc == FL_OK) break;
+    /* on ne se rabat sur l'autre en-tête que si celui-ci est corrompu : un en-tête valide mais non
+     * pris en charge (ex. réchiffrement en cours) ne doit jamais céder la place à des métadonnées périmées */
+    if (rc != FL_ECORRUPT) break;
   }
   free(pri.buf);
   free(sec.buf);
@@ -174,25 +186,36 @@ out:
   return rc;
 }
 
+/* Pertinence d'une erreur de slot, pour le rapport final : mémoire/E-S > mauvaise phrase > corrompu. */
+static int err_rank(int rc) {
+  if (rc == FL_ENOMEM) return 4;
+  if (rc == FL_EIO) return 3;
+  if (rc == FL_EBADPASS) return 2;
+  return 1;
+}
+
 static int luks2_unlock(struct fl_luks *l, const void *pass, size_t passlen, fl_bdev **decrypted) {
   const luks2 *x = l->impl;
   uint8_t *mk = fl_secure_alloc(64);
   if (!mk) return FL_ENOMEM;
   static const uint8_t none = 0;
   if (!pass) pass = &none;
-  int rc = FL_EBADPASS;
+  int best = 0;
+  bool ok = false;
   size_t mkl = 0;
   for (int i = 0; i < x->nslots; i++) {
     const l2_slot *s = &x->slots[i];
-    if (s->priority == 0 || s->digest < 0) continue;
-    rc = try_slot(l, x, s, pass, passlen, mk);
+    if (!s->supported || s->priority == 0 || s->digest < 0) continue;
+    int rc = try_slot(l, x, s, pass, passlen, mk);
     if (rc == FL_OK) {
       mkl = s->key_size;
+      ok = true;
       break;
     }
-    if (rc != FL_EBADPASS) break;
+    if (!best || err_rank(rc) > err_rank(best)) best = rc; /* on continue avec les slots suivants */
   }
-  if (rc == FL_OK) {
+  int rc = best ? best : FL_EBADPASS;
+  if (ok) {
     rc = fl_crypt_bdev_new(l->dev, x->seg_off, x->seg_size, x->seg_enc, mk, mkl, x->sector_size,
                            false /* IV en unités de 512 octets, comme cryptsetup */, x->iv_tweak, decrypted);
     if (rc != FL_OK) *decrypted = NULL;

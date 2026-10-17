@@ -9,6 +9,7 @@
 
 #define MAX_STRIPES 65536u
 #define MAX_ARGON2_KIB 4194304u /* maximum de cryptsetup */
+#define MAX_PBKDF2_ITER (1u << 27)
 
 static const cJSON *member(const cJSON *o, const char *k) { return cJSON_GetObjectItemCaseSensitive((cJSON *)o, k); }
 
@@ -114,7 +115,7 @@ static int parse_slot(const cJSON *ks, uint64_t dev_size, l2_slot *s) {
     s->kdf = L2_KDF_PBKDF2;
     if ((rc = get_str(kdf, "hash", s->kdf_hash, sizeof s->kdf_hash)) != FL_OK) return rc;
     if ((rc = get_uint(kdf, "iterations", 1, UINT32_MAX, &s->iterations)) != FL_OK) return rc;
-    if (fl_hash_len(s->kdf_hash) == 0) return FL_ENOTSUP;
+    if (fl_hash_len(s->kdf_hash) == 0 || s->iterations > MAX_PBKDF2_ITER) return FL_ENOTSUP;
   } else if (!strcmp(type, "argon2i") || !strcmp(type, "argon2id")) {
     s->kdf = type[7] ? L2_KDF_ARGON2ID : L2_KDF_ARGON2I;
     if ((rc = get_uint(kdf, "cpus", 1, 64, &s->cpus)) != FL_OK) return rc;
@@ -124,7 +125,7 @@ static int parse_slot(const cJSON *ks, uint64_t dev_size, l2_slot *s) {
   } else {
     return FL_ENOTSUP;
   }
-  s->digest = -1;
+  s->supported = true;
   return FL_OK;
 }
 
@@ -139,7 +140,7 @@ static int parse_digest(const cJSON *d, l2_digest *out) {
   if ((rc = get_b64(d, "salt", out->salt, sizeof out->salt, &out->salt_len)) != FL_OK) return rc;
   if ((rc = get_b64(d, "digest", out->digest, sizeof out->digest, &out->digest_len)) != FL_OK) return rc;
   if (out->digest_len < 16) return FL_ECORRUPT; /* un digest trop court accepterait n'importe quelle clé */
-  if (fl_hash_len(out->hash) == 0) return FL_ENOTSUP;
+  if (fl_hash_len(out->hash) == 0 || out->iterations > MAX_PBKDF2_ITER) return FL_ENOTSUP;
   return FL_OK;
 }
 
@@ -162,6 +163,7 @@ static int parse_segment(const cJSON *sg, uint64_t dev_size, luks2 *x) {
   if (!cJSON_IsObject(sg)) return FL_ECORRUPT;
   if ((rc = get_str(sg, "type", type, sizeof type)) != FL_OK) return rc;
   if (strcmp(type, "crypt") != 0) return FL_ENOTSUP;
+  if (member(sg, "integrity")) return FL_ENOTSUP; /* dm-integrity : déchiffrerait n'importe quoi */
   if ((rc = get_u64(sg, "offset", &x->seg_off)) != FL_OK) return rc;
   const cJSON *sz = member(sg, "size");
   if (cJSON_IsString(sz) && sz->valuestring && !strcmp(sz->valuestring, "dynamic")) {
@@ -194,6 +196,14 @@ int fl_luks2_parse_json(const char *json, uint64_t dev_size, luks2 *x) {
   if (!cJSON_IsObject(root) || !cJSON_IsObject(keyslots) || !cJSON_IsObject(segments) || !cJSON_IsObject(digests))
     goto out;
 
+  /* exigences obligatoires (réchiffrement en cours, etc.) : non prises en charge */
+  const cJSON *req = member(member(member(root, "config"), "requirements"), "mandatory");
+  if (req && !cJSON_IsArray(req)) goto out;
+  if (req && cJSON_GetArraySize(req) > 0) {
+    rc = FL_ENOTSUP;
+    goto out;
+  }
+
   /* segments : un seul, "0", de type crypt */
   int nseg = cJSON_GetArraySize(segments);
   if (nseg != 1) {
@@ -214,8 +224,16 @@ int fl_luks2_parse_json(const char *json, uint64_t dev_size, luks2 *x) {
       goto out;
     }
     l2_slot *s = &x->slots[x->nslots];
+    s->digest = -1;
     if ((rc = parse_u64(e->string, &ids[x->nslots])) != FL_OK) goto out;
-    if ((rc = parse_slot(e, dev_size, s)) != FL_OK) goto out;
+    rc = parse_slot(e, dev_size, s);
+    if (rc == FL_ENOTSUP) {
+      /* slot non pris en charge : ignoré, les autres restent utilisables */
+      memset(s, 0, sizeof *s);
+      s->digest = -1;
+    } else if (rc != FL_OK) {
+      goto out;
+    }
     x->nslots++;
   }
 
@@ -247,6 +265,14 @@ int fl_luks2_parse_json(const char *json, uint64_t dev_size, luks2 *x) {
       if (seg0 && x->slots[found].digest < 0) x->slots[found].digest = x->ndigests;
     }
     x->ndigests++;
+  }
+
+  /* au moins un slot pris en charge, lié par un digest au segment 0 */
+  bool usable = false;
+  for (int i = 0; i < x->nslots; i++) usable |= x->slots[i].supported && x->slots[i].digest >= 0;
+  if (!usable) {
+    rc = FL_ENOTSUP;
+    goto out;
   }
 
   /* tri stable : priorité décroissante */

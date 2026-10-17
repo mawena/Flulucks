@@ -10,6 +10,7 @@
 #include "fluluks/luks.h"
 #include "fluluks/partition.h"
 #include "luks/luks_internal.h"
+#include "cJSON.h"
 #include "tt.h"
 
 #define CHUNK (1u << 20)
@@ -163,121 +164,266 @@ static void test_b64(void) {
   TT_ASSERT_EQ(fl_b64_decode("Zm9vYmFyZm9v", o, 8, &n), FL_ECORRUPT);
 }
 
-/* --- paramètres hostiles : on réécrit le JSON en mémoire (les deux en-têtes) et on recalcule la somme --- */
-static uint8_t *g_mem;
+/* --- images en mémoire : le JSON est modifié structurellement (cJSON), puis l'en-tête est re-signé.
+ * Aucune dépendance aux sels aléatoires des fixtures. --- */
 #define MEMCAP (32u * 1024 * 1024)
+#define LOADLEN (20u * 1024 * 1024) /* en-têtes, zones de clés, début du segment (16 Mio) */
+#define HDR 16384u                  /* hdr_size des fixtures ; secondaire à HDR */
+typedef struct {
+  uint8_t *m;
+  uint64_t fail_lo, fail_hi; /* secteurs en erreur d'E/S [lo, hi) */
+  fl_bdev dev;
+} memimg;
+
 static int mem_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
-  memcpy(buf, (uint8_t *)d->priv + lba * 512, (size_t)count * 512);
+  memimg *mi = d->priv;
+  if (lba < mi->fail_hi && lba + count > mi->fail_lo) return FL_EIO;
+  memcpy(buf, mi->m + lba * 512, (size_t)count * 512);
   return FL_OK;
 }
 static const fl_bdev_ops mem_ops = {mem_read, NULL, NULL, NULL};
 
-static void resigner(uint8_t *h, size_t hdr_size) {
+static int mem_load(memimg *mi, const char *img) {
+  memset(mi, 0, sizeof *mi);
+  fl_bdev *src = ouvrir(img);
+  if (!src) return -1;
+  mi->m = calloc(1, MEMCAP);
+  uint64_t n = fl_bdev_size_bytes(src);
+  if (n > LOADLEN) n = LOADLEN;
+  if (!mi->m || fl_bdev_read_bytes(src, 0, (size_t)n, mi->m) != FL_OK) return -1;
+  fl_bdev_close(src);
+  mi->dev = (fl_bdev){&mem_ops, 512, MEMCAP / 512, true, mi};
+  return 0;
+}
+static void mem_free(memimg *mi) { free(mi->m); }
+
+static void resigner(uint8_t *h) {
   memset(h + 448, 0, 64);
   uint8_t dg[32];
-  fl_hash("sha256", h, hdr_size, dg);
+  fl_hash("sha256", h, HDR, dg);
   memcpy(h + 448, dg, 32);
 }
 
-/* remplace old par repl dans le JSON de l'en-tête h (taille hdr_size) */
-static int patch(uint8_t *h, size_t hdr_size, const char *old, const char *repl) {
+/* Fixe `chemin` ("a.b.c") à la valeur JSON `val` (NULL = supprimer) dans l'en-tête h. chemin "" = remplacer la racine. */
+#define P_PRI 1
+#define P_SEC 2
+static int patch_one(uint8_t *h, const char *chemin, const char *val) {
   char *j = (char *)h + 4096;
-  size_t cap = hdr_size - 4096, ol = strlen(old), rl = strlen(repl);
-  char *p = memmem(j, cap, old, ol);
-  if (!p) return -1;
-  size_t tail = cap - (size_t)(p - j) - ol;
-  if (rl > ol) {
-    if (tail < rl - ol) return -1;
-    tail -= rl - ol; /* les octets perdus sont le remplissage NUL final */
+  cJSON *root = cJSON_Parse(j);
+  if (!root) return -1;
+  cJSON *v = val ? cJSON_Parse(val) : NULL;
+  if (*chemin == 0) {
+    cJSON_Delete(root);
+    root = v;
+  } else {
+    char path[128];
+    snprintf(path, sizeof path, "%s", chemin);
+    cJSON *cur = root;
+    char *save = NULL, *tok = strtok_r(path, ".", &save), *next;
+    while ((next = strtok_r(NULL, ".", &save)) != NULL) {
+      cur = cJSON_GetObjectItemCaseSensitive(cur, tok);
+      if (!cur) return -1;
+      tok = next;
+    }
+    if (cJSON_GetObjectItemCaseSensitive(cur, tok)) {
+      if (v) cJSON_ReplaceItemInObjectCaseSensitive(cur, tok, v);
+      else cJSON_DeleteItemFromObjectCaseSensitive(cur, tok);
+    } else if (v) {
+      cJSON_AddItemToObject(cur, tok, v);
+    }
   }
-  memmove(p + rl, p + ol, tail);
-  memcpy(p, repl, rl);
-  if (rl < ol) memset(j + cap - (ol - rl), 0, ol - rl);
-  resigner(h, hdr_size);
+  char *txt = cJSON_PrintUnformatted(root);
+  cJSON_Delete(root);
+  if (!txt || strlen(txt) >= HDR - 4096) return -1;
+  memset(j, 0, HDR - 4096);
+  memcpy(j, txt, strlen(txt));
+  free(txt);
+  resigner(h);
   return 0;
 }
 
-static int ouvrir_patche(const char *img, const char *old, const char *repl) {
-  fl_bdev *src = ouvrir(img);
-  if (!src) return -1000;
-  g_mem = calloc(1, MEMCAP);
-  fl_bdev_read_bytes(src, 0, 32768, g_mem);
-  fl_bdev_close(src);
-  if (patch(g_mem, 16384, old, repl) || patch(g_mem + 16384, 16384, old, repl)) {
-    free(g_mem);
-    return -1001;
-  }
-  fl_bdev dev = {&mem_ops, 512, MEMCAP / 512, true, g_mem};
+static int mem_patch(memimg *mi, int which, const char *chemin, const char *val) {
+  if ((which & P_PRI) && patch_one(mi->m, chemin, val)) return -1;
+  if ((which & P_SEC) && patch_one(mi->m + HDR, chemin, val)) return -1;
+  return 0;
+}
+
+static void mem_seqid(memimg *mi, int which, uint8_t seq) {
+  if (which & P_PRI) { mi->m[16 + 7] = seq; resigner(mi->m); }
+  if (which & P_SEC) { mi->m[HDR + 16 + 7] = seq; resigner(mi->m + HDR); }
+}
+
+/* image + modification sur les deux en-têtes -> code de fl_luks_open */
+static int ouvrir_patche(const char *img, const char *chemin, const char *val) {
+  memimg mi;
+  if (mem_load(&mi, img)) return -1000;
+  if (mem_patch(&mi, P_PRI | P_SEC, chemin, val)) { mem_free(&mi); return -1001; }
   fl_luks *l = NULL;
-  int rc = fl_luks_open(&dev, &l);
+  int rc = fl_luks_open(&mi.dev, &l);
   fl_luks_close(l);
-  free(g_mem);
+  mem_free(&mi);
   return rc;
 }
 
 static void test_luks2_hostile(void) {
   const char *img = "whole-luks2-4k.img";
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"stripes\":4000", "\"stripes\":4000"), FL_OK);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"stripes\":4000", "\"stripes\":0"), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"stripes\":4000", "\"stripes\":65537"), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"memory\":32768", "\"memory\":4194305"), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"memory\":32768", "\"memory\":8"), FL_ECORRUPT); /* < 8*cpus */
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"cpus\":2", "\"cpus\":65"), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"cpus\":2", "\"cpus\":0"), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"time\":4", "\"time\":1001"), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"time\":4", "\"time\":0"), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"key_size\":64,\"af\"", "\"key_size\":48,\"af\""), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"offset\":\"32768\"", "\"offset\":\"-1\""), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"offset\":\"32768\"", "\"offset\":\"99999999999999999999\""), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"offset\":\"32768\"", "\"offset\":\"0x8000\""), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"offset\":\"32768\"", "\"offset\":\"33000\""), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"size\":\"258048\"", "\"size\":\"1024\""), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"size\":\"258048\"", "\"size\":\"999999999999\""), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"offset\":\"16777216\"", "\"offset\":\"999999999999\""), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"offset\":\"16777216\"", "\"offset\":\"16777217\""), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"sector_size\":4096", "\"sector_size\":4097"), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"type\":\"luks2\"", "\"type\":\"autre\""), FL_ENOTSUP);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"type\":\"argon2i\"", "\"type\":\"scrypt\""), FL_ENOTSUP);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"type\":\"crypt\"", "\"type\":\"linear\""), FL_ENOTSUP);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"type\":\"raw\"", "\"type\":\"journal\""), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"type\":\"luks1\"", "\"type\":\"luks2\""), FL_ENOTSUP);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"encryption\":\"aes-xts-plain64\",\"sector", "\"encryption\":\"serpent-xts-plain64\",\"sector"), FL_ENOTSUP);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"salt\":\"WDjoV0lHtFWBWwgvO3gR0hSj/Nxhk4hPYEfK8AQii1A=\"", "\"salt\":\"!!!\""), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"iterations\":1000", "\"iterations\":0"), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"segments\":{\"0\"", "\"segments\":{\"5\":{\"type\":\"crypt\"},\"0\""), FL_ENOTSUP);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"keyslots\":{\"0\":", "\"keyslots\":[],\"x\":"), FL_ECORRUPT);
-  TT_ASSERT_EQ(ouvrir_patche(img, "{\"keyslots\"", "[{\"keyslots\""), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.af.stripes", "4000"), FL_OK);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.af.stripes", "0"), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.af.stripes", "65537"), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.kdf.memory", "4194305"), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.kdf.memory", "8"), FL_ECORRUPT); /* < 8*cpus */
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.kdf.cpus", "65"), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.kdf.cpus", "0"), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.kdf.time", "1001"), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.kdf.time", "0"), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.key_size", "48"), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.area.key_size", "48"), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.area.offset", "\"-1\""), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.area.offset", "\"99999999999999999999\""), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.area.offset", "\"0x8000\""), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.area.offset", "\"33000\""), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.area.size", "\"1024\""), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.area.size", "\"999999999999\""), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.area.type", "\"journal\""), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "segments.0.offset", "\"999999999999\""), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "segments.0.offset", "\"16777217\""), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "segments.0.sector_size", "4097"), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.kdf.salt", "\"!!!\""), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "digests.0.iterations", "0"), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "digests.0.keyslots", "[\"7\"]"), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots", "[]"), FL_ECORRUPT);
+  TT_ASSERT_EQ(ouvrir_patche(img, "", "[1]"), FL_ECORRUPT);
+  /* bien formé mais non pris en charge : aucun slot utilisable -> ENOTSUP */
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.type", "\"autre\""), FL_ENOTSUP);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.kdf.type", "\"scrypt\""), FL_ENOTSUP);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.af.type", "\"luks2\""), FL_ENOTSUP);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.af.hash", "\"md5\""), FL_ENOTSUP);
+  TT_ASSERT_EQ(ouvrir_patche(img, "keyslots.0.area.encryption", "\"serpent-xts-plain64\""), FL_ENOTSUP);
+  TT_ASSERT_EQ(ouvrir_patche(img, "segments.0.type", "\"linear\""), FL_ENOTSUP);
+  TT_ASSERT_EQ(ouvrir_patche(img, "segments.0.encryption", "\"serpent-xts-plain64\""), FL_ENOTSUP);
+  TT_ASSERT_EQ(ouvrir_patche(img, "segments.5", "{\"type\":\"crypt\"}"), FL_ENOTSUP);
+  TT_ASSERT_EQ(ouvrir_patche(img, "segments.0.integrity", "{\"type\":\"hmac(sha256)\"}"), FL_ENOTSUP);
+  TT_ASSERT_EQ(ouvrir_patche(img, "config.requirements", "{\"mandatory\":[\"online-reencrypt\"]}"), FL_ENOTSUP);
+  TT_ASSERT_EQ(ouvrir_patche(img, "config.requirements", "{\"mandatory\":[]}"), FL_OK);
+  TT_ASSERT_EQ(ouvrir_patche(img, "digests.0.iterations", "134217729"), FL_ENOTSUP);
+  TT_ASSERT_EQ(ouvrir_patche(img, "digests.0.iterations", "134217728"), FL_OK);
 }
 
-static void test_luks2_priorite_et_digest(void) {
-  const char *img = "whole-luks2-2slots.img";
+static void unlock_attendu(memimg *mi, const char *passfile, int attendu) {
   char pass[256];
-  size_t n = lire_pass(pass, sizeof pass, "pass.txt");
-  /* priorité 0 sur les deux slots : rien à essayer -> mauvaise phrase */
-  fl_bdev *src = ouvrir(img);
-  TT_ASSERT(src != NULL);
-  uint8_t *m = calloc(1, MEMCAP);
-  TT_ASSERT(m != NULL);
-  fl_bdev_read_bytes(src, 0, 32768, m);
-  fl_bdev_close(src);
-  TT_ASSERT_EQ(patch(m, 16384, "\"kdf\":{\"type\":\"pbkdf2\",\"hash\":\"sha256\",\"iterations\":1000,\"salt\":\"Eah", "\"priority\":0,\"kdf\":{\"type\":\"pbkdf2\",\"hash\":\"sha256\",\"iterations\":1000,\"salt\":\"Eah"), 0);
-  TT_ASSERT_EQ(patch(m + 16384, 16384, "\"kdf\":{\"type\":\"pbkdf2\",\"hash\":\"sha256\",\"iterations\":1000,\"salt\":\"Eah", "\"priority\":0,\"kdf\":{\"type\":\"pbkdf2\",\"hash\":\"sha256\",\"iterations\":1000,\"salt\":\"Eah"), 0);
-  fl_bdev dev = {&mem_ops, 512, MEMCAP / 512, true, m};
+  size_t n = lire_pass(pass, sizeof pass, passfile);
+  TT_ASSERT(n > 0);
   fl_luks *l = NULL;
-  TT_ASSERT_EQ(fl_luks_open(&dev, &l), FL_OK);
+  TT_ASSERT_EQ(fl_luks_open(&mi->dev, &l), FL_OK);
   fl_bdev *dec = NULL;
-  /* slot 0 ignoré ; la phrase pass.txt ouvre le slot 0 seulement (pass2 -> slot 1) */
-  TT_ASSERT_EQ(fl_luks_unlock(l, pass, n, &dec), FL_EBADPASS);
+  TT_ASSERT_EQ(fl_luks_unlock(l, pass, n, &dec), attendu);
+  TT_ASSERT((dec != NULL) == (attendu == FL_OK));
+  fl_bdev_close(dec);
   fl_luks_close(l);
-  /* le digest ne lie plus aucun slot : même la bonne phrase est refusée */
-  free(m);
-  TT_ASSERT_EQ(ouvrir_patche(img, "\"keyslots\":[\"0\",\"1\"]", "\"keyslots\":[\"7\"]"), FL_ECORRUPT);
+}
+
+/* pass.txt ouvre le slot 0 seulement, pass2.txt le slot 1 seulement. */
+static void test_luks2_priorite_et_digest(void) {
+  memimg mi;
+  TT_ASSERT_EQ(mem_load(&mi, "whole-luks2-2slots.img"), 0);
+  /* témoins positifs sur l'image intacte */
+  unlock_attendu(&mi, "pass.txt", FL_OK);
+  unlock_attendu(&mi, "pass2.txt", FL_OK);
+  /* slot 0 en priorité 0 : jamais essayé */
+  TT_ASSERT_EQ(mem_patch(&mi, P_PRI | P_SEC, "keyslots.0.priority", "0"), 0);
+  unlock_attendu(&mi, "pass.txt", FL_EBADPASS);
+  unlock_attendu(&mi, "pass2.txt", FL_OK);
+  /* priorité 2 sur le slot 0 : toujours utilisable */
+  TT_ASSERT_EQ(mem_patch(&mi, P_PRI | P_SEC, "keyslots.0.priority", "2"), 0);
+  unlock_attendu(&mi, "pass.txt", FL_OK);
+  unlock_attendu(&mi, "pass2.txt", FL_OK);
+  /* le digest ne lie plus que le slot 1 : le slot 0 est refusé même avec la bonne phrase */
+  TT_ASSERT_EQ(mem_patch(&mi, P_PRI | P_SEC, "digests.0.keyslots", "[\"1\"]"), 0);
+  unlock_attendu(&mi, "pass.txt", FL_EBADPASS);
+  unlock_attendu(&mi, "pass2.txt", FL_OK);
+  /* le digest ne liste plus le segment 0 : plus aucun slot lié -> ENOTSUP à l'ouverture */
+  TT_ASSERT_EQ(mem_patch(&mi, P_PRI | P_SEC, "digests.0.segments", "[]"), 0);
+  fl_luks *l = NULL;
+  TT_ASSERT_EQ(fl_luks_open(&mi.dev, &l), FL_ENOTSUP);
+  mem_free(&mi);
+}
+
+static void test_luks2_slot_non_supporte_ignore(void) {
+  memimg mi;
+  TT_ASSERT_EQ(mem_load(&mi, "whole-luks2-2slots.img"), 0);
+  TT_ASSERT_EQ(mem_patch(&mi, P_PRI | P_SEC, "keyslots.1.area.encryption", "\"serpent-xts-plain64\""), 0);
+  unlock_attendu(&mi, "pass.txt", FL_OK);
+  unlock_attendu(&mi, "pass2.txt", FL_EBADPASS);
+  mem_free(&mi);
+  /* itérations PBKDF2 hostiles sur un seul slot : ignoré aussi */
+  TT_ASSERT_EQ(mem_load(&mi, "whole-luks2-2slots.img"), 0);
+  TT_ASSERT_EQ(mem_patch(&mi, P_PRI | P_SEC, "keyslots.1.kdf.iterations", "134217729"), 0);
+  unlock_attendu(&mi, "pass.txt", FL_OK);
+  unlock_attendu(&mi, "pass2.txt", FL_EBADPASS);
+  TT_ASSERT_EQ(mem_patch(&mi, P_PRI | P_SEC, "keyslots.0.kdf.iterations", "134217729"), 0);
+  fl_luks *l = NULL;
+  TT_ASSERT_EQ(fl_luks_open(&mi.dev, &l), FL_ENOTSUP);
+  mem_free(&mi);
+}
+
+static void test_luks2_magie_abimee(void) {
+  memimg mi;
+  TT_ASSERT_EQ(mem_load(&mi, "whole-luks2-4k.img"), 0);
+  memset(mi.m, 0, 6); /* magie du primaire détruite */
+  unlock_attendu(&mi, "pass.txt", FL_OK);
+  mem_free(&mi);
+  /* version du primaire détruite */
+  TT_ASSERT_EQ(mem_load(&mi, "whole-luks2-4k.img"), 0);
+  mi.m[7] = 9;
+  unlock_attendu(&mi, "pass.txt", FL_OK);
+  /* magie détruite des deux côtés : plus du LUKS */
+  memset(mi.m, 0, 6);
+  memset(mi.m + HDR, 0, 6);
+  fl_luks *l = (fl_luks *)1;
+  TT_ASSERT_EQ(fl_luks_open(&mi.dev, &l), FL_ENOTSUP);
+  TT_ASSERT(l == NULL);
+  mem_free(&mi);
+}
+
+static void test_luks2_choix_entete(void) {
+  memimg mi;
+  fl_luks *l = NULL;
+  /* primaire valide (seqid plus grand) mais non pris en charge : jamais de repli sur le secondaire périmé */
+  TT_ASSERT_EQ(mem_load(&mi, "whole-luks2-4k.img"), 0);
+  TT_ASSERT_EQ(mem_patch(&mi, P_PRI, "segments.5", "{\"type\":\"crypt\"}"), 0);
+  mem_seqid(&mi, P_PRI, 9);
+  TT_ASSERT_EQ(fl_luks_open(&mi.dev, &l), FL_ENOTSUP);
+  /* même chose côté secondaire plus récent */
+  mem_free(&mi);
+  TT_ASSERT_EQ(mem_load(&mi, "whole-luks2-4k.img"), 0);
+  TT_ASSERT_EQ(mem_patch(&mi, P_SEC, "segments.5", "{\"type\":\"crypt\"}"), 0);
+  mem_seqid(&mi, P_SEC, 9);
+  TT_ASSERT_EQ(fl_luks_open(&mi.dev, &l), FL_ENOTSUP);
+  mem_free(&mi);
+  /* primaire à JSON corrompu mais somme valide, secondaire plus ancien et sain : repli */
+  TT_ASSERT_EQ(mem_load(&mi, "whole-luks2-4k.img"), 0);
+  TT_ASSERT_EQ(mem_patch(&mi, P_PRI, "keyslots.0.af.stripes", "0"), 0);
+  mem_seqid(&mi, P_PRI, 9);
+  unlock_attendu(&mi, "pass.txt", FL_OK);
+  mem_free(&mi);
+  /* erreur d'E/S sur l'en-tête secondaire : le primaire valide suffit */
+  TT_ASSERT_EQ(mem_load(&mi, "whole-luks2-4k.img"), 0);
+  mi.fail_lo = HDR / 512;
+  mi.fail_hi = HDR / 512 + 8;
+  unlock_attendu(&mi, "pass.txt", FL_OK);
+  /* primaire invalide + secondaire illisible : EIO */
+  memset(mi.m, 0, 6);
+  TT_ASSERT_EQ(fl_luks_open(&mi.dev, &l), FL_EIO);
+  mem_free(&mi);
 }
 
 int main(void) {
   TT_RUN(test_b64);
   TT_RUN(test_luks2_hostile);
   TT_RUN(test_luks2_priorite_et_digest);
+  TT_RUN(test_luks2_slot_non_supporte_ignore);
+  TT_RUN(test_luks2_magie_abimee);
+  TT_RUN(test_luks2_choix_entete);
   TT_RUN(test_luks2_gpt_argon2id);
   TT_RUN(test_luks2_4k_argon2i);
   TT_RUN(test_luks2_deuxieme_slot_utf8);

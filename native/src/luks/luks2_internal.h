@@ -14,6 +14,7 @@
 enum { L2_KDF_PBKDF2 = 1, L2_KDF_ARGON2I, L2_KDF_ARGON2ID };
 
 typedef struct {
+  bool supported; /* type/KDF/hash/chiffrement pris en charge (sinon slot ignoré) */
   int priority; /* 1 normal, 2 haute (0 = jamais : conservé mais ignoré) */
   uint32_t key_size;
   uint32_t stripes;
