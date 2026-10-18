@@ -24,6 +24,11 @@ struct fake_msc {
   bool cap_set, force_rc16;
   uint32_t inquiry_len;
   uint8_t peripheral;
+  bool rw, wp, wp_ms, ms_illegal, sync_illegal;
+  unsigned fail_write; /* 0 : jamais */
+  int fail_write_err;
+  bool w_pending; /* WRITE accepté : les données de la phase OUT vont dans l'image */
+  uint64_t w_off, w_bytes;
 
   /* pannes */
   bool fail_armed, failing;
@@ -209,12 +214,43 @@ static void exec_cdb(fake_msc *m, const uint8_t *cdb, uint8_t cdblen, bool dir_i
       exec_read(m, rdbe(cdb + 2, 8), rdbe(cdb + 10, 4));
       break;
     case 0x2A: /* WRITE(10) */
-    case 0x8A: /* WRITE(16) */
+    case 0x8A: { /* WRITE(16) */
       wants_out = true;
       m->s.writes++;
-      check_condition(m, 0x07, 0x27, 0x00); /* protégé en écriture : rien n'est écrit */
+      if (m->expect > m->s.max_write_xfer) m->s.max_write_xfer = m->expect;
+      if (!m->rw || m->wp) {
+        check_condition(m, 0x07, 0x27, 0x00); /* protégé en écriture : rien n'est écrit */
+        break;
+      }
+      if (media_fault(m)) break;
+      bool c16 = cdb[0] == 0x8A;
+      if (cdblen < (c16 ? 16 : 10)) goto illegal;
+      uint64_t lba = c16 ? rdbe(cdb + 2, 8) : rdbe(cdb + 2, 4);
+      uint64_t count = c16 ? rdbe(cdb + 10, 4) : rdbe(cdb + 7, 2);
+      if (lba > m->blocks || count > m->blocks - lba) {
+        check_condition(m, 0x05, 0x21, 0x00);
+        break;
+      }
+      if (count * m->bs != m->expect) { /* Ho ≠ Do : erreur de phase */
+        m->status = 2;
+        break;
+      }
+      m->w_pending = true;
+      m->w_off = lba * m->bs;
+      m->w_bytes = count * m->bs;
+      break;
+    }
+    case 0x1A: /* MODE SENSE(6) */
+      wants_in = true;
+      if (m->ms_illegal) goto illegal;
+      r[0] = 3;                               /* longueur des données qui suivent */
+      r[2] = (!m->rw || m->wp_ms) ? 0x80 : 0; /* bit WP */
+      respond(m, r, 4);
       break;
     case 0x35: /* SYNCHRONIZE CACHE(10) */
+      if (m->sync_illegal) goto illegal;
+      /* l'image n'a pas de cache à vider : seul le compte (s.op[0x35]) importe */
+      break;
     case 0x1E: /* PREVENT ALLOW MEDIUM REMOVAL */
       break;
     case 0x1B: /* START STOP UNIT */
@@ -250,10 +286,15 @@ static int fake_bulk_out(void *ctx, const void *buf, size_t len, unsigned timeou
     } else if (m->fail_armed && m->fail_left == 0) {
       m->failing = true;
       rc = m->fail_err;
+    } else if (m->fail_write && (c[15] == 0x2A || c[15] == 0x8A) && --m->fail_write == 0) {
+      m->failing = true; /* débranché au n-ième WRITE : rien n'est reçu */
+      m->fail_err = m->fail_write_err;
+      rc = m->fail_err;
     } else {
       if (m->fail_armed) m->fail_left--;
       m->s.commands++;
       m->op = c[15];
+      m->w_pending = false;
       m->s.tmo_cbw[m->op] = timeout_ms;
       if (m->zlp_csw) {
         m->zlp_csw--;
@@ -287,8 +328,19 @@ static int fake_bulk_out(void *ctx, const void *buf, size_t len, unsigned timeou
     m->s.tmo_data[m->op] = timeout_ms;
     uint32_t left = m->expect - m->data_pos;
     uint32_t n = len < left ? (uint32_t)len : left;
-    m->data_pos += n; /* absorbé, jamais écrit */
+    if (m->w_pending) memcpy(m->data + m->data_pos, buf, n);
+    m->data_pos += n; /* sans WRITE accepté : absorbé, jamais écrit */
     if (m->data_pos == m->expect || n < len) m->st = ST_CSW;
+    if (m->w_pending && m->data_pos == m->expect) {
+      m->w_pending = false;
+      /* au-delà de l'image (capacité simulée) : accepté, rien n'est gardé */
+      uint64_t keep = m->w_off >= m->img_size ? 0 : m->img_size - m->w_off;
+      if (keep > m->w_bytes) keep = m->w_bytes;
+      if (keep && pwrite(m->fd, m->data, (size_t)keep, (off_t)m->w_off) != (ssize_t)keep)
+        check_condition(m, 0x03, 0x0C, 0x00);
+      else
+        m->s.written_bytes += m->w_bytes;
+    }
     rc = (int)n;
   } else {
     m->halt_out = true;
@@ -382,13 +434,14 @@ static int fake_bot_reset(void *ctx) {
   return rc;
 }
 
-int fake_msc_new(const char *image_path, fake_msc **out) {
+static int nouveau(const char *image_path, bool rw, fake_msc **out) {
   if (!image_path || !out) return FL_EINVAL;
   *out = NULL;
   fake_msc *m = calloc(1, sizeof *m);
   if (!m) return FL_ENOMEM;
   m->data = malloc(MAX_DATA);
-  m->fd = open(image_path, O_RDONLY | O_CLOEXEC);
+  m->rw = rw;
+  m->fd = open(image_path, (rw ? O_RDWR : O_RDONLY) | O_CLOEXEC);
   struct stat st;
   if (!m->data || m->fd < 0 || fstat(m->fd, &st) != 0 || st.st_size <= 0) {
     if (m->fd >= 0) close(m->fd);
@@ -410,6 +463,9 @@ int fake_msc_new(const char *image_path, fake_msc **out) {
   *out = m;
   return FL_OK;
 }
+
+int fake_msc_new(const char *image_path, fake_msc **out) { return nouveau(image_path, false, out); }
+int fake_msc_new_rw(const char *image_path, fake_msc **out) { return nouveau(image_path, true, out); }
 
 void fake_msc_free(fake_msc *m) {
   if (!m) return;
@@ -460,3 +516,13 @@ void fake_msc_set_capacity(fake_msc *m, uint64_t blocks) {
 void fake_msc_force_rc16(fake_msc *m) { m->force_rc16 = true; }
 void fake_msc_set_inquiry_len(fake_msc *m, uint32_t n) { m->inquiry_len = n > 36 ? 36 : n; }
 void fake_msc_set_peripheral(fake_msc *m, uint8_t b0) { m->peripheral = b0; }
+void fake_msc_set_write_protect(fake_msc *m, bool on, bool wp_mode_sense) {
+  m->wp = on;
+  m->wp_ms = on && wp_mode_sense;
+}
+void fake_msc_mode_sense_unsupported(fake_msc *m) { m->ms_illegal = true; }
+void fake_msc_sync_unsupported(fake_msc *m) { m->sync_illegal = true; }
+void fake_msc_fail_at_write(fake_msc *m, unsigned n, int err) {
+  m->fail_write = n;
+  m->fail_write_err = err;
+}

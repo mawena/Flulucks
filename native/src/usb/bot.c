@@ -36,12 +36,15 @@ static int t_in(fl_usb_dev *u, void *buf, size_t len, unsigned tmo) {
 }
 
 /* Délai des phases données et CSW. Un disque lent (rotation, reprise d'erreur interne) peut mettre
- * bien plus de 5 s à rendre une lecture, et START STOP UNIT (IMMED=0) ne rend son CSW qu'une fois le
- * disque lancé. Le CBW garde 5 s ; un débranchement (ENODEV, ESHUTDOWN) reste signalé aussitôt. */
+ * bien plus de 5 s à rendre une lecture ou une écriture, et START STOP UNIT (IMMED=0) ne rend son CSW
+ * qu'une fois le disque lancé. Le CBW garde 5 s ; un débranchement (ENODEV, ESHUTDOWN) reste signalé aussitôt. */
 static unsigned phase_timeout(uint8_t op) {
   switch (op) {
     case 0x28: /* READ(10) */
     case 0x88: /* READ(16) */
+    case 0x2A: /* WRITE(10) */
+    case 0x8A: /* WRITE(16) */
+    case 0x35: /* SYNCHRONIZE CACHE(10) : un disque peut vider des mégaoctets de cache */
     case 0x1B: /* START STOP UNIT */
       return FL_USB_MEDIA_TIMEOUT_MS;
     default:

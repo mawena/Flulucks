@@ -6,8 +6,10 @@
  * Le transport est abstrait : sur Linux et Android, fl_usbdevfs_transport_new l'implémente
  * sur un descripteur usbdevfs ; les tests utilisent un faux périphérique.
  *
- * Phase 2 : lecture seule. fl_bdev_write renvoie toujours FL_EROFS et aucune commande
- * WRITE n'est jamais envoyée. */
+ * Écriture : WRITE(10), ou WRITE(16) au-delà de 32 bits, 64 Kio au plus par commande ; flush envoie
+ * SYNCHRONIZE CACHE(10) (refusé par le disque comme non pris en charge : FL_OK). Délai de 30 s pour
+ * les données et le CSW. Ouvert en lecture seule, rien d'autre que des commandes de lecture n'est
+ * envoyé. */
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -40,6 +42,14 @@ typedef struct {
  * Après un FL_ENODEV, toute lecture renvoie FL_ENODEV sans rien envoyer.
  * Sûr entre fils : les commandes sont sérialisées par un verrou propre au périphérique. */
 int fl_usb_bdev_open(const fl_usb_transport *t, uint8_t lun, bool read_only, fl_bdev **out);
+/* Avec read_only faux, l'ouverture envoie aussi MODE SENSE(6) : le bit WP force read_only à vrai (un
+ * échec de MODE SENSE ne force rien). En écriture, le sens DATA PROTECT rend FL_EROFS et la
+ * protection devient collante (plus aucun WRITE). Après un FL_ENODEV, toute écriture rend FL_ENODEV
+ * sans rien envoyer. */
+
+/* Vrai si le disque a signalé une protection en écriture (MODE SENSE ou sens DATA PROTECT). Faux
+ * pour un fl_bdev qui n'est pas un disque USB. */
+bool fl_usb_bdev_write_protected(const fl_bdev *d);
 
 /* Transport usbdevfs (Linux, Android). `fd` vient de UsbDeviceConnection.getFileDescriptor() ;
  * l'interface doit déjà être réclamée. Le transport ne possède pas `fd` et ne le ferme pas.

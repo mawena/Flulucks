@@ -1,4 +1,4 @@
-/* Disque USB de stockage de masse vu comme un fl_bdev (lecture seule en phase 2). */
+/* Disque USB de stockage de masse vu comme un fl_bdev, en lecture ou en écriture. */
 
 #define _POSIX_C_SOURCE 200809L
 #include <errno.h>
@@ -7,6 +7,12 @@
 #include <time.h>
 
 #include "usb/usb_internal.h"
+
+static int usb_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf);
+static int usb_write(fl_bdev *d, uint64_t lba, uint32_t count, const void *buf);
+static int usb_flush(fl_bdev *d);
+static void usb_destroy(fl_bdev *d);
+static const fl_bdev_ops usb_ops = {usb_read, usb_write, usb_flush, usb_destroy};
 
 static uint64_t real_now(void *ctx) {
   (void)ctx;
@@ -54,9 +60,37 @@ static int usb_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
   return rc;
 }
 
+/* fl_bdev_write a déjà refusé un périphérique ouvert en lecture seule (FL_EROFS, rien n'est
+ * envoyé). 64 Kio au plus par WRITE. DATA PROTECT → FL_EROFS et protection collante ; après un
+ * FL_ENODEV, plus rien n'est envoyé. */
 static int usb_write(fl_bdev *d, uint64_t lba, uint32_t count, const void *buf) {
-  (void)d, (void)lba, (void)count, (void)buf;
-  return FL_EROFS; /* phase 2 : aucune commande WRITE n'est jamais envoyée */
+  usb_priv *p = d->priv;
+#if SIZE_MAX < UINT64_MAX
+  if ((uint64_t)count * d->sector_size > SIZE_MAX) return FL_EINVAL;
+#endif
+  uint32_t per = FL_USB_MAX_XFER / d->sector_size;
+  const uint8_t *in = buf;
+  int rc = FL_OK;
+  pthread_mutex_lock(&p->lock);
+  while (count) {
+    if (p->u.dead) {
+      rc = FL_ENODEV;
+      break;
+    }
+    if (p->u.wp) {
+      rc = FL_EROFS;
+      break;
+    }
+    uint32_t n = count < per ? count : per;
+    rc = fl_scsi_write(&p->u, lba, n, d->sector_size, in);
+    if (rc == FL_EROFS) p->u.wp = true;
+    if (rc != FL_OK) break;
+    lba += n;
+    count -= n;
+    in += (size_t)n * d->sector_size;
+  }
+  pthread_mutex_unlock(&p->lock);
+  return rc;
 }
 
 static int usb_flush(fl_bdev *d) {
@@ -68,6 +102,15 @@ static int usb_flush(fl_bdev *d) {
   return rc;
 }
 
+bool fl_usb_bdev_write_protected(const fl_bdev *d) {
+  if (!d || d->ops != &usb_ops) return false;
+  usb_priv *p = d->priv;
+  pthread_mutex_lock(&p->lock);
+  bool wp = p->u.wp;
+  pthread_mutex_unlock(&p->lock);
+  return wp;
+}
+
 static void usb_destroy(fl_bdev *d) {
   usb_priv *p = d->priv;
   if (p) {
@@ -77,7 +120,6 @@ static void usb_destroy(fl_bdev *d) {
   free(d);
 }
 
-static const fl_bdev_ops usb_ops = {usb_read, usb_write, usb_flush, usb_destroy};
 
 int fl_usb_bdev_open_ex(const fl_usb_transport *t, uint8_t lun, bool read_only, const fl_usb_clock *clk,
                         fl_bdev **out) {
@@ -109,6 +151,14 @@ int fl_usb_bdev_open_ex(const fl_usb_transport *t, uint8_t lun, bool read_only, 
   int rc = fl_scsi_inquiry(&p->u);
   if (rc == FL_OK) rc = fl_scsi_wait_ready(&p->u);
   if (rc == FL_OK) rc = fl_scsi_read_capacity(&p->u, &blocks, &bs);
+  /* Écriture demandée : MODE SENSE dit si le disque est protégé (verrou d'une carte SD, clé en
+   * lecture seule) ; son échec n'empêche pas l'ouverture et ne force rien. */
+  if (rc == FL_OK && !read_only) {
+    bool wp = false;
+    int ms = fl_scsi_mode_sense_wp(&p->u, &wp);
+    if (ms == FL_ENODEV) rc = ms;
+    else if (ms == FL_OK && wp) p->u.wp = read_only = true;
+  }
   if (rc != FL_OK) {
     usb_destroy(d);
     return rc;

@@ -103,9 +103,11 @@ static int start_unit(fl_usb_dev *u) {
 /* Exécute une commande avec réessais : immédiats (UNIT ATTENTION, transfert court…) au plus
  * FL_USB_QUICK_RETRIES fois, après attente tant que NOT READY, dans FL_USB_READY_BUDGET_MS.
  * NOT READY 04/02 : un seul START STOP UNIT par appel, puis l'attente reprend.
- * Succès seulement si au moins `need` octets de données sont arrivés. */
-static int run(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, void *buf, uint32_t len, uint32_t need,
-               uint32_t *got_out) {
+ * Succès seulement si au moins `need` octets de données sont arrivés. Sur un échec de commande,
+ * *last (si non NULL) reçoit le dernier sens. Une écriture réessayée est rejouée entière (même
+ * données, même adresse). */
+static int run_s(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, void *buf, uint32_t len, uint32_t need,
+                 uint32_t *got_out, sense_t *last) {
   uint64_t deadline = u->clk.now_ms(u->clk.ctx) + FL_USB_READY_BUDGET_MS;
   int quick = 0;
   bool started = false;
@@ -122,6 +124,7 @@ static int run(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, void 
       continue;
     }
     if (rc < 0) return rc == FL_ESTALL ? FL_EIO : rc; /* FL_ESTALL ne sort pas d'ici */
+    if (last) *last = s;
     int err;
     switch (classify(&s, &err)) {
       case A_FAIL:
@@ -146,6 +149,11 @@ static int run(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, void 
       }
     }
   }
+}
+
+static int run(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, void *buf, uint32_t len, uint32_t need,
+               uint32_t *got_out) {
+  return run_s(u, cdb, cdblen, dir, buf, len, need, got_out, NULL);
 }
 
 uint8_t fl_scsi_build_read(uint64_t lba, uint32_t n, uint8_t cdb[16]) {
@@ -215,7 +223,38 @@ int fl_scsi_read(fl_usb_dev *u, uint64_t lba, uint32_t n, uint32_t block_size, v
   return run(u, cdb, len, FL_BOT_IN, buf, bytes, bytes, NULL);
 }
 
+uint8_t fl_scsi_build_write(uint64_t lba, uint32_t n, uint8_t cdb[16]) {
+  uint8_t len = fl_scsi_build_read(lba, n, cdb);
+  cdb[0] = len == 10 ? 0x2A : 0x8A; /* WRITE(10) / WRITE(16) : même disposition que READ */
+  return len;
+}
+
+int fl_scsi_write(fl_usb_dev *u, uint64_t lba, uint32_t n, uint32_t block_size, const void *buf) {
+  if (n == 0 || block_size == 0 || n > FL_USB_MAX_XFER / block_size) return FL_EINVAL;
+  uint8_t cdb[16];
+  uint8_t len = fl_scsi_build_write(lba, n, cdb);
+  uint32_t bytes = n * block_size;
+  /* BOT n'écrit pas dans buf pour une phase OUT */
+  return run(u, cdb, len, FL_BOT_OUT, (void *)buf, bytes, bytes, NULL);
+}
+
+int fl_scsi_mode_sense_wp(fl_usb_dev *u, bool *wp) {
+  /* MODE SENSE(6), DBD=0, page 0x3F (toutes), 192 octets alloués : la réponse compte au moins
+   * l'en-tête de 4 octets, dont l'octet 2 porte le bit WP (bit 7). */
+  uint8_t cdb[6] = {0x1A, 0, 0x3F, 0, 192, 0};
+  uint8_t r[192];
+  memset(r, 0, sizeof r);
+  int rc = run(u, cdb, sizeof cdb, FL_BOT_IN, r, sizeof r, 4, NULL);
+  if (rc != FL_OK) return rc;
+  *wp = (r[2] & 0x80) != 0;
+  return FL_OK;
+}
+
 int fl_scsi_sync_cache(fl_usb_dev *u) {
   uint8_t cdb[10] = {0x35};
-  return run(u, cdb, sizeof cdb, FL_BOT_NONE, NULL, 0, 0, NULL);
+  sense_t s = {0, 0, 0};
+  int rc = run_s(u, cdb, sizeof cdb, FL_BOT_NONE, NULL, 0, 0, NULL, &s);
+  /* ILLEGAL REQUEST : commande non prise en charge, le disque n'a pas de cache à vider */
+  if (rc == FL_EIO && s.key == 0x05) return FL_OK;
+  return rc;
 }

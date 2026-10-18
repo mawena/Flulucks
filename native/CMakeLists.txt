@@ -130,6 +130,7 @@ if(FL_TESTS)
     ENVIRONMENT "FL_FIXTURES=${CMAKE_BINARY_DIR}/fixtures" FIXTURES_REQUIRED fx)
   fl_add_test(test_usb)
   target_sources(test_usb PRIVATE tests/support/fake_msc.c)
+  target_link_libraries(test_usb PRIVATE fl_testsupport)
 
   # Cœur du pont JNI sans jni.h (poignées, JSON) : aussi testé sur PC. Sur Android, ces mêmes
   # fichiers sont compilés dans fluluks_jni (cmake/android.cmake).
