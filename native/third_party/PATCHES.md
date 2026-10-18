@@ -11,7 +11,9 @@
   - `native/third_party/patches/lwext4/0002-lecture-noms-255-trous-de-dossier.patch` (phase 3, T1,
     détaillé en 4 à 6) ;
   - `native/third_party/patches/lwext4/0003-ecriture-api-horodatages-trous.patch` (phase 3, T4,
-    détaillé en 7 à 10).
+    détaillé en 7 à 10) ;
+  - `native/third_party/patches/lwext4/0004-journal-sommes-v3-sequence-barrieres.patch` (phase 3, T5,
+    détaillé en 11).
 - Application (`native/cmake/third_party.cmake`, à la configuration CMake) : `src/` et `include/` du
   sous-module sont copiés dans `${CMAKE_BINARY_DIR}/third_party/lwext4`, puis chaque correctif y est
   appliqué par `git apply -p1` (avec `GIT_CEILING_DIRECTORIES`, sinon `git apply` lancé à l'intérieur
@@ -28,7 +30,7 @@
 Aucune fonctionnalité du disque réel (`metadata_csum`, `64bit`, `flex_bg`, `extent`, `huge_file`,
 `dir_nlink`, `extra_isize`, journal présent mais non rejoué…) n'est refusée par lwext4 : le montage en
 lecture seule fonctionne sans correctif. Les correctifs 0001 et 0002 portent sur la justesse de la
-lecture et sur la robustesse face à un disque hostile ; 0003 sur l'écriture.
+lecture et sur la robustesse face à un disque hostile ; 0003 sur l'écriture ; 0004 sur le journal.
 
 ### 1. `ext4_fread` : trous et extents non écrits lus comme des zéros
 
@@ -194,6 +196,29 @@ délié mais alloué), disparaît.
 
 Tests : `test_interne_rmdir_sans_extents`, `test_ext4_dossier_indirect_bloc0`.
 
+### 11. Journal récupérable après une coupure
+
+- Sommes jbd2 v3 : `jbd_block_csum` hache la séquence en big-endian et `jbd_commit_csum_set` stocke la
+  somme du bloc de commit en big-endian (`csum_fix.diff` de l'essai). Avant : transactions rejetées par
+  le noyau, `e2fsck` et lwext4 lui-même.
+- Séquence : `jbd_journal_stop` ne remet plus `s_sequence` à 0 (prochaine transaction, comme jbd2) ;
+  avant, une coupure à la session suivante rejouait d'anciennes transactions. Le journal est marqué vide
+  (`s_start = 0`) avant l'effacement de `needs_recovery`.
+- Barrières : `ext4_blockdev_iface.bflush` (NULL accepté), appelée avant et après le bloc de commit,
+  avant l'écriture du superbloc du journal (point de contrôle) et à la fin de `ext4_cache_flush`. La
+  colle la branche sur `fl_bdev_flush` (sur USB : SYNCHRONIZE CACHE).
+- `ext4_umount` libère tout même si le superbloc ne peut pas être écrit (disque mort), et rend l'erreur.
+
+Côté colle : après une erreur d'écriture ou de barrière, plus rien n'est écrit (le disque reste figé dans
+l'état de la panne, que le journal sait récupérer ; lwext4 ignore les erreurs d'écriture de son cache de
+blocs, et son état en mémoire diverge alors de celui du disque) ; les écritures rendent `FL_EIO`.
+
+Tests (`test_ext4_coupure.c`) : `test_ext4_journal_sommes` (vérificateur C des sommes, repris de
+`jcheck.py`), `test_ext4_barrieres`, `test_ext4_coupure_sessions`,
+`test_ext4_coupure_fichiers_fermes_intacts`, `test_ext4_coupure_gros_fichier`,
+`test_ext4_coupure_3000` : après coupure, `e2fsck -fy` ne fait que rejouer le journal (et corriger les
+compteurs globaux), puis `e2fsck -fn` est propre.
+
 ## Protections côté FluLuks (sans correctif lwext4)
 
 En écriture, `ext4_glue.c` vérifie chaque opération avant d'appeler lwext4, dont les fonctions de haut
@@ -220,9 +245,8 @@ superbloc avec `s_log_block_size = 30` provoque un comportement indéfini dans l
 - Une opération en plusieurs transactions n'est pas atomique : la suppression d'un fichier ou d'un
   dossier tronque d'abord (transactions de 16 Mio au plus), puis retire l'entrée ; une coupure entre les
   deux laisse une entrée vers un fichier vide, que `e2fsck` accepte.
-- Journal : les sommes jbd2 v3 écrites par lwext4 sont fausses et la séquence repart de 0 à chaque
-  session (essai du 2026-10-18) ; correctif 0004 (T5). D'ici là, seul un démontage propre laisse le
-  disque propre : une coupure en pleine écriture n'est pas récupérable proprement par Ubuntu.
+- Le journal n'est jamais rejoué sur le téléphone (Ubuntu le rejoue) ; le montage en écriture d'un
+  volume à rejouer est refusé (lecture seule).
 - Les liens symboliques ne sont pas suivis ; `fl_fs_open` sur un lien rend `FL_ENOTSUP`.
 - Les sommes de contrôle `metadata_csum` des inodes, des descripteurs et des dossiers ne sont vérifiées
   qu'à titre d'avertissement (seule celle du superbloc est bloquante).

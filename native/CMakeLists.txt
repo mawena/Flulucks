@@ -115,6 +115,8 @@ if(FL_TESTS)
   target_link_libraries(test_banc PRIVATE fl_testsupport)
   fl_add_test(test_ext4_ecriture LABELS ecriture)
   target_link_libraries(test_ext4_ecriture PRIVATE fl_testsupport)
+  fl_add_test(test_ext4_coupure LABELS ecriture)
+  target_link_libraries(test_ext4_coupure PRIVATE fl_testsupport)
   fl_add_test(test_usb)
   target_sources(test_usb PRIVATE tests/support/fake_msc.c)
 

@@ -89,7 +89,7 @@ dans le même commit que le travail.
 - [x] T2 — Tests manquants des phases 1 et 2, `FL_EBUSY` en fermeture, écriture LUKS2
 - [x] T3 — Banc de non-corruption (images d'écriture, `e2fsck`, `debugfs`, pannes)
 - [x] T4 — Écriture ext4 (API complète, propriétaire hérité, horodatages)
-- [ ] T5 — Journal sûr (sommes v3, séquence, barrières) et tests de coupure
+- [x] T5 — Journal sûr (sommes v3, séquence, barrières) et tests de coupure
 - [ ] T6 — Règles de lecture seule du § 4.2 et montage sûr
 - [ ] T7 — crc32c rapide
 - [ ] T8 — Batterie de non-corruption complète (+ vérification par le noyau, par l'utilisateur)

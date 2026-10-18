@@ -63,6 +63,7 @@ typedef struct {
   uint64_t max_bytes; /* au-delà, les numéros de bloc logique (32 bits) débordent */
   bool needs_recovery;
   bool rw;            /* monté en écriture, journal démarré */
+  bool io_err;        /* une écriture ou une barrière a échoué : plus rien n'est écrit (g_lock) */
   uint8_t sb[1024];   /* superbloc validé, octets [1024, 2048) du disque (tenu à jour) */
 } ext4_vol;
 
@@ -133,9 +134,13 @@ static int bd_bread(struct ext4_blockdev *bd, void *buf, uint64_t blk_id, uint32
 static int bd_bwrite(struct ext4_blockdev *bd, const void *buf, uint64_t blk_id, uint32_t blk_cnt) {
   ext4_vol *v = bd->bdif->p_user;
   if (!v->rw) return EROFS;
+  if (v->io_err) return EIO;
   if (blk_cnt == 0) return EOK;
   if ((uint64_t)blk_cnt > (uint64_t)SIZE_MAX / v->dev->sector_size) return EIO;
-  if (fl_bdev_write(v->dev, blk_id, blk_cnt, buf) != FL_OK) return EIO;
+  if (fl_bdev_write(v->dev, blk_id, blk_cnt, buf) != FL_OK) {
+    v->io_err = true;
+    return EIO;
+  }
   /* le superbloc écrit devient celui que bd_bread sert */
   uint64_t start = blk_id * v->dev->sector_size;
   uint64_t end = start + (uint64_t)blk_cnt * v->dev->sector_size;
@@ -143,6 +148,25 @@ static int bd_bwrite(struct ext4_blockdev *bd, const void *buf, uint64_t blk_id,
   if (lo < hi) memcpy(v->sb + (lo - 1024), (const uint8_t *)buf + (lo - start), (size_t)(hi - lo));
   return EOK;
 }
+
+/* Barrière d'écriture de lwext4 (correctif 0004) : vidage du cache du périphérique (sur USB,
+ * SYNCHRONIZE CACHE). */
+static int bd_bflush(struct ext4_blockdev *bd) {
+  ext4_vol *v = bd->bdif->p_user;
+  if (v->io_err) return EIO;
+  if (fl_bdev_flush(v->dev) != FL_OK) {
+    v->io_err = true;
+    return EIO;
+  }
+  return EOK;
+}
+
+/* Après une erreur d'écriture, rien n'est plus écrit (bd_bwrite, bd_bflush) : le disque reste
+ * figé dans l'état du moment de la panne, que le journal sait récupérer, au lieu de recevoir
+ * l'état de lwext4, qui diverge de celui du disque dès qu'une écriture a échoué (lwext4 ignore
+ * les erreurs d'écriture de son cache de blocs). Les opérations d'écriture rendent alors FL_EIO ;
+ * la lecture continue. */
+static int io_checked(const ext4_vol *v, int rc) { return v->io_err && (rc == FL_OK || rc == FL_EIO) ? FL_EIO : rc; }
 
 /* ---------- validation du superbloc (avant lwext4) ---------- */
 
@@ -422,7 +446,8 @@ static int e_open(fl_fs *fs, const char *path, int flags, fl_file **out) {
     rc = parent_ok(v, path);
     creer = rc == FL_OK;
   }
-  if (rc == FL_OK) rc = map_err(ext4_fopen2(&h->f, full, creer ? O_RDWR | O_CREAT : flags & FL_O_RDWR ? O_RDWR : O_RDONLY));
+  if (rc == FL_OK && (creer || (flags & FL_O_TRUNC)) && v->io_err) rc = FL_EIO;
+  if (rc == FL_OK) rc = io_checked(v, map_err(ext4_fopen2(&h->f, full, creer ? O_RDWR | O_CREAT : flags & FL_O_RDWR ? O_RDWR : O_RDONLY)));
   if (rc == FL_OK) {
     h->next = v->files;
     v->files = h;
@@ -431,7 +456,7 @@ static int e_open(fl_fs *fs, const char *path, int flags, fl_file **out) {
     if (flags & FL_O_TRUNC) {
       /* toujours, même vide : mtime et ctime sont mis à jour (POSIX) */
       h->written = true;
-      rc = map_err(ext4_ftruncate(&h->f, 0));
+      rc = io_checked(v, map_err(ext4_ftruncate(&h->f, 0)));
     }
   }
   pthread_mutex_unlock(&g_lock);
@@ -477,10 +502,11 @@ static int64_t e_pwrite(fl_file *f, const void *buf, size_t len, uint64_t off) {
   size_t done = 0;
   pthread_mutex_lock(&g_lock);
   h->written = true;
-  int r = ext4_fseek(&h->f, (int64_t)off, SEEK_SET);
+  int r = v->io_err ? EIO : ext4_fseek(&h->f, (int64_t)off, SEEK_SET);
   if (r == EOK) r = ext4_fwrite(&h->f, buf, len, &done);
+  int rc = io_checked(v, map_err(r));
   pthread_mutex_unlock(&g_lock);
-  if (r != EOK) return map_err(r);
+  if (rc != FL_OK) return rc;
   if (done != len) return FL_EIO;
   return (int64_t)len;
 }
@@ -491,7 +517,7 @@ static int e_truncate(fl_file *f, uint64_t size) {
   if (size > v->max_bytes) return FL_EINVAL;
   pthread_mutex_lock(&g_lock);
   h->written = true;
-  int rc = map_err(ext4_ftruncate(&h->f, size));
+  int rc = v->io_err ? FL_EIO : io_checked(v, map_err(ext4_ftruncate(&h->f, size)));
   pthread_mutex_unlock(&g_lock);
   return rc;
 }
@@ -509,7 +535,7 @@ static int e_close(fl_file *f) {
       break;
     }
   v->open_files--;
-  if (h->written) rc = sync_locked(v);
+  if (h->written) rc = io_checked(v, v->io_err ? FL_EIO : sync_locked(v));
   pthread_mutex_unlock(&g_lock);
   free(h);
   free(f);
@@ -526,7 +552,8 @@ static int e_mkdir(fl_fs *fs, const char *path) {
   if (rc == FL_OK) rc = FL_EEXIST;
   else if (rc == FL_ENOENT) {
     rc = parent_ok(v, path);
-    if (rc == FL_OK) rc = map_err(ext4_dir_mk(full));
+    if (rc == FL_OK && v->io_err) rc = FL_EIO;
+    if (rc == FL_OK) rc = io_checked(v, map_err(ext4_dir_mk(full)));
   }
   pthread_mutex_unlock(&g_lock);
   return rc;
@@ -544,7 +571,8 @@ static int e_unlink(fl_fs *fs, const char *path) {
   if (rc == FL_OK && inode_type(&in) == EXT4_INODE_MODE_DIRECTORY) rc = FL_EISDIR;
   /* lwext4 libérerait l'inode sous le descripteur ouvert */
   if (rc == FL_OK && ino_open(v, ino)) rc = FL_EBUSY;
-  if (rc == FL_OK) rc = map_err(ext4_fremove(full));
+  if (rc == FL_OK && v->io_err) rc = FL_EIO;
+  if (rc == FL_OK) rc = io_checked(v, map_err(ext4_fremove(full)));
   pthread_mutex_unlock(&g_lock);
   return rc;
 }
@@ -586,7 +614,8 @@ static int e_rmdir(fl_fs *fs, const char *path) {
   if (rc == FL_OK) rc = dir_empty(full, &empty);
   if (rc == FL_OK && !empty) rc = FL_ENOTEMPTY;
   /* vide : ext4_dir_rm (récursif) ne supprime que lui */
-  if (rc == FL_OK) rc = map_err(ext4_dir_rm(full));
+  if (rc == FL_OK && v->io_err) rc = FL_EIO;
+  if (rc == FL_OK) rc = io_checked(v, map_err(ext4_dir_rm(full)));
   pthread_mutex_unlock(&g_lock);
   return rc;
 }
@@ -608,7 +637,8 @@ static int e_rename(fl_fs *fs, const char *from, const char *to) {
     if (rc == FL_OK) rc = FL_EEXIST; /* pas de remplacement */
     else if (rc == FL_ENOENT) rc = parent_ok(v, to);
   }
-  if (rc == FL_OK) rc = map_err(ext4_frename(ffrom, fto));
+  if (rc == FL_OK && v->io_err) rc = FL_EIO;
+  if (rc == FL_OK) rc = io_checked(v, map_err(ext4_frename(ffrom, fto)));
   pthread_mutex_unlock(&g_lock);
   return rc;
 }
@@ -616,7 +646,7 @@ static int e_rename(fl_fs *fs, const char *from, const char *to) {
 static int e_sync(fl_fs *fs) {
   ext4_vol *v = fs->priv;
   pthread_mutex_lock(&g_lock);
-  int rc = sync_locked(v);
+  int rc = v->io_err ? FL_EIO : io_checked(v, sync_locked(v));
   pthread_mutex_unlock(&g_lock);
   return rc;
 }
@@ -636,18 +666,17 @@ static int e_unmount(fl_fs *fs) {
     pthread_mutex_unlock(&g_lock);
     return FL_EINVAL;
   }
-  int rj = v->rw ? ext4_journal_stop(v->mp) : EOK;
-  int r = ext4_umount(v->mp);
-  if (r != EOK) {
-    /* lwext4 garde encore un pointeur vers v : ne rien libérer */
-    pthread_mutex_unlock(&g_lock);
-    return map_err(r);
-  }
+  /* Disque mort : tout est libéré quand même (correctif 0004 : ext4_umount libère le point de
+   * montage sur erreur), et la première erreur est rendue. */
+  int rc = v->rw ? map_err(ext4_journal_stop(v->mp)) : FL_OK;
+  int r = map_err(ext4_umount(v->mp));
+  if (rc == FL_OK) rc = r;
   ext4_device_unregister(v->dev_name);
-  int rf = v->rw ? fl_bdev_flush(v->dev) : FL_OK;
+  if (v->rw && rc == FL_OK) rc = v->io_err ? FL_EIO : fl_bdev_flush(v->dev);
+  if (v->io_err && rc == FL_OK) rc = FL_EIO;
   pthread_mutex_unlock(&g_lock);
   vol_free(fs, v);
-  return rj != EOK ? map_err(rj) : rf;
+  return rc;
 }
 
 static const fl_fs_ops k_ext4_ops = {
@@ -696,6 +725,7 @@ int fl_ext4_mount(fl_bdev *dev, bool want_rw, fl_fs **out) {
   v->bdif.bread = bd_bread;
   v->bdif.bwrite = bd_bwrite;
   v->bdif.close = bd_close;
+  v->bdif.bflush = bd_bflush;
   v->bdif.ph_bsize = dev->sector_size;
   v->bdif.ph_bcnt = dev->sector_count;
   v->bdif.ph_bbuf = v->ph_buf;
