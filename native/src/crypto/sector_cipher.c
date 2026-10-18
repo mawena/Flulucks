@@ -74,7 +74,7 @@ int fl_sector_cipher_new(const char *spec, const uint8_t *key, size_t keylen,
       uint8_t h[32];
       bad = mbedtls_md(mbedtls_md_info_from_type(MBEDTLS_MD_SHA256), key, keylen, h) ||
             mbedtls_aes_setkey_enc(&c->essiv, h, 256);
-      explicit_bzero(h, sizeof h);
+      fl_memzero(h, sizeof h);
     }
   }
   if (bad) {
@@ -105,7 +105,7 @@ static int sector_op(fl_sector_cipher *c, int enc, uint64_t iv_sector, const voi
         uint8_t e[16];
         r = mbedtls_aes_crypt_ecb(&c->essiv, MBEDTLS_AES_ENCRYPT, iv, e);
         memcpy(iv, e, 16);
-        explicit_bzero(e, sizeof e);
+        fl_memzero(e, sizeof e);
         if (r) return FL_EIO;
       }
       r = mbedtls_aes_crypt_cbc(enc ? &c->cbc_enc : &c->cbc_dec, enc ? MBEDTLS_AES_ENCRYPT : MBEDTLS_AES_DECRYPT,

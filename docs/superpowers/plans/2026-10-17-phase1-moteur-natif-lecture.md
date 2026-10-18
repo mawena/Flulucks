@@ -25,7 +25,7 @@ de chaque tâche, dans le même commit.
   un message en français de type `feat:` / `test:` / `chore:`, **sans aucune ligne d'attribution à
   Claude**, sous l'identité git de l'utilisateur (`mawena <gamligocharles@gmail.com>`).
 - Code natif en **C11**, portable Linux x86_64 **et** Android arm64 : pas d'API spécifique à glibc dans
-  `native/src` (sauf `explicit_bzero`, présente dans Bionic et glibc), et pas de `printf` dans la
+  `native/src` (l'effacement passe par `fl_memzero`, qui n'utilise `explicit_bzero` que sur glibc ou Android ≥ 28), et pas de `printf` dans la
   bibliothèque (seul l'outil CLI écrit sur la sortie).
 - Nos sources compilent avec `-Wall -Wextra -Werror`. Les dépendances tierces compilent sans `-Werror`.
 - Les tests tournent en Debug avec `-fsanitize=address,undefined`. Aucun rapport de sanitizer n'est

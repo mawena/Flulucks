@@ -1,6 +1,10 @@
 #ifndef FLULUKS_ERROR_H
 #define FLULUKS_ERROR_H
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
   FL_OK = 0,
   FL_EIO = -1,
@@ -15,10 +19,18 @@ typedef enum {
   FL_ENOTDIR = -10,
   FL_EISDIR = -11,
   FL_ENOTEMPTY = -12,
-  FL_ENOSPC = -13
+  FL_ENOSPC = -13,
+  FL_ENODEV = -14,    /* disque débranché */
+  FL_ETIMEDOUT = -15, /* le disque ne répond pas */
+  FL_ESTALL = -16,    /* transfert USB bloqué (interne au transport USB) */
+  FL_EBUSY = -17      /* volume occupé */
 } fl_err;
 
 /* Message lisible pour un code d'erreur. Jamais NULL ; code inconnu -> "erreur inconnue". */
 const char *fl_strerror(int err);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

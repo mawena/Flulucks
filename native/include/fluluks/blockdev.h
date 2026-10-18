@@ -5,6 +5,10 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef struct fl_bdev fl_bdev;
 
 typedef struct {
@@ -37,5 +41,9 @@ uint64_t fl_bdev_size_bytes(const fl_bdev *d);
 int fl_file_bdev_open(const char *path, uint32_t sector_size, bool read_only, fl_bdev **out);
 /* Tranche [first_lba, first_lba+count) du parent ; ne possède pas le parent. */
 int fl_slice_bdev_new(fl_bdev *parent, uint64_t first_lba, uint64_t count, fl_bdev **out);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

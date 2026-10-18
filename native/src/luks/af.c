@@ -21,8 +21,8 @@ static int diffuse(const char *hash, size_t hl, uint8_t *buf, size_t len) {
     if (rc != FL_OK) break;
     memcpy(buf + off, out, n);
   }
-  explicit_bzero(in, sizeof in);
-  explicit_bzero(out, sizeof out);
+  fl_memzero(in, sizeof in);
+  fl_memzero(out, sizeof out);
   return rc;
 }
 

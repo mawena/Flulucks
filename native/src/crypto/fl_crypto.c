@@ -8,6 +8,7 @@
 #include "fluluks/error.h"
 #include "mbedtls/md.h"
 #include "mbedtls/pkcs5.h"
+#include "fluluks/secure.h"
 
 static int md_of(const char *hash, mbedtls_md_type_t *t, size_t *len) {
   if (!hash) return FL_ENOTSUP;
@@ -42,7 +43,7 @@ int fl_pbkdf2(const char *hash, const void *pw, size_t pwlen, const void *salt, 
   if (!out || !outlen || iterations == 0 || (!pw && pwlen) || (!salt && saltlen)) return FL_EINVAL;
   int r = mbedtls_pkcs5_pbkdf2_hmac_ext(t, pw, pwlen, salt, saltlen, iterations, (uint32_t)outlen, out);
   if (r != 0) {
-    explicit_bzero(out, outlen);
+    fl_memzero(out, outlen);
     return FL_EINVAL;
   }
   return FL_OK;
@@ -70,7 +71,7 @@ int fl_argon2(fl_argon2_type t, const void *pw, size_t pwlen, const void *salt, 
   ctx.flags = ARGON2_DEFAULT_FLAGS; /* la memoire interne est effacee par argon2 (clear_internal_memory) ; mot de passe non modifie */
   int r = argon2_ctx(&ctx, t == FL_ARGON2I ? Argon2_i : Argon2_id);
   if (r == ARGON2_OK) return FL_OK;
-  explicit_bzero(out, outlen);
+  fl_memzero(out, outlen);
   if (r == ARGON2_MEMORY_ALLOCATION_ERROR) return FL_ENOMEM;
   if (r == ARGON2_THREAD_FAIL) return FL_EIO;
   return FL_EINVAL;

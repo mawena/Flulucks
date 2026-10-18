@@ -13,3 +13,21 @@ build/
 
 # Artefacts de cryptsetup reencrypt
 tools/fixtures/LUKS-*
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+*.log
+android/.gradle/
+android/local.properties
+android/app/.cxx/
+android/captures/
+android/key.properties
+android/app/debug
+android/app/profile
+android/app/release
+GeneratedPluginRegistrant.*

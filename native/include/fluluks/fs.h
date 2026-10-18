@@ -18,6 +18,10 @@
 #include "fluluks/blockdev.h"
 #include "fluluks/probe.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum { FL_FT_FILE = 1, FL_FT_DIR = 2, FL_FT_SYMLINK = 3, FL_FT_OTHER = 4 } fl_ftype;
 
 typedef struct {
@@ -71,5 +75,9 @@ int fl_fs_rename(fl_fs *fs, const char *from, const char *to);
 int fl_fs_sync(fl_fs *fs);
 /* NULL accepté. FL_EINVAL (rien n'est démonté) tant qu'un fichier reste ouvert. */
 int fl_fs_unmount(fl_fs *fs);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

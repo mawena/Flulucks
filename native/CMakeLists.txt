@@ -20,9 +20,11 @@ include(cmake/third_party.cmake)
 set(FL_SOURCES
   src/error.c
   src/secure.c
+  src/util/memzero.c
   src/blockdev/blockdev.c
   src/blockdev/file_bdev.c
   src/blockdev/slice_bdev.c
+  src/blockdev/cache_bdev.c
   src/part/crc32.c
   src/part/gpt.c
   src/part/mbr.c
@@ -39,16 +41,29 @@ set(FL_SOURCES
   src/luks/crypt_bdev.c
   src/fs/fs.c
   src/fs/ext4_glue.c
+  src/usb/bot.c
+  src/usb/scsi.c
+  src/usb/usb_bdev.c
 )
+# Transport usbdevfs : Linux et Android seulement.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR ANDROID)
+  list(APPEND FL_SOURCES src/usb/usbdevfs_transport.c)
+endif()
 
 add_library(fluluks STATIC ${FL_SOURCES})
 target_include_directories(fluluks PUBLIC include PRIVATE src)
 target_compile_options(fluluks PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 Threads::Threads)
 
-add_executable(fluluks-cli tools/fluluks_cli.c)
-target_link_libraries(fluluks-cli PRIVATE fluluks)
-target_compile_options(fluluks-cli PRIVATE -Wall -Wextra -Werror)
+if(NOT ANDROID)
+  add_executable(fluluks-cli tools/fluluks_cli.c)
+  target_link_libraries(fluluks-cli PRIVATE fluluks)
+  target_compile_options(fluluks-cli PRIVATE -Wall -Wextra -Werror)
+endif()
+
+if(ANDROID)
+  include(cmake/android.cmake)
+endif()
 
 if(FL_TESTS)
   enable_testing()
@@ -83,6 +98,20 @@ if(FL_TESTS)
   fl_add_test(test_luks2)
   fl_add_test(test_luks2_lent LABELS lent)
   fl_add_test(test_ext4)
+  fl_add_test(test_cache)
+  fl_add_test(test_usb)
+  target_sources(test_usb PRIVATE tests/support/fake_msc.c)
+
+  # Cœur du pont JNI sans jni.h (poignées, JSON) : aussi testé sur PC. Sur Android, ces mêmes
+  # fichiers sont compilés dans fluluks_jni (cmake/android.cmake).
+  add_library(fl_jnicore STATIC jni/json_out.c jni/handles.c)
+  target_include_directories(fl_jnicore PUBLIC jni)
+  target_link_libraries(fl_jnicore PUBLIC fluluks)
+  target_compile_options(fl_jnicore PRIVATE -Wall -Wextra -Werror)
+  fl_add_test(test_json_out)
+  target_link_libraries(test_json_out PRIVATE fl_jnicore)
+  fl_add_test(test_handles)
+  target_link_libraries(test_handles PRIVATE fl_jnicore)
 
   add_test(NAME test_cli COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli.sh $<TARGET_FILE:fluluks-cli>)
   set_tests_properties(test_cli PROPERTIES

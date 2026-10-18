@@ -17,7 +17,7 @@ void *fl_secure_alloc(size_t n) {
 void fl_secure_free(void *p, size_t n) {
   if (!p) return;
   if (n == 0) n = 1;
-  explicit_bzero(p, n);
+  fl_memzero(p, n);
   (void)munlock(p, n);
   free(p);
 }

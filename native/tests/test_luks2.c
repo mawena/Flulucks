@@ -435,6 +435,37 @@ static void test_luks2_choix_entete(void) {
   mem_free(&mi);
 }
 
+/* Plus grande mémoire Argon2 parmi les slots utilisables, en Kio ; 0 pour PBKDF2 ou LUKS1. */
+static void kdf_attendu(const char *nom, int partitionne, uint32_t attendu) {
+  fl_bdev *d = ouvrir(nom), *s = NULL;
+  TT_ASSERT(d != NULL);
+  if (partitionne) {
+    fl_part_table t;
+    TT_ASSERT_EQ(fl_part_scan(d, &t), FL_OK);
+    TT_ASSERT(t.count >= 1);
+    TT_ASSERT_EQ(fl_slice_bdev_new(d, t.parts[0].first_lba, t.parts[0].sector_count, &s), FL_OK);
+  }
+  fl_luks *l = NULL;
+  TT_ASSERT_EQ(fl_luks_open(s ? s : d, &l), FL_OK);
+  uint32_t kib = 12345;
+  TT_ASSERT_EQ(fl_luks_max_kdf_memory_kib(l, &kib), FL_OK);
+  TT_ASSERT_EQ(kib, attendu);
+  fl_luks_close(l);
+  fl_bdev_close(s);
+  fl_bdev_close(d);
+}
+
+static void test_luks_max_kdf_memory(void) {
+  kdf_attendu("gpt-luks2.img", 1, 65536);       /* argon2id, 64 Mio */
+  kdf_attendu("whole-luks2-4k.img", 0, 32768);  /* argon2i, 32 Mio */
+  kdf_attendu("whole-luks2-2slots.img", 0, 0);  /* PBKDF2 seulement */
+  kdf_attendu("whole-luks1-xts.img", 0, 0);     /* LUKS1 */
+  kdf_attendu("mbr-luks1-essiv.img", 1, 0);
+  uint32_t kib = 7;
+  TT_ASSERT_EQ(fl_luks_max_kdf_memory_kib(NULL, &kib), FL_EINVAL);
+  TT_ASSERT_EQ(kib, 7);
+}
+
 int main(void) {
   TT_RUN(test_b64);
   TT_RUN(test_luks2_hostile);
@@ -448,6 +479,7 @@ int main(void) {
   TT_RUN(test_luks2_mauvaise_phrase);
   TT_RUN(test_luks2_entete_secondaire);
   TT_RUN(test_luks2_tronque);
+  TT_RUN(test_luks_max_kdf_memory);
   TT_RUN(test_luks2_taille_dynamique_impaire);
   TT_MAIN_END();
 }

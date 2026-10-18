@@ -16,6 +16,10 @@ const char *fl_strerror(int err) {
     case FL_EISDIR: return "est un dossier";
     case FL_ENOTEMPTY: return "dossier non vide";
     case FL_ENOSPC: return "plus d'espace disponible";
+    case FL_ENODEV: return "disque débranché";
+    case FL_ETIMEDOUT: return "le disque ne répond pas";
+    case FL_ESTALL: return "transfert USB bloqué";
+    case FL_EBUSY: return "volume occupé";
     default: return "erreur inconnue";
   }
 }

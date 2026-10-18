@@ -5,7 +5,7 @@ contenant de l'ext4, sans root pour les images.
 
 ## Prérequis
 
-- cmake ≥ 3.22, ninja, gcc ou clang, git
+- cmake ≥ 3.20, ninja, gcc ou clang, git
 - python3 avec le paquet `cryptography` (génération des fixtures)
 - pour les fixtures : cryptsetup, e2fsprogs, dosfstools, ntfs-3g, gdisk/fdisk
 
@@ -64,3 +64,9 @@ contenu lu être incomplet ; `fluluks-cli` avertit alors sur stderr).
    sudo build/native/fluluks-cli parts /dev/sdX
    sudo build/native/fluluks-cli ls /dev/sdX 1 / --pass-file <fichier>
    ```
+
+## Prérequis Android
+
+Sur un clone neuf, lancer `flutter pub get` puis `flutter build apk --debug` une fois avant d'utiliser `./gradlew` : Flutter génère `gradlew`, le jar du wrapper et `local.properties`.
+
+`disable-abi-filtering=true` (dans `android/gradle.properties`) empêche le plugin Flutter d'écraser les `abiFilters` arm64-v8a et x86_64 de `app/build.gradle.kts`.
