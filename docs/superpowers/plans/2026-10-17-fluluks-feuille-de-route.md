@@ -91,7 +91,7 @@ dans le même commit que le travail.
 - [x] T4 — Écriture ext4 (API complète, propriétaire hérité, horodatages)
 - [x] T5 — Journal sûr (sommes v3, séquence, barrières) et tests de coupure
 - [x] T6 — Règles de lecture seule du § 4.2 et montage sûr
-- [ ] T7 — crc32c rapide
+- [x] T7 — crc32c rapide *(chemin arm64 à passer sur le Pixel : `run_native_tests.sh`)*
 - [ ] T8 — Batterie de non-corruption complète (+ vérification par le noyau, par l'utilisateur)
 - [ ] T9 — Écriture USB (WRITE, SYNCHRONIZE CACHE, protection en écriture)
 - [ ] T10 — JNI et VolumeManager en écriture (synchronisation, éjection, débranchement)

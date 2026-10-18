@@ -15,7 +15,8 @@
   - `native/third_party/patches/lwext4/0004-journal-sommes-v3-sequence-barrieres.patch` (phase 3, T5,
     détaillé en 11) ;
   - `native/third_party/patches/lwext4/0005-montage-etat-tables-inodes-sommes.patch` (phase 3, T6,
-    détaillé en 12).
+    détaillé en 12) ;
+  - `native/third_party/patches/lwext4/0006-crc32c-rapide.patch` (phase 3, T7, détaillé en 13).
 - Application (`native/cmake/third_party.cmake`, à la configuration CMake) : `src/` et `include/` du
   sous-module sont copiés dans `${CMAKE_BINARY_DIR}/third_party/lwext4`, puis chaque correctif y est
   appliqué par `git apply -p1` (avec `GIT_CEILING_DIRECTORIES`, sinon `git apply` lancé à l'intérieur
@@ -32,7 +33,7 @@
 Aucune fonctionnalité du disque réel (`metadata_csum`, `64bit`, `flex_bg`, `extent`, `huge_file`,
 `dir_nlink`, `extra_isize`, journal présent mais non rejoué…) n'est refusée par lwext4 : le montage en
 lecture seule fonctionne sans correctif. Les correctifs 0001 et 0002 portent sur la justesse de la
-lecture et sur la robustesse face à un disque hostile ; 0003 sur l'écriture ; 0004 sur le journal ; 0005 sur le montage.
+lecture et sur la robustesse face à un disque hostile ; 0003 sur l'écriture ; 0004 sur le journal ; 0005 sur le montage ; 0006 sur la vitesse.
 
 ### 1. `ext4_fread` : trous et extents non écrits lus comme des zéros
 
@@ -245,6 +246,22 @@ d'écriture, en lecture seule `RO_IOERR`. Lecture seule collante : les écriture
 `FL_EROFS`, la lecture continue.
 
 Tests : `test_ext4_politique.c` (12 tests).
+
+### 13. crc32c rapide
+
+`ext4_crc32c` (96 % du temps d'écriture dans l'essai, octet par octet) garde sa signature et son
+résultat au bit près. Chemin choisi une fois : SSE4.2 sur x86_64, instructions crc32c d'ARMv8 sur arm64
+(`HWCAP_CRC32`), sinon tranches de 8. `ext4_crc32c_sw` (chemin portable) et `ext4_crc32c_impl` (nom du
+chemin) servent aux tests.
+
+Mesure (PC, build Debug avec ASan, 300 Mio écrits par tranches de 1 Mio sur `ext4-rw-gros.img`, comme
+`test_ecriture_gros_fichier`) : 5,3 s avant, 2,2 s après (× 2,4). Sur le PC, `test_crc32c debit`
+(blocs de 4 Kio, même build) : 243 Mo/s octet par octet, 390 Mo/s par tranches de 8, 1 966 Mo/s avec
+SSE4.2. Le chemin arm64 est vérifié à la compilation (clang, cible aarch64 : `crc32cb`/`crc32cx`
+émises) ; reste à le passer sur le Pixel (`tools/android/run_native_tests.sh`).
+
+Tests : `test_crc32c.c` (`test_crc32c_vecteurs`, `test_crc32c_equivalence`, `test_crc32c_debit` en
+label `lent`).
 
 ## Protections côté FluLuks (sans correctif lwext4)
 
