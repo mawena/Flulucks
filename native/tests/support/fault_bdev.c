@@ -51,7 +51,7 @@ static void f_destroy(fl_bdev *d) {
 static const fl_bdev_ops fault_ops = {f_read, f_write, f_flush, f_destroy};
 
 int fl_fault_bdev_new(fl_bdev *parent, uint64_t writes_ok, int err, fl_bdev **out) {
-  if (!parent || !out) return FL_EINVAL;
+  if (!parent || !out || err >= 0) return FL_EINVAL;
   fl_bdev *d = calloc(1, sizeof *d);
   fault *f = calloc(1, sizeof *f);
   if (!d || !f) {

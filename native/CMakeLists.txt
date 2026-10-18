@@ -87,6 +87,10 @@ if(FL_TESTS)
     if(T_LABELS)
       set_tests_properties(${name} PROPERTIES LABELS "${T_LABELS}")
     endif()
+    # Les tests du banc d'écriture se sautent (code 77) sans e2fsck/debugfs ou sur Android.
+    if("ecriture" IN_LIST T_LABELS)
+      set_tests_properties(${name} PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
   endfunction()
 
   # Banc de non-corruption (T3) : juges e2fsck/debugfs, modèle d'arborescence, périphérique à pannes.

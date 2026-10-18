@@ -44,6 +44,35 @@ tm *tm_new(void) {
   return m;
 }
 
+static uint64_t debugfs_limit = TM_DEBUGFS_FULL_DEFAULT;
+void tm_set_debugfs_full_limit(uint64_t limit) { debugfs_limit = limit; }
+
+tm *tm_clone(const tm *m) {
+  tm *c = tm_new();
+  if (!c) return NULL;
+  ent_free(&c->e[0]);
+  c->n = 0;
+  while (c->cap < m->n) {
+    ent *ne = realloc(c->e, c->cap * 2 * sizeof *ne);
+    if (!ne) {
+      tm_free(c);
+      return NULL;
+    }
+    c->e = ne;
+    c->cap *= 2;
+  }
+  for (size_t i = 0; i < m->n; i++) {
+    c->e[i] = m->e[i];
+    c->e[i].path = strdup(m->e[i].path);
+    c->n = i + 1;
+    if (!c->e[i].path) {
+      tm_free(c);
+      return NULL;
+    }
+  }
+  return c;
+}
+
 void tm_free(tm *m) {
   if (!m) return;
   for (size_t i = 0; i < m->n; i++) ent_free(&m->e[i]);
@@ -83,16 +112,58 @@ static ent *ajouter(tm *m, const char *path) {
   return x;
 }
 
-/* sha256 du contenu, ou des deux bords au-delà de TM_BIG. */
-static int hash_contenu(const void *data, size_t len, uint8_t out[32]) {
-  if (len <= TM_BIG) return fl_hash("sha256", data, len, out);
-  uint8_t *b = malloc(2 * TM_EDGE);
-  if (!b) return -1;
-  memcpy(b, data, TM_EDGE);
-  memcpy(b + TM_EDGE, (const uint8_t *)data + len - TM_EDGE, TM_EDGE);
-  int rc = fl_hash("sha256", b, 2 * TM_EDGE, out);
-  free(b);
+/* Condensat d'un contenu : sha256 de la suite des sha256 des tranches de TM_CHUNK octets. */
+typedef struct {
+  uint8_t *dig;
+  size_t n, cap;
+  uint8_t zero[32];
+  int zero_ok;
+} cdig;
+
+static const uint8_t *zeros_chunk(void) {
+  static uint8_t z[TM_CHUNK];
+  return z;
+}
+
+static int cdig_add(cdig *c, const uint8_t *data, size_t len) {
+  if (c->n == c->cap) {
+    size_t nc = c->cap ? c->cap * 2 : 256;
+    uint8_t *nd = realloc(c->dig, nc * 32);
+    if (!nd) return -1;
+    c->dig = nd;
+    c->cap = nc;
+  }
+  uint8_t *d = c->dig + c->n * 32;
+  if (len == TM_CHUNK && !memcmp(data, zeros_chunk(), TM_CHUNK)) {
+    if (!c->zero_ok) {
+      if (fl_hash("sha256", data, len, c->zero) != 0) return -1;
+      c->zero_ok = 1;
+    }
+    memcpy(d, c->zero, 32);
+  } else if (fl_hash("sha256", data, len, d) != 0) {
+    return -1;
+  }
+  c->n++;
+  return 0;
+}
+
+static int cdig_fin(cdig *c, uint8_t out[32]) {
+  int rc = fl_hash("sha256", c->dig ? c->dig : (const uint8_t *)"", c->n * 32, out);
+  free(c->dig);
+  c->dig = NULL;
   return rc;
+}
+
+static int hash_contenu(const void *data, size_t len, uint8_t out[32]) {
+  cdig c = {0};
+  for (size_t o = 0; o < len; o += TM_CHUNK) {
+    size_t k = len - o < TM_CHUNK ? len - o : TM_CHUNK;
+    if (cdig_add(&c, (const uint8_t *)data + o, k) != 0) {
+      free(c.dig);
+      return -1;
+    }
+  }
+  return cdig_fin(&c, out);
 }
 
 static int nom_ok(const char *path) {
@@ -199,23 +270,24 @@ int tm_apply_attrs(tm *m, const char *path, uint32_t uid, uint32_t gid, uint32_t
 
 /* --- construction depuis un dossier ------------------------------------------------------ */
 
-static int lire_fichier(const char *chemin, uint64_t size, uint8_t sha[32]) {
+/* Condensat d'un fichier du disque local, lu par tranches. */
+static int hash_fichier(const char *chemin, uint64_t size, uint8_t sha[32]) {
   FILE *f = fopen(chemin, "rb");
   if (!f) return -1;
-  int rc = -1;
-  if (size <= TM_BIG) {
-    uint8_t *b = malloc(size ? size : 1);
-    if (b && fread(b, 1, size, f) == size) rc = fl_hash("sha256", b, size, sha);
-    free(b);
-  } else {
-    uint8_t *b = malloc(2 * TM_EDGE);
-    if (b && fread(b, 1, TM_EDGE, f) == TM_EDGE && fseeko(f, (off_t)(size - TM_EDGE), SEEK_SET) == 0 &&
-        fread(b + TM_EDGE, 1, TM_EDGE, f) == TM_EDGE)
-      rc = fl_hash("sha256", b, 2 * TM_EDGE, sha);
-    free(b);
+  uint8_t *b = malloc(TM_CHUNK);
+  cdig c = {0};
+  int rc = b ? 0 : -1;
+  for (uint64_t o = 0; rc == 0 && o < size; o += TM_CHUNK) {
+    size_t k = size - o < TM_CHUNK ? (size_t)(size - o) : TM_CHUNK;
+    if (fread(b, 1, k, f) != k || cdig_add(&c, b, k) != 0) rc = -1;
   }
   fclose(f);
-  return rc;
+  free(b);
+  if (rc != 0) {
+    free(c.dig);
+    return -1;
+  }
+  return cdig_fin(&c, sha);
 }
 
 static int parcourir(tm *m, const char *dirreel, const char *dirvirt) {
@@ -244,7 +316,7 @@ static int parcourir(tm *m, const char *dirreel, const char *dirvirt) {
         break;
       }
       x->size = (uint64_t)st.st_size;
-      rc = lire_fichier(reel, x->size, x->sha);
+      rc = hash_fichier(reel, x->size, x->sha);
     } /* autres types : ignorés, mkfs -d les crée mais le banc n'en utilise pas */
   }
   closedir(d);
@@ -339,22 +411,21 @@ int tm_check_fl(const tm *m, fl_fs *fs) {
       ecart(&r, "ouverture impossible (%llu %llu)", x->path, 0, 0);
       continue;
     }
-    size_t lu = x->size <= TM_BIG ? (size_t)x->size : 2 * TM_EDGE;
-    uint8_t *b = malloc(lu ? lu : 1);
+    uint8_t *b = malloc(TM_CHUNK);
+    cdig c = {0};
     int ok = b != NULL;
-    size_t got = 0;
-    while (ok && got < lu) {
-      size_t part = x->size <= TM_BIG ? lu - got : TM_EDGE;
-      if (got >= TM_EDGE && x->size > TM_BIG) part = TM_EDGE;
-      if (part > lu - got) part = lu - got;
-      uint64_t off = got;
-      if (x->size > TM_BIG && got >= TM_EDGE) off = x->size - TM_EDGE + (got - TM_EDGE);
-      int64_t n = fl_file_pread(f, b + got, part, off);
-      if (n <= 0) ok = 0;
-      else got += (size_t)n;
+    for (uint64_t o = 0; ok && o < x->size; o += TM_CHUNK) {
+      size_t want = x->size - o < TM_CHUNK ? (size_t)(x->size - o) : TM_CHUNK, got = 0;
+      while (got < want) { /* un pread court n'est pas une erreur : on continue à off + got */
+        int64_t n = fl_file_pread(f, b + got, want - got, o + got);
+        if (n <= 0) break;
+        got += (size_t)n;
+      }
+      if (got != want || cdig_add(&c, b, want) != 0) ok = 0;
     }
     uint8_t sha[32];
-    if (!ok || fl_hash("sha256", b, lu, sha) != 0) ecart(&r, "lecture impossible (%llu %llu)", x->path, 0, 0);
+    if (!ok) free(c.dig);
+    if (!ok || cdig_fin(&c, sha) != 0) ecart(&r, "lecture impossible (%llu %llu)", x->path, 0, 0);
     else if (memcmp(sha, x->sha, 32) != 0) ecart(&r, "contenu différent (%llu %llu)", x->path, 0, 0);
     free(b);
     fl_file_close(f);
@@ -364,28 +435,6 @@ int tm_check_fl(const tm *m, fl_fs *fs) {
 }
 
 /* --- debugfs ------------------------------------------------------------------------------- */
-
-typedef struct {
-  char *buf;
-  size_t len;
-} texte;
-
-static int lire_tout(const char *chemin, texte *t) {
-  FILE *f = fopen(chemin, "rb");
-  if (!f) return -1;
-  fseek(f, 0, SEEK_END);
-  long n = ftell(f);
-  fseek(f, 0, SEEK_SET);
-  t->buf = malloc((size_t)n + 1);
-  if (!t->buf) {
-    fclose(f);
-    return -1;
-  }
-  t->len = fread(t->buf, 1, (size_t)n, f);
-  t->buf[t->len] = 0;
-  fclose(f);
-  return 0;
-}
 
 int tm_check_debugfs(const tm *m, const char *img) {
   rapport r = {0};
@@ -403,7 +452,7 @@ int tm_check_debugfs(const tm *m, const char *img) {
   for (size_t i = 0; i < m->n; i++) {
     if (strpbrk(t[i].path, "\"\n\r")) goto fin;
     if (t[i].is_dir) fprintf(cf, "ls -p \"%s\"\n", t[i].path);
-    else if (t[i].size <= TM_BIG) fprintf(cf, "dump \"%s\" %s/f%zu\n", t[i].path, dir, i);
+    else if (t[i].size <= debugfs_limit) fprintf(cf, "dump \"%s\" %s/f%zu\n", t[i].path, dir, i);
   }
   if (fclose(cf) != 0) {
     cf = NULL;
@@ -483,14 +532,11 @@ int tm_check_debugfs(const tm *m, const char *img) {
       ecart(&r, "taille %llu, attendu %llu", chemin, taille, x->size);
       continue;
     }
-    if (x->size <= TM_BIG) {
+    if (x->size <= debugfs_limit) {
       snprintf(tmp, sizeof tmp, "%s/f%zu", dir, (size_t)(x - t));
-      texte tx = {0};
       uint8_t sha[32];
-      if (lire_tout(tmp, &tx) != 0 || tx.len != x->size || fl_hash("sha256", tx.buf, tx.len, sha) != 0)
-        ecart(&r, "dump debugfs incomplet (%llu %llu)", chemin, 0, 0);
+      if (hash_fichier(tmp, x->size, sha) != 0) ecart(&r, "dump debugfs incomplet (%llu %llu)", chemin, 0, 0);
       else if (memcmp(sha, x->sha, 32) != 0) ecart(&r, "contenu différent (%llu %llu)", chemin, 0, 0);
-      free(tx.buf);
       unlink(tmp);
     }
   }

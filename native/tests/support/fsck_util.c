@@ -3,6 +3,9 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
+#include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -49,10 +52,13 @@ int fu_tools_available(void) {
 #endif
 }
 
-int fu_run(char *const argv[], char *out, size_t cap) {
+int fu_run(char *const argv[], char *out, size_t cap) { return fu_run_timeout(argv, out, cap, 900); }
+
+int fu_run_timeout(char *const argv[], char *out, size_t cap, unsigned seconds) {
   if (out && cap) out[0] = 0;
 #ifdef __ANDROID__
   (void)argv;
+  (void)seconds;
   return -1;
 #else
   int pfd[2];
@@ -63,24 +69,40 @@ int fu_run(char *const argv[], char *out, size_t cap) {
     close(pfd[1]);
     return -1;
   }
-  posix_spawn_file_actions_addopen(&fa, 0, "/dev/null", O_RDONLY, 0);
-  posix_spawn_file_actions_adddup2(&fa, pfd[1], 1);
-  posix_spawn_file_actions_adddup2(&fa, pfd[1], 2);
+  int fa_rc = posix_spawn_file_actions_addopen(&fa, 0, "/dev/null", O_RDONLY, 0);
+  fa_rc |= posix_spawn_file_actions_adddup2(&fa, pfd[1], 1);
+  fa_rc |= posix_spawn_file_actions_adddup2(&fa, pfd[1], 2);
   char pathenv[4096];
   const char *p = getenv("PATH");
   snprintf(pathenv, sizeof pathenv, "PATH=%s", p ? p : "/usr/bin:/bin");
   char *envp[] = {(char *)"LC_ALL=C", pathenv, NULL};
-  pid_t pid;
-  int rc = posix_spawnp(&pid, argv[0], &fa, NULL, argv, envp);
+  pid_t pid = 0;
+  int rc = fa_rc ? fa_rc : posix_spawnp(&pid, argv[0], &fa, NULL, argv, envp);
   posix_spawn_file_actions_destroy(&fa);
   close(pfd[1]);
   if (rc != 0) {
     close(pfd[0]);
     return -1;
   }
+  struct timespec t0;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
   size_t len = 0;
   char tmp[4096];
+  int timeout = 0;
   for (;;) {
+    struct timespec t1;
+    clock_gettime(CLOCK_MONOTONIC, &t1);
+    long long ecoule = (long long)(t1.tv_sec - t0.tv_sec) * 1000 + (t1.tv_nsec - t0.tv_nsec) / 1000000;
+    long long reste = (long long)seconds * 1000 - ecoule;
+    if (reste <= 0) {
+      timeout = 1;
+      break;
+    }
+    struct pollfd pf = {pfd[0], POLLIN, 0};
+    int pr = poll(&pf, 1, reste > 1000000 ? 1000000 : (int)reste);
+    if (pr < 0 && errno == EINTR) continue;
+    if (pr < 0) break;
+    if (pr == 0) continue; /* le délai est revérifié en haut de boucle */
     ssize_t n = read(pfd[0], tmp, sizeof tmp);
     if (n < 0 && errno == EINTR) continue;
     if (n <= 0) break;
@@ -92,9 +114,11 @@ int fu_run(char *const argv[], char *out, size_t cap) {
   }
   close(pfd[0]);
   if (out && cap) out[len] = 0;
+  if (timeout) kill(pid, SIGKILL);
   int st;
   while (waitpid(pid, &st, 0) < 0)
     if (errno != EINTR) return -1;
+  if (timeout) return FU_RC_TIMEOUT;
   if (WIFEXITED(st)) return WEXITSTATUS(st);
   if (WIFSIGNALED(st)) return 128 + WTERMSIG(st);
   return -1;
@@ -123,17 +147,85 @@ int fu_tmpdir(char *out, size_t cap) {
   return 0;
 }
 
-int fu_e2fsck_n(const char *img, char *out, size_t cap) {
-  char *const argv[] = {(char *)"e2fsck", (char *)"-fn", (char *)img, NULL};
-  return fu_run(argv, out, cap);
+#define GRANDE_SORTIE ((size_t)1 << 20)
+
+static void copier_tronque(char *dst, size_t cap, const char *src) {
+  if (!dst || !cap) return;
+  size_t n = strlen(src);
+  if (n > cap - 1) n = cap - 1;
+  memcpy(dst, src, n);
+  dst[n] = 0;
 }
 
-int fu_e2fsck_recover(const char *img, int *replayed, char *out, size_t cap) {
-  char fy[16384];
+int fu_e2fsck_n(const char *img, char *out, size_t cap) {
+  char *big = malloc(GRANDE_SORTIE);
+  if (!big) return -1;
+  char *const argv[] = {(char *)"e2fsck", (char *)"-fn", (char *)img, NULL};
+  int rc = fu_run(argv, big, GRANDE_SORTIE);
+  copier_tronque(out, cap, big);
+  if (rc == 0) {
+    int rejouer = strstr(big, "skipping journal recovery") != NULL;
+    if (!rejouer) {
+      char *const dargv[] = {(char *)"dumpe2fs", (char *)"-h", (char *)img, NULL};
+      if (fu_run(dargv, big, GRANDE_SORTIE) == 0) {
+        const char *f = strstr(big, "Filesystem features:");
+        const char *fin = f ? strchr(f, '\n') : NULL;
+        const char *nr = f ? strstr(f, "needs_recovery") : NULL;
+        rejouer = nr && fin && nr < fin;
+      }
+    }
+    if (rejouer) rc = FU_RC_JOURNAL;
+  }
+  free(big);
+  return rc;
+}
+
+static int finit_par(const char *l, const char *suffixe) {
+  size_t a = strlen(l), b = strlen(suffixe);
+  return a >= b && !strcmp(l + a - b, suffixe);
+}
+
+int fu_fy_repairs_benign(const char *fy_out) {
+  char *copie = strdup(fy_out);
+  if (!copie) return 0;
+  char prev[1024] = "";
+  int ok = 1;
+  char *save = NULL;
+  for (char *l = strtok_r(copie, "\n", &save); l && ok; l = strtok_r(NULL, "\n", &save)) {
+    size_t n = strlen(l);
+    while (n && (l[n - 1] == ' ' || l[n - 1] == '\r')) l[--n] = 0;
+    if (!n) continue;
+    if (finit_par(l, "FIXED.") || strstr(l, "orphaned inode")) {
+      ok = 0;
+      break;
+    }
+    if (finit_par(l, "? yes")) {
+      const char *desc = l;
+      const char *q = strchr(l, '?');
+      int nue = q && !memchr(l, ' ', (size_t)(q - l)); /* « Fix? yes » : la description est la ligne d'avant */
+      if (nue) desc = prev;
+      if (strncmp(desc, "Free blocks count wrong (", 25) && strncmp(desc, "Free inodes count wrong (", 25)) ok = 0;
+    }
+    snprintf(prev, sizeof prev, "%s", l);
+  }
+  free(copie);
+  return ok;
+}
+
+int fu_e2fsck_recover(const char *img, int *replayed, int *fy_rc, char *fy_out, size_t fy_cap, char *out,
+                      size_t cap) {
+  char *big = malloc(GRANDE_SORTIE);
+  if (!big) return -1;
   char *const a1[] = {(char *)"e2fsck", (char *)"-fy", (char *)img, NULL};
-  fu_run(a1, fy, sizeof fy);
-  if (replayed) *replayed = strstr(fy, "recovering journal") != NULL;
-  return fu_e2fsck_n(img, out, cap);
+  int rc1 = fu_run(a1, big, GRANDE_SORTIE);
+  if (fy_rc) *fy_rc = rc1;
+  if (replayed) *replayed = strstr(big, "recovering journal") != NULL;
+  copier_tronque(fy_out, fy_cap, big);
+  int benin = rc1 >= 0 && rc1 < 4 && fu_fy_repairs_benign(big);
+  free(big);
+  int fn = fu_e2fsck_n(img, out, cap);
+  if (fn != 0) return fn;
+  return benin ? 0 : FU_RC_REPAIRED;
 }
 
 /* Chemin sûr pour une commande debugfs : pas de guillemet ni de saut de ligne. */
@@ -146,9 +238,9 @@ int64_t fu_debugfs_cat(const char *img, const char *path, void *buf, size_t cap)
   char td[4096], dir[4200], file[4300], cmd[8192], out[4096];
   if (fu_tmpdir(td, sizeof td) != 0) return -1;
   snprintf(dir, sizeof dir, "%s/cat-XXXXXX", td);
-  if (!mkdtemp(dir)) return -1;
+  if (strchr(dir, '"') || !mkdtemp(dir)) return -1;
   snprintf(file, sizeof file, "%s/f", dir);
-  snprintf(cmd, sizeof cmd, "dump \"%s\" %s", path, file);
+  snprintf(cmd, sizeof cmd, "dump \"%s\" \"%s\"", path, file);
   char *const argv[] = {(char *)"debugfs", (char *)"-R", cmd, (char *)img, NULL};
   fu_run(argv, out, sizeof out);
   int64_t res = -1;
@@ -183,13 +275,22 @@ int fu_debugfs_inode_field(const char *img, const char *path, const char *field,
     base = 8;
   } else if (!strcmp(field, "mtime") || !strcmp(field, "ctime") || !strcmp(field, "atime") ||
              !strcmp(field, "crtime")) {
+    /* « mtime: 0x<secondes sur 32 bits>:<extra> -- date » ; les 2 bits bas de l'extra prolongent l'époque
+     * (secondes = int32 signé + (extra & 3) << 32). Sans extra (inode de 128 octets) : 32 bits seuls. */
     char key[16];
     snprintf(key, sizeof key, "%s: 0x", field);
     const char *k = strstr(txt, key);
-    if (k) {
-      p = k + strlen(key);
-      base = 16;
-    }
+    if (!k) return -1;
+    char *e1;
+    errno = 0;
+    unsigned long long lo = strtoull(k + strlen(key), &e1, 16);
+    if (e1 == k + strlen(key) || errno) return -1;
+    unsigned long long extra = 0;
+    if (*e1 == ':') extra = strtoull(e1 + 1, NULL, 16);
+    int64_t sec = (int64_t)(int32_t)(uint32_t)lo + (int64_t)((extra & 3) << 32);
+    if (sec < 0) return -1;
+    *out = (uint64_t)sec;
+    return 0;
   }
   if (!p) return -1;
   char *end;

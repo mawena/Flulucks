@@ -76,8 +76,10 @@ for t in "${TESTS[@]}"; do
   secs=$(awk -v s="$start" -v e="$(date +%s.%N)" 'BEGIN{printf "%.1f", e - s}')
   code=$(printf '%s\n' "$out" | tr -d '\r' | sed -n 's/^__EXIT=//p' | tail -1)
   clean_out=$(printf '%s\n' "$out" | tr -d '\r' | { grep -v '^__EXIT=' || true; })
-  if [ "$code" = 0 ]; then printf '%s\n' "$clean_out" | tail -n 8; else printf '%s\n' "$clean_out" | tail -n 60; fi
-  if [ "$code" = 0 ]; then SUMMARY+=("OK     $t  ${secs} s"); else SUMMARY+=("ECHEC  $t  (code ${code:-?}, ${secs} s)"); FAILED=1; fi
+  if [ "$code" = 0 ] || [ "$code" = 77 ]; then printf '%s\n' "$clean_out" | tail -n 8; else printf '%s\n' "$clean_out" | tail -n 60; fi
+  if [ "$code" = 0 ]; then SUMMARY+=("OK     $t  ${secs} s")
+  elif [ "$code" = 77 ]; then SUMMARY+=("SAUTÉ  $t  (code 77, banc réservé au PC)")
+  else SUMMARY+=("ECHEC  $t  (code ${code:-?}, ${secs} s)"); FAILED=1; fi
 done
 
 echo; echo "=== Récapitulatif ($SERIAL)"

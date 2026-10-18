@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "fault_bdev.h"
@@ -91,21 +92,27 @@ static int bitmap_groupe0(const char *img, uint64_t *blk, uint32_t *bs) {
   return 0;
 }
 
+/* Met à zéro le bitmap de blocs du groupe 0 de la copie. */
+static int abimer_bitmap(const char *copie) {
+  uint64_t blk;
+  uint32_t bs;
+  if (bitmap_groupe0(copie, &blk, &bs) != 0) return -1;
+  fl_bdev *d = NULL;
+  if (fl_file_bdev_open(copie, 512, false, &d) != FL_OK) return -1;
+  static uint8_t zeros[65536];
+  int rc = fl_bdev_write(d, blk * bs / 512, bs / 512, zeros);
+  fl_bdev_close(d);
+  return rc == FL_OK ? 0 : -1;
+}
+
 static void test_banc_detecte_corruption(void) {
   char copie[4096], out[1 << 16];
   TT_ASSERT(copie_de("ext4-rw-reel.img", copie, sizeof copie) == 0);
   TT_ASSERT_EQ(fu_e2fsck_n(copie, out, sizeof out), 0);
-  uint64_t blk;
-  uint32_t bs;
-  TT_ASSERT(bitmap_groupe0(copie, &blk, &bs) == 0);
-  fl_bdev *d = NULL;
-  TT_ASSERT_EQ(fl_file_bdev_open(copie, 512, false, &d), FL_OK);
-  static uint8_t zeros[65536];
-  int rc = fl_bdev_write(d, blk * bs / 512, bs / 512, zeros);
-  fl_bdev_close(d);
-  TT_ASSERT_EQ(rc, FL_OK);
+  TT_ASSERT_EQ(abimer_bitmap(copie), 0);
   int fsck = fu_e2fsck_n(copie, out, sizeof out);
-  TT_ASSERT(fsck != 0);
+  if (fsck != 4 && fsck != 12) fprintf(stderr, "e2fsck -fn = %d\n%s\n", fsck, out);
+  TT_ASSERT(fsck == 4 || fsck == 12); /* erreurs laissées sans correction */
   TT_ASSERT(out[0] != 0);
   unlink(copie);
 }
@@ -174,6 +181,8 @@ static void test_banc_panne(void) {
   TT_ASSERT_EQ(fl_bdev_write(f, 4, 1, c), FL_ENODEV);
   TT_ASSERT_EQ(fl_fault_bdev_writes(f), 0);
   fl_bdev_close(f);
+  TT_ASSERT_EQ(fl_fault_bdev_new(parent, 1, 0, &f), FL_EINVAL); /* err doit être négatif */
+  TT_ASSERT_EQ(fl_fault_bdev_new(parent, 1, 5, &f), FL_EINVAL);
   fl_bdev_close(parent);
   fl_bdev_close(file);
   unlink(copie);
@@ -214,13 +223,16 @@ static fl_fs *monter(const char *copie, fl_bdev **dev) {
 }
 
 static void test_banc_modele(void) {
+  char tree[4096];
+  snprintf(tree, sizeof tree, "%s", tt_fixture("tree"));
+  tm *base = tm_new(); /* condensats de tree/ calculés une fois (clairsemé.bin : 5 Gio lus en entier) */
+  TT_ASSERT(base != NULL && tm_from_dir(base, tree) == 0);
+  TT_ASSERT(tm_count(base) > 300);
   for (size_t i = 0; i < NIMG; i++) {
-    char copie[4096], tree[4096];
+    char copie[4096];
     TT_ASSERT(copie_de(IMAGES[i], copie, sizeof copie) == 0);
-    snprintf(tree, sizeof tree, "%s", tt_fixture("tree"));
-    tm *m = tm_new();
-    TT_ASSERT(m != NULL && tm_from_dir(m, tree) == 0);
-    TT_ASSERT(tm_count(m) > 300);
+    tm *m = tm_clone(base);
+    TT_ASSERT(m != NULL);
     fl_bdev *dev = NULL;
     fl_fs *fs = monter(copie, &dev);
     /* metadata_csum_seed + orphan_file (options par défaut d'e2fsprogs ≥ 1.47) : le moteur refuse de
@@ -235,15 +247,25 @@ static void test_banc_modele(void) {
     if (ecarts) fprintf(stderr, "%s : %d écarts (debugfs)\n", IMAGES[i], ecarts);
     TT_ASSERT_EQ(ecarts, 0);
 
-    /* Le modèle n'est pas aveugle : un écart de contenu, un fichier en trop, un manquant, un attribut. */
+    /* Le modèle n'est pas aveugle : un écart de contenu, un fichier en trop, un manquant, un attribut.
+     * Vérifié sur la première image seulement (chaque contrôle relit les 5 Gio de clairsemé.bin). */
+    if (i != 0) {
+      tm_free(m);
+      if (fs) {
+        fl_fs_unmount(fs);
+        fl_bdev_close(dev);
+      }
+      unlink(copie);
+      continue;
+    }
     tm_set_quiet(1);
 #define DIFFERENT(mod) ((!fs || tm_check_fl(mod, fs) > 0) && tm_check_debugfs(mod, copie) > 0)
 #define IDENTIQUE(mod) ((!fs || tm_check_fl(mod, fs) == 0) && tm_check_debugfs(mod, copie) == 0)
     TT_ASSERT_EQ(tm_apply_file(m, "/hello.txt", "Bonjour FluLuk5\n", 16, getuid(), getgid(), 0664), 0);
     int ok1 = DIFFERENT(m);
     tm_free(m);
-    m = tm_new();
-    TT_ASSERT(m != NULL && tm_from_dir(m, tree) == 0);
+    m = tm_clone(base);
+    TT_ASSERT(m != NULL);
     TT_ASSERT_EQ(tm_apply_unlink(m, "/hello.txt"), 0); /* sur le volume : fichier en trop */
     int ok2 = DIFFERENT(m);
     TT_ASSERT_EQ(tm_apply_file(m, "/hello.txt", "Bonjour FluLuks\n", 16, getuid(), getgid(), 0664), 0);
@@ -253,10 +275,22 @@ static void test_banc_modele(void) {
     int ok4 = IDENTIQUE(m); /* remis à l'identique */
     TT_ASSERT_EQ(tm_apply_attrs(m, "/hello.txt", getuid() + 1, getgid(), 0664), 0);
     int ok5 = DIFFERENT(m);
+    /* gros.bin (5 Mio, plusieurs tranches) : le même contenu en mémoire donne le même condensat que le
+     * fichier lu sur disque ; un octet changé au milieu est vu. */
+    TT_ASSERT_EQ(tm_apply_attrs(m, "/hello.txt", getuid(), getgid(), 0664), 0);
+    uint8_t *gros = malloc((size_t)5 << 20);
+    TT_ASSERT(gros != NULL);
+    for (size_t k = 0; k < ((size_t)5 << 20); k++) gros[k] = (uint8_t)((k * 31 + 7) & 0xFF);
+    TT_ASSERT_EQ(tm_apply_file(m, "/gros.bin", gros, (size_t)5 << 20, getuid(), getgid(), 0664), 0);
+    int ok6 = IDENTIQUE(m);
+    gros[(size_t)2500000] ^= 1;
+    TT_ASSERT_EQ(tm_apply_file(m, "/gros.bin", gros, (size_t)5 << 20, getuid(), getgid(), 0664), 0);
+    int ok7 = DIFFERENT(m);
+    free(gros);
 #undef DIFFERENT
 #undef IDENTIQUE
     tm_set_quiet(0);
-    TT_ASSERT(ok1 && ok2 && ok3 && ok4 && ok5);
+    TT_ASSERT(ok1 && ok2 && ok3 && ok4 && ok5 && ok6 && ok7);
     tm_free(m);
     if (fs) {
       fl_fs_unmount(fs);
@@ -264,6 +298,7 @@ static void test_banc_modele(void) {
     }
     unlink(copie);
   }
+  tm_free(base);
 }
 
 static void test_banc_journal_v3(void) {
@@ -289,38 +324,110 @@ static void test_banc_journal_v3(void) {
   }
 }
 
-/* fu_e2fsck_recover : une image avec journal à rejouer est rejouée, puis propre. */
-static void test_banc_recover(void) {
-  char copie[4096], out[8192], td[4096], cmd[4300];
-  TT_ASSERT(copie_de("ext4-rw-1k.img", copie, sizeof copie) == 0);
-  TT_ASSERT_EQ(fu_tmpdir(td, sizeof td), 0);
+/* Pose sur la copie un journal à rejouer (debugfs jo -c / jw -r 100 / jc), SANS e2fsck -fy. */
+static int poser_journal(const char *copie) {
+  char td[4096], cmd[4300], out[8192];
+  if (fu_tmpdir(td, sizeof td) != 0) return -1;
   snprintf(cmd, sizeof cmd, "%s/jcmd-XXXXXX", td);
   int fd = mkstemp(cmd);
-  TT_ASSERT(fd >= 0);
+  if (fd < 0) return -1;
   noter(cmd);
   static const char t[] = "jo -c\njw -r 100\njc\n";
-  TT_ASSERT(write(fd, t, sizeof t - 1) == (ssize_t)(sizeof t - 1));
+  int ok = write(fd, t, sizeof t - 1) == (ssize_t)(sizeof t - 1);
   close(fd);
-  char *const argv[] = {(char *)"debugfs", (char *)"-w", (char *)"-f", cmd, copie, NULL};
-  TT_ASSERT_EQ(fu_run(argv, out, sizeof out), 0);
-  /* Journal non vide : e2fsck -fn le voit (needs_recovery) et le dit. */
-  char *const dump[] = {(char *)"dumpe2fs", (char *)"-h", copie, NULL};
-  TT_ASSERT_EQ(fu_run(dump, out, sizeof out), 0);
-  TT_ASSERT(strstr(out, "needs_recovery") != NULL);
-  int replayed = 0;
-  TT_ASSERT_EQ(fu_e2fsck_recover(copie, &replayed, out, sizeof out), 0);
+  char *const argv[] = {(char *)"debugfs", (char *)"-w", (char *)"-f", cmd, (char *)copie, NULL};
+  ok = ok && fu_run(argv, out, sizeof out) == 0;
+  unlink(cmd);
+  char *const dump[] = {(char *)"dumpe2fs", (char *)"-h", (char *)copie, NULL};
+  return ok && fu_run(dump, out, sizeof out) == 0 && strstr(out, "needs_recovery") ? 0 : -1;
+}
+
+/* Le piège : « e2fsck -fn » ignore le journal à rejouer et sort avec 0. Le juge doit refuser. */
+static void test_banc_juge_journal_non_rejoue(void) {
+  char copie[4096], out[8192];
+  TT_ASSERT(copie_de("ext4-rw-1k.img", copie, sizeof copie) == 0);
+  TT_ASSERT_EQ(poser_journal(copie), 0);
+  char *const brut[] = {(char *)"e2fsck", (char *)"-fn", copie, NULL};
+  TT_ASSERT_EQ(fu_run(brut, out, sizeof out), 0); /* l'outil lui-même dit 0... */
+  TT_ASSERT(strstr(out, "skipping journal recovery") != NULL);
+  TT_ASSERT_EQ(fu_e2fsck_n(copie, out, sizeof out), FU_RC_JOURNAL); /* ... pas le juge */
+  unlink(copie);
+}
+
+static void test_banc_recover(void) {
+  char copie[4096], out[8192], fy[8192];
+  TT_ASSERT(copie_de("ext4-rw-1k.img", copie, sizeof copie) == 0);
+  TT_ASSERT_EQ(poser_journal(copie), 0);
+  int replayed = 0, fy_rc = -1;
+  TT_ASSERT_EQ(fu_e2fsck_recover(copie, &replayed, &fy_rc, fy, sizeof fy, out, sizeof out), 0);
   TT_ASSERT_EQ(replayed, 1);
+  TT_ASSERT(fy_rc >= 0 && fy_rc < 4);
+  TT_ASSERT(strstr(fy, "recovering journal") != NULL);
   /* Deuxième passage : plus rien à rejouer. */
-  TT_ASSERT_EQ(fu_e2fsck_recover(copie, &replayed, out, sizeof out), 0);
+  TT_ASSERT_EQ(fu_e2fsck_recover(copie, &replayed, &fy_rc, NULL, 0, out, sizeof out), 0);
   TT_ASSERT_EQ(replayed, 0);
   unlink(copie);
-  unlink(cmd);
+}
+
+/* Les réparations de -fy ne sont pas cachées : un bitmap abîmé est réparé par -fy (le -fn qui suit est
+ * propre), mais fu_e2fsck_recover refuse. */
+static void test_banc_recover_refuse_reparation(void) {
+  char copie[4096], out[8192], fy[1 << 16];
+  TT_ASSERT(copie_de("ext4-rw-reel.img", copie, sizeof copie) == 0);
+  TT_ASSERT_EQ(abimer_bitmap(copie), 0);
+  int replayed = 0, fy_rc = -1;
+  int rc = fu_e2fsck_recover(copie, &replayed, &fy_rc, fy, sizeof fy, out, sizeof out);
+  if (rc != FU_RC_REPAIRED) fprintf(stderr, "rc=%d fy_rc=%d\n%s\n", rc, fy_rc, fy);
+  TT_ASSERT_EQ(rc, FU_RC_REPAIRED);
+  TT_ASSERT(fy_rc == 1 || fy_rc == 2); /* -fy a corrigé quelque chose */
+  TT_ASSERT_EQ(fu_e2fsck_n(copie, out, sizeof out), 0); /* et l'image est désormais propre */
+  unlink(copie);
+}
+
+static void test_banc_fy_benin(void) {
+  static const char benin[] =
+      "reel.img: recovering journal\n"
+      "Pass 1: Checking inodes, blocks, and sizes\n"
+      "Pass 5: Checking group summary information\n"
+      "Free blocks count wrong (3000, counted=2999).\nFix? yes\n\n"
+      "Free inodes count wrong (4000, counted=3999).\nFix? yes\n\n"
+      "reel.img: ***** FILE SYSTEM WAS MODIFIED *****\n";
+  TT_ASSERT(fu_fy_repairs_benign(benin));
+  TT_ASSERT(fu_fy_repairs_benign(""));
+  TT_ASSERT(fu_fy_repairs_benign("reel.img: recovering journal\nreel.img: 319/4096 files\n"));
+  static const char *const mauvais[] = {
+      "Block bitmap differences:  -(1--2)\nFix? yes\n\n",
+      "Inode 12 ref count is 2, should be 1.  Fix? yes\n",
+      "Free blocks count wrong for group #3 (10, counted=9).\nFix? yes\n\n",
+      "Free inodes count wrong for group #0 (10, counted=9).\nFix? yes\n",
+      "Entry 'x' in / (2) references inode 99 found in group 0's unused inode area.\nClear? yes\n",
+      "Free blocks count wrong (3000, counted=2999).\nFix? yes\n\nBlock bitmap differences:  +5\nFix? yes\n",
+      "Inode 12 was part of the orphaned inode list.  FIXED.\n",
+      "Clearing orphaned inode 12 (uid=0, gid=0, mode=0100644, size=0)\n",
+  };
+  for (size_t i = 0; i < sizeof mauvais / sizeof *mauvais; i++) {
+    if (fu_fy_repairs_benign(mauvais[i])) fprintf(stderr, "cas %zu jugé bénin : %s\n", i, mauvais[i]);
+    TT_ASSERT(!fu_fy_repairs_benign(mauvais[i]));
+  }
+}
+
+static void test_banc_outils_delai(void) {
+  char out[256];
+  char *const dort[] = {(char *)"sleep", (char *)"30", NULL};
+  time_t t0 = time(NULL);
+  TT_ASSERT_EQ(fu_run_timeout(dort, out, sizeof out, 1), FU_RC_TIMEOUT);
+  TT_ASSERT(time(NULL) - t0 < 10);
+  char *const vrai[] = {(char *)"echo", (char *)"ok", NULL};
+  TT_ASSERT_EQ(fu_run_timeout(vrai, out, sizeof out, 30), 0);
+  TT_ASSERT_STR_EQ(out, "ok\n");
+  char *const absent[] = {(char *)"outil-qui-n-existe-pas", NULL};
+  TT_ASSERT(fu_run(absent, out, sizeof out) != 0);
 }
 
 int main(void) {
   if (!fu_tools_available()) {
     printf("SAUTÉ : e2fsck/debugfs/dumpe2fs absents ou plateforme Android (banc réservé au PC)\n");
-    return 0;
+    return 77; /* SKIP_RETURN_CODE de CTest */
   }
   TT_RUN(test_banc_image_propre);
   TT_RUN(test_banc_detecte_corruption);
@@ -329,7 +436,11 @@ int main(void) {
   TT_RUN(test_banc_modele_operations);
   TT_RUN(test_banc_modele);
   TT_RUN(test_banc_journal_v3);
+  TT_RUN(test_banc_juge_journal_non_rejoue);
   TT_RUN(test_banc_recover);
+  TT_RUN(test_banc_recover_refuse_reparation);
+  TT_RUN(test_banc_fy_benin);
+  TT_RUN(test_banc_outils_delai);
   TT_RUN(test_banc_luks_extrait);
   nettoyer();
   TT_MAIN_END();

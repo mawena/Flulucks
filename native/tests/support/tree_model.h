@@ -6,18 +6,23 @@
  * Les tests appliquent au modèle (tm_apply_*) la même opération que celle faite sur le volume, puis
  * comparent : tm_check_fl par l'API du moteur, tm_check_debugfs par debugfs (indépendant de lwext4).
  *
- * Contenu : sha256 du fichier entier jusqu'à TM_BIG octets ; au-delà, sha256 des TM_EDGE premiers
- * octets suivis des TM_EDGE derniers (fichiers creux géants), et tm_check_debugfs ne compare que
- * taille, uid, gid et mode. Dossier racine : mode 040755, uid 0, gid 0 (comme le crée mkfs -d). "lost+found"
- * à la racine n'est jamais compté. */
+ * Contenu : « sha256 » du modèle = sha256 de la suite des sha256 de chaque tranche de TM_CHUNK octets du
+ * fichier entier (la dernière peut être plus courte ; une tranche entièrement nulle utilise un condensat
+ * précalculé). Toute taille, y compris les fichiers creux géants. Dossier racine : mode 040755, uid 0,
+ * gid 0 (comme le crée mkfs -d). "lost+found" à la racine n'est jamais compté.
+ *
+ * ATTENTION : tm_check_fl compare toujours le contenu entier. tm_check_debugfs ne le compare que pour les
+ * fichiers d'au plus tm_set_debugfs_full_limit() octets (1 Gio par défaut, car debugfs « dump » écrit
+ * le fichier entier sur disque). Au-delà, SEUL(S) la taille, uid, gid et mode sont comparés par debugfs :
+ * le juge indépendant est FAIBLE pour ces fichiers (il ne voit pas une corruption de contenu). */
 
 #include <stddef.h>
 #include <stdint.h>
 
 #include "fluluks/fs.h"
 
-#define TM_BIG ((uint64_t)64 << 20)
-#define TM_EDGE ((size_t)1 << 20)
+#define TM_CHUNK ((size_t)1 << 20)
+#define TM_DEBUGFS_FULL_DEFAULT ((uint64_t)1 << 30)
 
 typedef struct tm tm;
 
@@ -25,6 +30,9 @@ typedef struct tm tm;
 void tm_set_quiet(int quiet);
 
 tm *tm_new(void); /* contient la racine */
+tm *tm_clone(const tm *m);
+/* Taille maximale d'un fichier dont tm_check_debugfs compare le contenu (défaut 1 Gio). */
+void tm_set_debugfs_full_limit(uint64_t limit);
 void tm_free(tm *m);
 size_t tm_count(const tm *m);
 /* Construit le modèle depuis un dossier source (celui donné à mkfs -d). 0 ou -1. */
