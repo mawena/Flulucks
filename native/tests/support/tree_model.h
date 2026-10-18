@@ -49,6 +49,12 @@ int tm_apply_rmdir(tm *m, const char *path); /* dossier vide seulement */
 int tm_apply_rename(tm *m, const char *from, const char *to); /* déplace aussi les descendants */
 int tm_apply_attrs(tm *m, const char *path, uint32_t uid, uint32_t gid, uint32_t perm);
 
+/* Écrit le modèle dans `fichier`, une ligne par entrée, triée par chemin, champs séparés par des
+ * tabulations : type (d ou f), taille, condensat (hexadécimal, voir plus haut ; « - » pour un
+ * dossier), uid, gid, mode (octal, st_mode complet), chemin. Lu par
+ * tools/fixtures/verify_rw_with_kernel.sh. 0 ou -1. */
+int tm_write_manifest(const tm *m, const char *fichier);
+
 /* Compare le volume monté au modèle. Renvoie le nombre d'écarts (0 = identique) ; chacun est décrit
  * sur stderr (dix premiers). Un écart de contenu, un fichier en trop ou manquant comptent. */
 int tm_check_fl(const tm *m, fl_fs *fs);

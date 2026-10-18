@@ -82,6 +82,34 @@ void tm_free(tm *m) {
 
 size_t tm_count(const tm *m) { return m->n; }
 
+static int cmp_chemin(const void *a, const void *b) {
+  return strcmp((*(const ent *const *)a)->path, (*(const ent *const *)b)->path);
+}
+
+int tm_write_manifest(const tm *m, const char *fichier) {
+  const ent **t = malloc(m->n * sizeof *t);
+  FILE *f = t ? fopen(fichier, "w") : NULL;
+  if (!f) {
+    free(t);
+    return -1;
+  }
+  for (size_t i = 0; i < m->n; i++) t[i] = &m->e[i];
+  qsort(t, m->n, sizeof *t, cmp_chemin);
+  int rc = 0;
+  for (size_t i = 0; i < m->n && rc == 0; i++) {
+    const ent *x = t[i];
+    char hex[65] = "-";
+    if (!x->is_dir)
+      for (int k = 0; k < 32; k++) snprintf(hex + 2 * k, 3, "%02x", x->sha[k]);
+    if (fprintf(f, "%c\t%llu\t%s\t%u\t%u\t%o\t%s\n", x->is_dir ? 'd' : 'f', (unsigned long long)x->size, hex,
+                (unsigned)x->uid, (unsigned)x->gid, (unsigned)x->mode, x->path) < 0)
+      rc = -1;
+  }
+  if (fclose(f) != 0) rc = -1;
+  free(t);
+  return rc;
+}
+
 static ent *trouver(const tm *m, const char *path) {
   for (size_t i = 0; i < m->n; i++)
     if (!strcmp(m->e[i].path, path)) return &m->e[i];
