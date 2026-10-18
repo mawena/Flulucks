@@ -5,7 +5,8 @@ Usage : manifest.py <dossier>
 Une ligne par entrée, séparée par des tabulations : type (d, f ou ? pour tout autre type), taille,
 condensat (sha256 de la suite des sha256 de chaque tranche de 1 Mio ; « - » pour un dossier), uid, gid,
 mode (octal, st_mode complet), chemin. Trié par chemin (octets). « lost+found » à la racine est exclu.
-Utilisé par verify_rw_with_kernel.sh et par le test test_manifeste (sans root).
+Utilisé par verify_rw_with_kernel.sh, et vérifié sans root par test_manifeste (native/tests/test_batterie.c :
+arborescence écrite par le moteur, extraite par « debugfs rdump », comparée à tm_write_manifest).
 """
 import hashlib
 import os

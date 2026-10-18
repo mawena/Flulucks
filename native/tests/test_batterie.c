@@ -2,16 +2,26 @@
 /* Batterie de non-corruption ext4 (phase 3, T8). Des opérations pseudo-aléatoires (graine affichée,
  * rejouable par FL_SEED=<n>) sont appliquées à la fois au volume et au modèle (tree_model) : création,
  * ajout à la fin, réécriture au milieu, troncature vers le haut et vers le bas, renommage et
- * déplacement (fichiers et dossiers), suppression, mkdir/rmdir, noms Unicode jusqu'à 255 octets,
- * profondeur jusqu'à 40. Tous les 200 pas et à la fin : démontage, « e2fsck -fn » propre, debugfs voit
- * le modèle, le moteur relit chaque fichier de la batterie, puis remontage.
+ * déplacement (fichiers et dossiers), suppression, mkdir/rmdir, noms Unicode jusqu'à 255 octets.
+ * Profondeur 40 garantie : chaque batterie commence par creuser une chaîne de dossiers jusqu'à la
+ * profondeur 40 (/b = 1, un fichier au fond), jugée aussitôt ; la profondeur maximale jugée est
+ * affichée dans le bilan et doit valoir 40. Jalons : après le creusage, tous les 200 pas (variante
+ * longue comprise) et au dernier pas : le moteur relit chaque fichier de la batterie, démontage,
+ * « e2fsck -fn » propre, debugfs voit le modèle, puis remontage.
  *
- * Chaque batterie laisse son image et son manifeste dans build/native/batterie/ (<nom>.ecrite.img,
- * <nom>.manifest, <nom>.pass pour LUKS), pour tools/fixtures/verify_rw_with_kernel.sh (sudo, lancé
- * par l'utilisateur).
+ * Chaque batterie réussie laisse son image et son manifeste dans build/native/batterie/
+ * (<nom>.ecrite.img, <nom>.manifest, <nom>.pass pour LUKS), pour tools/fixtures/verify_rw_with_kernel.sh
+ * (sudo, lancé par l'utilisateur). Ces trois sorties sont supprimées au début de chaque batterie : un
+ * passage en échec n'en laisse donc aucune périmée. En échec, l'image de travail est gardée sous
+ * <nom>.echec.img (graine dans le message ; le script, qui ne prend que les *.ecrite.img, l'ignore ;
+ * à supprimer à la main, un nouvel échec de la même batterie l'écrase).
  *
- * « test_batterie lent » (test CTest test_batterie_lent, label lent) : la variante longue et le
- * fichier dense de 4,1 Gio. Réservé au PC : sauté (code 77) sans e2fsck/debugfs, et sur Android. */
+ * Aussi : disque plein, fichiers creux de 5 Gio, 20 000 petits fichiers, et test_manifeste
+ * (tools/fixtures/manifest.py comparé à tm_write_manifest, sans root).
+ *
+ * « test_batterie lent » (test CTest test_batterie_lent, label lent) : la variante longue (5 graines
+ * de 20 000 pas) et le fichier dense de 4,1 Gio. Réservé au PC : sauté (code 77) sans
+ * e2fsck/debugfs, et sur Android. */
 #include <errno.h>
 #include <fcntl.h>
 #include <libgen.h>
@@ -420,7 +430,7 @@ static int pas(etat *e, fl_fs *fs) {
 static void dossier_batterie(char *out, size_t cap) {
   char fx[4096];
   snprintf(fx, sizeof fx, "%s", tt_fixture("x"));
-  snprintf(out, cap, "%s/../batterie", dirname(fx)); /* build/native/batterie */
+  snprintf(out, cap, "%s/batterie", dirname(dirname(fx))); /* build/native/batterie */
   mkdir(out, 0755);
 }
 
@@ -430,7 +440,61 @@ static int copier(const char *src, const char *dst) {
   return fu_run(argv, out, sizeof out);
 }
 
-/* Une batterie de `n` pas, juge tous les `tous` pas. */
+/* Chemin <dossier batterie>/<nom><suffixe>. */
+static void chemin_batterie(const char *nom, const char *suffixe, char *out, size_t cap) {
+  char dir[4096];
+  dossier_batterie(dir, sizeof dir);
+  snprintf(out, cap, "%s/%s%s", dir, nom, suffixe);
+}
+
+/* Profondeur du dossier le plus profond de la batterie (/b = 1). */
+static int profondeur(const etat *e) {
+  int p = 0;
+  for (size_t i = 0; i < e->nd; i++)
+    if (e->d[i].prof > p) p = e->d[i].prof;
+  return p;
+}
+
+/* Creuse depuis le dossier le plus profond jusqu'à PROFONDEUR_MAX, puis pose un fichier au fond. */
+static int creuser(etat *e, fl_fs *fs) {
+  for (;;) {
+    size_t k = 0;
+    for (size_t i = 1; i < e->nd; i++)
+      if (e->d[i].prof > e->d[k].prof) k = i;
+    char c[4200];
+    nom_libre(e, e->d[k].chemin, c, sizeof c);
+    if (e->d[k].prof >= PROFONDEUR_MAX) {
+      size_t len = 1 + entre(16 * 1024);
+      uint8_t *data = malloc(len);
+      remplir(data, len);
+      int rc = ecrire_tout(fs, c, FL_O_RDWR | FL_O_CREAT, data, len, 0);
+      if (rc != FL_OK) {
+        free(data);
+        return rc;
+      }
+      ajouter_fich(e, c, data, len);
+      return appliquer_fich(e, &e->f[e->nf - 1]) ? -100 : FL_OK;
+    }
+    int prof = e->d[k].prof + 1;
+    int rc = fl_fs_mkdir(fs, c);
+    if (rc != FL_OK) return rc;
+    if (tm_apply_mkdir(e->m, c, e->uid, e->gid, 0755)) return -100;
+    ajouter_doss(e, c, prof);
+  }
+}
+
+/* Jalon : le moteur relit chaque fichier, démontage, juge, puis remontage si `remonter`. 1 si ok. */
+static int jalon(vol *v, const etat *e, bool remonter) {
+  int ok = 1;
+  for (size_t i = 0; ok && i < e->nf; i++) ok = verifier_fich(v->fs, &e->f[i]) == FL_OK;
+  if (vol_demonter(v) != FL_OK) ok = 0;
+  if (ok && juger(v, e->m) != 0) ok = 0;
+  if (ok && remonter && vol_monter(v) != FL_OK) ok = 0;
+  return ok;
+}
+
+/* Une batterie : creusage jusqu'à PROFONDEUR_MAX et premier jalon, puis `n` pas, jalon tous les `tous`
+ * pas et au dernier. */
 static void batterie(const char *nom, const genre *g, int n, int tous, uint64_t defaut) {
   vol v = {.g = g};
   etat e = {0};
@@ -438,20 +502,38 @@ static void batterie(const char *nom, const genre *g, int n, int tous, uint64_t 
   g_x = s * 0x9E3779B97F4A7C15ull + 1;
   fprintf(stderr, "%s : graine %llu (FL_SEED=%llu pour rejouer), %d pas\n", nom, (unsigned long long)s,
           (unsigned long long)s, n);
+  /* les sorties d'un passage précédent ne doivent jamais être vérifiées à la place des nouvelles */
+  static const char *const k_sorties[] = {".ecrite.img", ".manifest", ".pass"};
+  char dst[4400];
+  for (size_t i = 0; i < sizeof k_sorties / sizeof *k_sorties; i++) {
+    chemin_batterie(nom, k_sorties[i], dst, sizeof dst);
+    TT_ASSERT(unlink(dst) == 0 || errno == ENOENT);
+  }
   char src[4096];
   snprintf(src, sizeof src, "%s", tt_fixture(g->fixture));
   TT_ASSERT_EQ(fu_copy_image(src, v.img, sizeof v.img), 0);
-  TT_ASSERT_EQ(vol_monter(&v), FL_OK);
+  int ok = vol_monter(&v) == FL_OK, prof_jugee = 0, k = 0;
   fl_stat st;
-  TT_ASSERT_EQ(fl_fs_stat(v.fs, "/", &st), FL_OK);
-  e.uid = st.uid;
-  e.gid = st.gid;
-  e.m = tm_clone(g_base);
-  TT_ASSERT(e.m != NULL);
-  int rc = fl_fs_mkdir(v.fs, "/b");
+  if (ok) ok = fl_fs_stat(v.fs, "/", &st) == FL_OK;
+  if (ok) {
+    e.uid = st.uid;
+    e.gid = st.gid;
+    e.m = tm_clone(g_base);
+    ok = e.m != NULL;
+  }
+  int rc = ok ? fl_fs_mkdir(v.fs, "/b") : FL_EIO;
   if (rc == FL_OK) rc = tm_apply_mkdir(e.m, "/b", e.uid, e.gid, 0755) ? -100 : FL_OK;
   ajouter_doss(&e, "/b", 1);
-  int k = 0, ok = rc == FL_OK;
+  if (rc == FL_OK) rc = creuser(&e, v.fs);
+  if (rc != FL_OK) {
+    fprintf(stderr, "%s : départ ou creusage, erreur %d (graine %llu)\n", nom, rc, (unsigned long long)s);
+    ok = 0;
+  }
+  if (ok && !jalon(&v, &e, true)) {
+    fprintf(stderr, "%s : juge en échec après le creusage (graine %llu)\n", nom, (unsigned long long)s);
+    ok = 0;
+  }
+  if (ok) prof_jugee = profondeur(&e);
   for (k = 1; ok && k <= n; k++) {
     rc = pas(&e, v.fs);
     if (rc != FL_OK) {
@@ -460,34 +542,42 @@ static void batterie(const char *nom, const genre *g, int n, int tous, uint64_t 
       break;
     }
     if (k % tous == 0 || k == n) {
-      for (size_t i = 0; ok && i < e.nf; i++) ok = verifier_fich(v.fs, &e.f[i]) == FL_OK;
-      if (vol_demonter(&v) != FL_OK) ok = 0;
-      if (ok && juger(&v, e.m) != 0) {
+      int p = profondeur(&e);
+      ok = jalon(&v, &e, k < n);
+      if (!ok)
         fprintf(stderr, "%s : juge en échec au pas %d (graine %llu)\n", nom, k, (unsigned long long)s);
-        ok = 0;
-      }
-      if (ok && k < n && vol_monter(&v) != FL_OK) ok = 0;
+      else if (p > prof_jugee)
+        prof_jugee = p;
     }
   }
   if (v.fs) vol_demonter(&v);
-  fprintf(stderr, "%s : %zu fichiers, %zu dossiers\n", nom, e.nf, e.nd);
+  fprintf(stderr, "%s : %zu fichiers, %zu dossiers, profondeur jugée maximale %d (finale %d)\n", nom, e.nf,
+          e.nd, prof_jugee, profondeur(&e));
   if (ok) {
-    char dir[4200], dst[4400];
-    dossier_batterie(dir, sizeof dir);
-    snprintf(dst, sizeof dst, "%s/%s.ecrite.img", dir, nom);
-    TT_ASSERT_EQ(copier(v.img, dst), 0);
-    snprintf(dst, sizeof dst, "%s/%s.manifest", dir, nom);
-    TT_ASSERT_EQ(tm_write_manifest(e.m, dst), 0);
-    if (g->luks) {
-      snprintf(dst, sizeof dst, "%s/%s.pass", dir, nom);
+    chemin_batterie(nom, ".ecrite.img", dst, sizeof dst);
+    if (copier(v.img, dst) != 0) ok = 0;
+    chemin_batterie(nom, ".manifest", dst, sizeof dst);
+    if (ok && tm_write_manifest(e.m, dst) != 0) ok = 0;
+    if (ok && g->luks) {
+      chemin_batterie(nom, ".pass", dst, sizeof dst);
       char pass[4096];
       snprintf(pass, sizeof pass, "%s", tt_fixture("pass.txt"));
-      TT_ASSERT_EQ(copier(pass, dst), 0);
+      if (copier(pass, dst) != 0) ok = 0;
     }
+    if (!ok) fprintf(stderr, "%s : sorties pour verify_rw_with_kernel.sh impossibles à écrire\n", nom);
+    unlink(v.img);
+  } else {
+    /* la preuve est gardée ; verify_rw_with_kernel.sh ne prend que les *.ecrite.img */
+    chemin_batterie(nom, ".echec.img", dst, sizeof dst);
+    if (rename(v.img, dst) != 0 && (copier(v.img, dst) != 0 || unlink(v.img) != 0))
+      fprintf(stderr, "%s : image en échec non gardée (%s)\n", nom, v.img);
+    else
+      fprintf(stderr, "%s : image en échec gardée dans %s (graine %llu, FL_SEED=%llu pour rejouer)\n", nom, dst,
+              (unsigned long long)s, (unsigned long long)s);
   }
-  unlink(v.img);
   etat_libre(&e);
   TT_ASSERT(ok);
+  TT_ASSERT_EQ(prof_jugee, PROFONDEUR_MAX);
 }
 
 static const genre G_REEL = {"ext4-rw-reel.img", 512, false};
@@ -497,6 +587,118 @@ static const genre G_SEED = {"ext4-rw-seed.img", 512, false};
 static const genre G_LUKS2 = {"luks2-rw-reel.img", 512, true};
 static const genre G_4K = {"ext4-rw-reel.img", 4096, false};
 static const genre G_GROS = {"ext4-rw-gros.img", 512, false};
+
+/* test_manifeste (sans root) : tools/fixtures/manifest.py, lancé sur une arborescence écrite par le
+ * moteur puis extraite par « debugfs rdump » (sans montage), rend exactement tm_write_manifest du
+ * modèle. Valide le format partagé par verify_rw_with_kernel.sh (tri, condensat par tranches de 1 Mio
+ * avec tranches nulles, modes octaux, noms Unicode).
+ *
+ * uid et gid : rdump les recopie par fchown, ce qui n'aboutit qu'en root ; sinon les fichiers extraits
+ * appartiennent à l'utilisateur qui lance le test. Hors root, le modèle prend donc getuid()/getgid()
+ * avant la comparaison (les uid/gid écrits par le moteur restent jugés par tm_check_debugfs dans les
+ * batteries). Les modes, eux, sont recopiés par fchmod dans les deux cas et comparés tels quels. */
+typedef struct {
+  const char *chemin; /* relatif à /m dans l'image, absolu dans le modèle */
+  bool dossier;
+  size_t taille;  /* fichier : octets aléatoires écrits à 0 */
+  size_t tronque; /* fichier : taille finale (> taille : trou en fin) */
+} entree_manif;
+
+static const entree_manif k_manif[] = {
+    {"/vide", false, 0, 0},
+    {"/petit.txt", false, 100, 100},
+    {"/a", true, 0, 0},
+    {"/a b", false, 1, 1},
+    {"/a/b", true, 0, 0},
+    {"/a/b/c", true, 0, 0},
+    {"/a/b/c/trois-tranches.bin", false, 5 * MIB / 2, 5 * MIB / 2},
+    {"/a/b/c/creux.bin", false, 10, 3 * MIB},
+    {"/caf\xc3\xa9 \xf0\x9f\x98\x80 \xe6\x97\xa5\xe6\x9c\xac", true, 0, 0},
+    {"/caf\xc3\xa9 \xf0\x9f\x98\x80 \xe6\x97\xa5\xe6\x9c\xac/tranche-exacte", false, MIB, MIB},
+};
+
+static void test_manifeste(void) {
+  vol v = {.g = &G_REEL};
+  char src[4096];
+  snprintf(src, sizeof src, "%s", tt_fixture(G_REEL.fixture));
+  TT_ASSERT_EQ(fu_copy_image(src, v.img, sizeof v.img), 0);
+  TT_ASSERT_EQ(vol_monter(&v), FL_OK);
+  TT_ASSERT_EQ(fl_fs_mkdir(v.fs, "/m"), FL_OK);
+  fl_stat st;
+  TT_ASSERT_EQ(fl_fs_stat(v.fs, "/m", &st), FL_OK);
+  const bool root = geteuid() == 0;
+  const uint32_t uid = root ? st.uid : (uint32_t)getuid(), gid = root ? st.gid : (uint32_t)getgid();
+  tm *m = tm_new();
+  TT_ASSERT(m != NULL);
+  TT_ASSERT_EQ(tm_apply_attrs(m, "/", uid, gid, st.mode), 0);
+  /* un nom de 255 octets (UTF-8 de 2 octets) au fond */
+  char long_nom[300] = "/a/b/c/";
+  size_t l = strlen(long_nom);
+  for (int i = 0; i < 127; i++, l += 2) memcpy(long_nom + l, "\xc3\xa9", 2);
+  long_nom[l++] = 'z';
+  long_nom[l] = 0;
+  uint8_t *b = malloc(3 * MIB);
+  TT_ASSERT(b != NULL);
+  g_x = 1234;
+  int ok = 1;
+  for (size_t i = 0; ok && i <= sizeof k_manif / sizeof *k_manif; i++) {
+    const entree_manif x =
+        i < sizeof k_manif / sizeof *k_manif ? k_manif[i] : (entree_manif){long_nom, false, 4096, 4096};
+    char c[4200];
+    snprintf(c, sizeof c, "/m%s", x.chemin);
+    if (x.dossier) {
+      ok = fl_fs_mkdir(v.fs, c) == FL_OK && tm_apply_mkdir(m, x.chemin, uid, gid, st.mode & 07777) == 0;
+    } else {
+      memset(b, 0, x.tronque);
+      remplir(b, x.taille);
+      fl_file *f = NULL;
+      ok = fl_fs_open(v.fs, c, FL_O_RDWR | FL_O_CREAT, &f) == FL_OK;
+      if (ok && x.taille) ok = fl_file_pwrite(f, b, x.taille, 0) == (int64_t)x.taille;
+      if (ok && x.tronque != x.taille) ok = fl_file_truncate(f, x.tronque) == FL_OK;
+      if (f && fl_file_close(f) != FL_OK) ok = 0;
+      if (ok) ok = tm_apply_file(m, x.chemin, b, x.tronque, uid, gid, 0644) == 0;
+    }
+    if (!ok) fprintf(stderr, "test_manifeste : %s impossible\n", c);
+  }
+  free(b);
+  TT_ASSERT(ok);
+  TT_ASSERT_EQ(vol_demonter(&v), FL_OK);
+
+  char td[4096], dir[4200], cmd[4400], attendu_f[4400], extrait[4400];
+  TT_ASSERT_EQ(fu_tmpdir(td, sizeof td), 0);
+  snprintf(dir, sizeof dir, "%s/manifeste-XXXXXX", td);
+  TT_ASSERT(mkdtemp(dir) != NULL);
+  snprintf(cmd, sizeof cmd, "rdump /m %s", dir);
+  static char out[1 << 16], attendu[1 << 16];
+  char *const dfs[] = {(char *)"debugfs", (char *)"-R", cmd, v.img, NULL};
+  int rc = fu_run(dfs, out, sizeof out);
+  if (rc != 0) fprintf(stderr, "debugfs rdump = %d\n%s\n", rc, out);
+  snprintf(attendu_f, sizeof attendu_f, "%s/attendu.manifest", dir);
+  if (rc == 0) rc = tm_write_manifest(m, attendu_f);
+  FILE *f = rc == 0 ? fopen(attendu_f, "rb") : NULL;
+  size_t na = f ? fread(attendu, 1, sizeof attendu - 1, f) : 0;
+  if (f) fclose(f);
+  attendu[na] = 0;
+  snprintf(extrait, sizeof extrait, "%s/m", dir);
+  char *const py[] = {(char *)"python3", (char *)"-I", (char *)FL_TOOLS_DIR "/fixtures/manifest.py", extrait,
+                      NULL};
+  if (rc == 0 && f) rc = fu_run(py, out, sizeof out);
+  else rc = -1;
+  if (rc == 0 && strcmp(out, attendu) != 0) {
+    fprintf(stderr, "manifest.py :\n%s\ntm_write_manifest :\n%s\n", out, attendu);
+    rc = -1;
+  } else if (rc != 0) {
+    fprintf(stderr, "manifest.py = %d\n%s\n", rc, out);
+  }
+  fprintf(stderr, "test_manifeste : %zu entrées comparées (%s)\n", sizeof k_manif / sizeof *k_manif + 2,
+          root ? "root : uid/gid de l'image" : "hors root : uid/gid de l'utilisateur");
+  char *const rm[] = {(char *)"rm", (char *)"-rf", dir, NULL};
+  char o2[256];
+  fu_run(rm, o2, sizeof o2);
+  tm_free(m);
+  unlink(v.img);
+  TT_ASSERT_EQ(rc, 0);
+}
 
 static void test_batterie_reel(void) { batterie("reel", &G_REEL, 2000, 200, 1); }
 static void test_batterie_1k(void) { batterie("1k", &G_1K, 1000, 200, 2); }
@@ -509,7 +711,7 @@ static void test_batterie_longue(void) {
   for (uint64_t s = 1; s <= 5; s++) {
     char nom[32];
     snprintf(nom, sizeof nom, "longue-%llu", (unsigned long long)s);
-    batterie(nom, &G_REEL, 20000, 1000, s);
+    batterie(nom, &G_REEL, 20000, 200, s);
   }
 }
 
@@ -712,6 +914,7 @@ int main(int argc, char **argv) {
     TT_RUN(test_batterie_longue);
     TT_RUN(test_batterie_gros_dense);
   } else {
+    TT_RUN(test_manifeste);
     TT_RUN(test_batterie_disque_plein);
     TT_RUN(test_batterie_reel);
     TT_RUN(test_batterie_1k);

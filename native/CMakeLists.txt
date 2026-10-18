@@ -125,6 +125,8 @@ if(FL_TESTS)
   target_link_libraries(test_ext4_politique PRIVATE fl_testsupport)
   fl_add_test(test_batterie LABELS ecriture)
   target_link_libraries(test_batterie PRIVATE fl_testsupport)
+  # test_manifeste lance tools/fixtures/manifest.py
+  target_compile_definitions(test_batterie PRIVATE FL_TOOLS_DIR="${CMAKE_SOURCE_DIR}/../tools")
   add_test(NAME test_batterie_lent COMMAND test_batterie lent)
   set_tests_properties(test_batterie_lent PROPERTIES LABELS lent SKIP_RETURN_CODE 77
     ENVIRONMENT "FL_FIXTURES=${CMAKE_BINARY_DIR}/fixtures" FIXTURES_REQUIRED fx)

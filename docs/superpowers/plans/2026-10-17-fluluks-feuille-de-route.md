@@ -110,7 +110,12 @@ dans le même commit que le travail.
         ro_compat refusés ; juge aligné sur jbd2 ; ordre des barrières vérifié ; PC 20/20)*
   - [ ] Correctif écriture et politique (T4, T6) : erreur d'E/S pendant une écriture, `rmdir` sur disque
         hostile, sommes fausses avalées, lecture seule collante jusqu'au démontage *(critique)*
-  - [ ] Correctif T8 : batterie (cadence 200 pas, profondeur 40, copies supprimées en échec)
+  - [x] Correctif T8 : batterie (cadence 200 pas, profondeur 40, copies supprimées en échec) *(jalon
+        tous les 200 pas partout, variante longue comprise ; chaque batterie creuse jusqu'à la profondeur
+        40, jugée aussitôt et affirmée ; en échec l'image est gardée en `<nom>.echec.img`, et les
+        sorties d'un passage précédent sont supprimées au départ ; `test_manifeste` ajouté (manifest.py
+        contre tm_write_manifest, via `debugfs rdump`, sans root) ; PC 20/20, `test_batterie_lent`
+        vert en 83 min)*
   - [ ] Passage sur le Pixel : tests natifs (`run_native_tests.sh`), `connectedDebugAndroidTest`,
         `check_image.sh`
   - [ ] Relecture finale de toute la branche

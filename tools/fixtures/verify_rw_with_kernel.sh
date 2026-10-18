@@ -2,7 +2,8 @@
 # Vérification par le noyau Linux (root requis) des images écrites par le moteur (phase 3, T8) : monte
 # en lecture seule chaque <nom>.ecrite.img laissée par test_batterie (LUKS : cryptsetup open --readonly
 # avec <nom>.pass) et compare son contenu à <nom>.manifest (chemin, type, taille, condensat, uid, gid,
-# mode ; format : native/tests/support/tree_model.h, tm_write_manifest).
+# mode ; format : native/tests/support/tree_model.h, tm_write_manifest). Les <nom>.echec.img (preuves
+# laissées par une batterie en échec) ne sont jamais vérifiées.
 # Usage : sudo tools/fixtures/verify_rw_with_kernel.sh build/native/batterie
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 2; }
