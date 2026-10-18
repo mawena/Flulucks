@@ -18,7 +18,8 @@ typedef struct fake_msc fake_msc;
 typedef struct {
   unsigned op[256];        /* commandes SCSI reçues, par code d'opération */
   unsigned commands;       /* CBW valides reçus */
-  unsigned writes;         /* WRITE(10) + WRITE(16) */
+  unsigned writes;         /* WRITE(10) + WRITE(16) reçus (refusés compris) */
+  unsigned writes_ok;      /* WRITE dont les données ont été acceptées (écrites, ou hors image) */
   uint64_t written_bytes;  /* octets écrits dans l'image */
   uint32_t max_write_xfer; /* plus grande longueur de données d'un WRITE */
   unsigned resets;         /* bot_reset */
@@ -28,6 +29,8 @@ typedef struct {
   unsigned violations;     /* appels concurrents détectés (verrou absent côté hôte) */
   unsigned zlps;           /* paquets de longueur nulle envoyés à la place du CSW */
   uint8_t start_stop[6];   /* dernier CDB START STOP UNIT reçu */
+  uint8_t last_cdb[16];    /* dernier CDB reçu (complété de zéros) */
+  uint8_t last_cdb_len;
   /* Délai (ms) du dernier transfert de chaque phase, par code d'opération de la commande. */
   unsigned tmo_cbw[256], tmo_data[256], tmo_csw[256];
 } fake_msc_stats;
@@ -63,6 +66,9 @@ void fake_msc_zlp_before_csw(fake_msc *m, unsigned k);
 void fake_msc_bogus_residue(fake_msc *m, uint32_t residue);
 /* La prochaine commande d'accès au support échoue avec ce sens. */
 void fake_msc_sense_next(fake_msc *m, uint8_t key, uint8_t asc, uint8_t ascq);
+/* Les k prochaines commandes de code d'opération `op` (quel qu'il soit : WRITE, SYNCHRONIZE CACHE,
+ * MODE SENSE…) échouent avec ce sens, sans rien exécuter (un WRITE n'écrit rien). */
+void fake_msc_sense_op(fake_msc *m, uint8_t op, uint8_t key, uint8_t asc, uint8_t ascq, unsigned k);
 /* Taille de bloc logique (toute valeur non nulle : les valeurs hostiles sont permises). */
 int fake_msc_set_block_size(fake_msc *m, uint32_t bs);
 /* Nombre de blocs annoncé (0 → dernier LBA 0xFFFFFFFFFFFFFFFF en READ CAPACITY(16)). */

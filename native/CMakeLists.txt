@@ -128,7 +128,9 @@ if(FL_TESTS)
   add_test(NAME test_batterie_lent COMMAND test_batterie lent)
   set_tests_properties(test_batterie_lent PROPERTIES LABELS lent SKIP_RETURN_CODE 77
     ENVIRONMENT "FL_FIXTURES=${CMAKE_BINARY_DIR}/fixtures" FIXTURES_REQUIRED fx)
-  fl_add_test(test_usb)
+  # test_usb_pile_ecriture appelle e2fsck : label ecriture, code 77 si le juge manque (les autres tests
+  # du faux disque tournent quand même).
+  fl_add_test(test_usb LABELS ecriture)
   target_sources(test_usb PRIVATE tests/support/fake_msc.c)
   target_link_libraries(test_usb PRIVATE fl_testsupport)
 

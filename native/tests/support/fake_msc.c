@@ -40,6 +40,8 @@ struct fake_msc {
   uint32_t bogus_residue;
   bool sense_armed;
   uint8_t next_key, next_asc, next_ascq;
+  unsigned op_sense_left; /* fake_msc_sense_op */
+  uint8_t op_sense_op, op_sense_key, op_sense_asc, op_sense_ascq;
 
   /* machine d'états BOT */
   int st;
@@ -149,6 +151,15 @@ static void exec_cdb(fake_msc *m, const uint8_t *cdb, uint8_t cdblen, bool dir_i
   m->status = 0;
   m->data_len = 0;
   m->s.op[cdb[0]]++;
+  memset(m->s.last_cdb, 0, sizeof m->s.last_cdb);
+  memcpy(m->s.last_cdb, cdb, cdblen);
+  m->s.last_cdb_len = cdblen;
+  if (m->op_sense_left && cdb[0] == m->op_sense_op) {
+    m->op_sense_left--;
+    if (cdb[0] == 0x2A || cdb[0] == 0x8A) m->s.writes++;
+    check_condition(m, m->op_sense_key, m->op_sense_asc, m->op_sense_ascq); /* rien n'est exécuté */
+    return;
+  }
   uint8_t r[64];
   memset(r, 0, sizeof r);
   bool wants_in = false, wants_out = false;
@@ -338,8 +349,10 @@ static int fake_bulk_out(void *ctx, const void *buf, size_t len, unsigned timeou
       if (keep > m->w_bytes) keep = m->w_bytes;
       if (keep && pwrite(m->fd, m->data, (size_t)keep, (off_t)m->w_off) != (ssize_t)keep)
         check_condition(m, 0x03, 0x0C, 0x00);
-      else
+      else {
         m->s.written_bytes += m->w_bytes;
+        m->s.writes_ok++;
+      }
     }
     rc = (int)n;
   } else {
@@ -502,6 +515,13 @@ void fake_msc_sense_next(fake_msc *m, uint8_t key, uint8_t asc, uint8_t ascq) {
   m->next_key = key;
   m->next_asc = asc;
   m->next_ascq = ascq;
+}
+void fake_msc_sense_op(fake_msc *m, uint8_t op, uint8_t key, uint8_t asc, uint8_t ascq, unsigned k) {
+  m->op_sense_op = op;
+  m->op_sense_key = key;
+  m->op_sense_asc = asc;
+  m->op_sense_ascq = ascq;
+  m->op_sense_left = k;
 }
 int fake_msc_set_block_size(fake_msc *m, uint32_t bs) {
   if (bs == 0) return FL_EINVAL;

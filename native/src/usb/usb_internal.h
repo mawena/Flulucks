@@ -34,6 +34,10 @@ typedef struct {
   bool dead;           /* FL_ENODEV vu : plus rien n'est envoyé */
   bool ignore_residue; /* résidu du CSW fantaisiste (heuristique de Linux) : on compte les octets reçus */
   bool wp;             /* protection en écriture signalée (MODE SENSE ou DATA PROTECT) : collante */
+  bool opened;         /* ouverture réussie : la politique UNIT ATTENTION change (voir scsi.c) */
+  bool ua_reset;       /* UNIT ATTENTION autre que « support changé » vue après l'ouverture : collant,
+                        * tout flush rend FL_EIO (le cache volatil du disque a pu être perdu) */
+  bool sync_unsupported; /* SYNCHRONIZE CACHE refusé (ILLEGAL REQUEST) */
 } fl_usb_dev;
 
 enum { FL_BOT_NONE = 0, FL_BOT_IN = 1, FL_BOT_OUT = 2 };
@@ -63,11 +67,13 @@ int fl_scsi_read_capacity(fl_usb_dev *u, uint64_t *blocks, uint32_t *block_size)
 int fl_scsi_read(fl_usb_dev *u, uint64_t lba, uint32_t n, uint32_t block_size, void *buf);
 /* WRITE(10), ou WRITE(16) au-delà de 32 bits ; renvoie la longueur. */
 uint8_t fl_scsi_build_write(uint64_t lba, uint32_t n, uint8_t cdb[16]);
-/* Écriture de n blocs (n * block_size <= FL_USB_MAX_XFER). Sens DATA PROTECT → FL_EROFS. */
+/* Écriture de n blocs (n * block_size <= FL_USB_MAX_XFER). Sens DATA PROTECT → FL_EROFS. Après
+ * l'ouverture, UNIT ATTENTION : FL_ENODEV (support changé, périphérique mort) ou FL_EIO, sans réessai. */
 int fl_scsi_write(fl_usb_dev *u, uint64_t lba, uint32_t n, uint32_t block_size, const void *buf);
 /* MODE SENSE(6) : *wp = bit de protection en écriture de l'en-tête. */
 int fl_scsi_mode_sense_wp(fl_usb_dev *u, bool *wp);
-/* SYNCHRONIZE CACHE(10) ; ILLEGAL REQUEST (non prise en charge) vaut FL_OK. */
+/* SYNCHRONIZE CACHE(10) ; ILLEGAL REQUEST (non prise en charge) vaut FL_OK et pose
+ * u->sync_unsupported. */
 int fl_scsi_sync_cache(fl_usb_dev *u);
 
 /* fl_usb_bdev_open avec une horloge choisie (NULL = horloge réelle). */

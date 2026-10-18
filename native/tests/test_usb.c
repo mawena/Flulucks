@@ -524,7 +524,7 @@ static void test_usb_sens(void) {
   TT_ASSERT_EQ(fl_bdev_read(d, 1, 1, a), FL_EIO);
   fake_msc_sense_next(m, 0x07, 0x27, 0x00); /* DATA PROTECT */
   TT_ASSERT_EQ(fl_bdev_read(d, 1, 1, a), FL_EROFS);
-  fake_msc_sense_next(m, 0x06, 0x28, 0x00); /* UNIT ATTENTION : réessai immédiat */
+  fake_msc_sense_next(m, 0x06, 0x29, 0x00); /* UNIT ATTENTION (remise à zéro) : lecture réessayée */
   TT_ASSERT_EQ(fl_bdev_read(d, 1, 1, a), FL_OK);
   g_h.sleeps = 0;
   fake_msc_not_ready(m, 2); /* NOT READY : réessai après attente */
@@ -663,6 +663,25 @@ static void test_usb_cdb_lecture(void) {
   TT_ASSERT_EQ(fl_scsi_build_read(5, 0x10000, c), 16);
 }
 
+static void test_usb_cdb_ecriture(void) {
+  uint8_t c[16];
+  memset(c, 0xEE, sizeof c);
+  TT_ASSERT_EQ(fl_scsi_build_write(0x12345678u, 0x9ABC, c), 10);
+  static const uint8_t w10[10] = {0x2A, 0x00, 0x12, 0x34, 0x56, 0x78, 0x00, 0x9A, 0xBC, 0x00};
+  TT_ASSERT_MEM_EQ(c, w10, 10); /* octet 1 = 0 : ni FUA, ni DPO, ni WRPROTECT */
+  memset(c, 0xEE, sizeof c);
+  TT_ASSERT_EQ(fl_scsi_build_write(0x0102030405060708ull, 0x0A0B0C0Du, c), 16);
+  static const uint8_t w16[16] = {0x8A, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06,
+                                  0x07, 0x08, 0x0A, 0x0B, 0x0C, 0x0D, 0x00, 0x00};
+  TT_ASSERT_MEM_EQ(c, w16, 16);
+  TT_ASSERT_EQ(fl_scsi_build_write(0xFFFFFFFFull, 1, c), 10);
+  TT_ASSERT_EQ(c[0], 0x2A);
+  TT_ASSERT_EQ(fl_scsi_build_write(0xFFFFFFFFull, 2, c), 16); /* dernier bloc au-delà de 32 bits */
+  TT_ASSERT_EQ(c[0], 0x8A);
+  TT_ASSERT_EQ(fl_scsi_build_write(0, 0x10000, c), 16); /* longueur au-delà de 16 bits */
+  TT_ASSERT_EQ(c[0], 0x8A);
+}
+
 typedef struct {
   fl_bdev *d;
   uint64_t lba;
@@ -762,6 +781,24 @@ static fake_msc *faux_rw(const char *fixture, char *img, size_t cap) {
   return m;
 }
 
+/* 1 si le fichier `img` a exactement le contenu de la fixture `fixture`, 0 sinon. */
+static int meme_image(const char *img, const char *fixture) {
+  int a = open(img, O_RDONLY), b = open(tt_fixture(fixture), O_RDONLY);
+  uint8_t *x = malloc(MIB), *y = malloc(MIB);
+  int ok = a >= 0 && b >= 0 && x && y;
+  for (off_t off = 0; ok;) {
+    ssize_t na = pread(a, x, MIB, off), nb = pread(b, y, MIB, off);
+    if (na != nb || na < 0 || memcmp(x, y, (size_t)na) != 0) ok = 0;
+    if (na <= 0) break;
+    off += na;
+  }
+  if (a >= 0) close(a);
+  if (b >= 0) close(b);
+  free(x);
+  free(y);
+  return ok;
+}
+
 static void motif(uint8_t *b, size_t n, unsigned graine) {
   for (size_t i = 0; i < n; i++) b[i] = (uint8_t)(i * 131 + graine * 7 + (i >> 9));
 }
@@ -807,8 +844,19 @@ static void test_usb_ecriture_aller_retour(void) {
   TT_ASSERT(fd >= 0);
   motif(b, (size_t)w[1].n * 512, 1);
   TT_ASSERT_EQ(pread(fd, r, (size_t)w[1].n * 512, (off_t)(w[1].lba * 512)), (ssize_t)w[1].n * 512);
-  close(fd);
   TT_ASSERT_MEM_EQ(r, b, (size_t)w[1].n * 512);
+  /* secteurs voisins de chaque plage : intacts (rien ne déborde) */
+  for (size_t i = 0; i < 3; i++) {
+    uint64_t v[2] = {w[i].lba - 1, w[i].lba + w[i].n};
+    for (int k = 0; k < 2; k++) {
+      if (v[k] >= last) continue; /* la dernière plage finit au dernier secteur */
+      uint8_t avant[512], apres[512];
+      TT_ASSERT_EQ(lire_ref("gpt-luks2.img", v[k] * 512, 512, avant), 0);
+      TT_ASSERT_EQ(pread(fd, apres, 512, (off_t)(v[k] * 512)), 512);
+      TT_ASSERT_MEM_EQ(apres, avant, 512);
+    }
+  }
+  close(fd);
   free(b);
   free(r);
   unlink(img);
@@ -828,10 +876,18 @@ static void test_usb_ecriture_16(void) {
   TT_ASSERT_EQ(fl_bdev_write(d, (1ull << 32) + 10, 8, b), FL_OK);
   TT_ASSERT_EQ(s->op[0x8A], 1);
   TT_ASSERT_EQ(s->op[0x2A], 0);
+  static const uint8_t c1[16] = {0x8A, 0, 0, 0, 0, 1, 0, 0, 0, 10, 0, 0, 0, 8, 0, 0};
+  TT_ASSERT_EQ(s->last_cdb_len, 16);
+  TT_ASSERT_MEM_EQ(s->last_cdb, c1, 16);
   TT_ASSERT_EQ(fl_bdev_write(d, 0xFFFFFFFFull - 3, 8, b), FL_OK); /* chevauche 2^32 : WRITE(16) */
   TT_ASSERT_EQ(s->op[0x8A], 2);
+  static const uint8_t c2[16] = {0x8A, 0, 0, 0, 0, 0, 0xFF, 0xFF, 0xFF, 0xFC, 0, 0, 0, 8, 0, 0};
+  TT_ASSERT_MEM_EQ(s->last_cdb, c2, 16);
+  TT_ASSERT_EQ(s->writes_ok, 2);
   fl_bdev_close(d);
   fake_msc_free(m);
+  /* tout est tombé au-delà de l'image : elle n'a pas changé */
+  TT_ASSERT_EQ(meme_image(img, "gpt-luks2.img"), 1);
   unlink(img);
 }
 
@@ -845,9 +901,23 @@ static void test_usb_flush(void) {
   TT_ASSERT_EQ(fl_bdev_flush(d), FL_OK);
   TT_ASSERT_EQ(s->op[0x35], 1);
   TT_ASSERT_EQ(s->tmo_csw[0x35], 30000u);
+  TT_ASSERT(!fl_usb_bdev_sync_unsupported(d));
   fake_msc_sync_unsupported(m);
   TT_ASSERT_EQ(fl_bdev_flush(d), FL_OK); /* ILLEGAL REQUEST : pas de cache à vider */
   TT_ASSERT_EQ(s->op[0x35], 2);
+  TT_ASSERT(fl_usb_bdev_sync_unsupported(d)); /* mémorisé */
+  TT_ASSERT(!fl_usb_bdev_sync_unsupported(NULL));
+  fl_bdev_close(d);
+  /* SYNCHRONIZE CACHE refusé par DATA PROTECT : FL_EROFS, protection collante */
+  TT_ASSERT_EQ(ouvrir_usb(m, false, &d), FL_OK);
+  TT_ASSERT(!fl_usb_bdev_write_protected(d));
+  fake_msc_sense_op(m, 0x35, 0x07, 0x27, 0x00, 1);
+  TT_ASSERT_EQ(fl_bdev_flush(d), FL_EROFS);
+  TT_ASSERT(fl_usb_bdev_write_protected(d));
+  unsigned w = s->writes;
+  uint8_t z[512] = {0};
+  TT_ASSERT_EQ(fl_bdev_write(d, 0, 1, z), FL_EROFS);
+  TT_ASSERT_EQ(s->writes, w); /* plus aucun WRITE */
   fl_bdev_close(d);
   fake_msc_free(m);
   unlink(img);
@@ -866,8 +936,18 @@ static void test_usb_protection_mode_sense(void) {
   TT_ASSERT_EQ(fl_bdev_write(d, 0, 1, z), FL_EROFS);
   TT_ASSERT_EQ(fake_msc_stats_get(m)->writes, 0);
   fl_bdev_close(d);
-  /* MODE SENSE refusé : l'ouverture réussit, sans rien forcer */
+  /* MODE SENSE refusé par DATA PROTECT : vaut protection */
   fake_msc_set_write_protect(m, false, false);
+  fake_msc_reset_stats(m);
+  fake_msc_sense_op(m, 0x1A, 0x07, 0x27, 0x00, 1);
+  TT_ASSERT_EQ(ouvrir_usb(m, false, &d), FL_OK);
+  TT_ASSERT_EQ(fake_msc_stats_get(m)->op[0x1A], 1);
+  TT_ASSERT(d->read_only);
+  TT_ASSERT(fl_usb_bdev_write_protected(d));
+  TT_ASSERT_EQ(fl_bdev_write(d, 0, 1, z), FL_EROFS);
+  TT_ASSERT_EQ(fake_msc_stats_get(m)->writes, 0);
+  fl_bdev_close(d);
+  /* MODE SENSE refusé (ILLEGAL REQUEST) : l'ouverture réussit, sans rien forcer */
   fake_msc_mode_sense_unsupported(m);
   TT_ASSERT_EQ(ouvrir_usb(m, false, &d), FL_OK);
   TT_ASSERT(!d->read_only);
@@ -943,11 +1023,231 @@ static void test_usb_lecture_seule_respectee(void) {
   unlink(img);
 }
 
+static void test_usb_ecriture_4k(void) {
+  const char *fx = "whole-luks2-4k.img";
+  char img[4096];
+  fake_msc *m = faux_rw(fx, img, sizeof img);
+  TT_ASSERT(m != NULL);
+  TT_ASSERT_EQ(fake_msc_set_block_size(m, 4096), FL_OK);
+  fl_bdev *d = NULL;
+  TT_ASSERT_EQ(ouvrir_usb(m, false, &d), FL_OK);
+  TT_ASSERT_EQ(d->sector_size, 4096);
+  TT_ASSERT(!d->read_only);
+  const uint64_t lba = 100;
+  const uint32_t n = 40; /* 160 Kio : 16 + 16 + 8 secteurs */
+  uint8_t *b = malloc((size_t)n * 4096), *r = malloc((size_t)n * 4096);
+  TT_ASSERT(b && r);
+  motif(b, (size_t)n * 4096, 4);
+  fake_msc_stats *s = fake_msc_stats_get(m);
+  fake_msc_reset_stats(m);
+  TT_ASSERT_EQ(fl_bdev_write(d, lba, n, b), FL_OK);
+  TT_ASSERT_EQ(s->writes, 3);
+  TT_ASSERT_EQ(s->writes_ok, 3);
+  TT_ASSERT_EQ(s->max_write_xfer, 64 * KIB);
+  TT_ASSERT_EQ(fl_bdev_read(d, lba, n, r), FL_OK);
+  TT_ASSERT_MEM_EQ(r, b, (size_t)n * 4096);
+  TT_ASSERT_EQ(fl_bdev_flush(d), FL_OK);
+  fl_bdev_close(d);
+  fake_msc_free(m);
+  int fd = open(img, O_RDONLY);
+  TT_ASSERT(fd >= 0);
+  TT_ASSERT_EQ(pread(fd, r, (size_t)n * 4096, (off_t)(lba * 4096)), (ssize_t)n * 4096);
+  TT_ASSERT_MEM_EQ(r, b, (size_t)n * 4096);
+  uint64_t v[2] = {lba - 1, lba + n};
+  for (int k = 0; k < 2; k++) {
+    uint8_t avant[4096], apres[4096];
+    TT_ASSERT_EQ(lire_ref(fx, v[k] * 4096, 4096, avant), 0);
+    TT_ASSERT_EQ(pread(fd, apres, 4096, (off_t)(v[k] * 4096)), 4096);
+    TT_ASSERT_MEM_EQ(apres, avant, 4096);
+  }
+  close(fd);
+  free(b);
+  free(r);
+  unlink(img);
+}
+
+/* ---------- UNIT ATTENTION après l'ouverture ---------- */
+
+/* Support changé (06/28/00) sur un WRITE : rien n'est écrit, FL_ENODEV, et le périphérique est mort. */
+static void test_usb_ua_28_ecriture(void) {
+  char img[4096];
+  fake_msc *m = faux_rw("gpt-luks2.img", img, sizeof img);
+  TT_ASSERT(m != NULL);
+  fl_bdev *d = NULL;
+  TT_ASSERT_EQ(ouvrir_usb(m, false, &d), FL_OK);
+  uint8_t b[8 * 512];
+  motif(b, sizeof b, 28);
+  fake_msc_stats *s = fake_msc_stats_get(m);
+  fake_msc_reset_stats(m);
+  fake_msc_sense_op(m, 0x2A, 0x06, 0x28, 0x00, 1); /* une seule fois : un réessai réussirait */
+  TT_ASSERT_EQ(fl_bdev_write(d, 2048, 8, b), FL_ENODEV);
+  TT_ASSERT_EQ(s->op[0x2A], 1); /* pas de réessai */
+  TT_ASSERT_EQ(s->writes_ok, 0);
+  unsigned appels = s->calls;
+  uint8_t r[512];
+  TT_ASSERT_EQ(fl_bdev_read(d, 0, 1, r), FL_ENODEV);
+  TT_ASSERT_EQ(fl_bdev_flush(d), FL_ENODEV);
+  TT_ASSERT_EQ(fl_bdev_write(d, 2048, 8, b), FL_ENODEV);
+  TT_ASSERT_EQ(s->calls, appels); /* plus rien n'est envoyé */
+  TT_ASSERT_EQ(s->writes_ok, 0);
+  fl_bdev_close(d);
+  fake_msc_free(m);
+  TT_ASSERT_EQ(meme_image(img, "gpt-luks2.img"), 1);
+  unlink(img);
+}
+
+/* Support changé sur une lecture après l'ouverture : FL_ENODEV collant, plus rien n'est envoyé. */
+static void test_usb_ua_28_lecture(void) {
+  char img[4096];
+  fake_msc *m = faux_rw("gpt-luks2.img", img, sizeof img);
+  TT_ASSERT(m != NULL);
+  fl_bdev *d = NULL;
+  TT_ASSERT_EQ(ouvrir_usb(m, false, &d), FL_OK);
+  fake_msc_stats *s = fake_msc_stats_get(m);
+  fake_msc_reset_stats(m);
+  fake_msc_sense_next(m, 0x06, 0x28, 0x00); /* prochain accès au support, une fois */
+  uint8_t r[512];
+  TT_ASSERT_EQ(fl_bdev_read(d, 1, 1, r), FL_ENODEV);
+  TT_ASSERT_EQ(s->op[0x28], 1); /* pas de réessai */
+  unsigned appels = s->calls;
+  TT_ASSERT_EQ(fl_bdev_read(d, 1, 1, r), FL_ENODEV);
+  uint8_t b[512];
+  motif(b, sizeof b, 1);
+  TT_ASSERT_EQ(fl_bdev_write(d, 2048, 1, b), FL_ENODEV);
+  TT_ASSERT_EQ(fl_bdev_flush(d), FL_ENODEV);
+  TT_ASSERT_EQ(s->calls, appels);
+  TT_ASSERT_EQ(s->writes, 0);
+  fl_bdev_close(d);
+  /* idem en lecture seule */
+  TT_ASSERT_EQ(ouvrir_usb(m, true, &d), FL_OK);
+  fake_msc_sense_op(m, 0x28, 0x06, 0x28, 0x00, 1);
+  TT_ASSERT_EQ(fl_bdev_read(d, 1, 1, r), FL_ENODEV);
+  appels = s->calls;
+  TT_ASSERT_EQ(fl_bdev_read(d, 1, 1, r), FL_ENODEV);
+  TT_ASSERT_EQ(s->calls, appels);
+  fl_bdev_close(d);
+  fake_msc_free(m);
+  TT_ASSERT_EQ(meme_image(img, "gpt-luks2.img"), 1);
+  unlink(img);
+}
+
+/* Remise à zéro (06/29/00) ou paramètres changés (06/2A/00) sur un WRITE : FL_EIO, une seule
+ * tentative, rien n'est écrit ; le flush qui suit rend FL_EIO (cache peut-être perdu). */
+static void test_usb_ua_29_ecriture(void) {
+  static const uint8_t ascs[2] = {0x29, 0x2A};
+  char img[4096];
+  fake_msc *m = faux_rw("gpt-luks2.img", img, sizeof img);
+  TT_ASSERT(m != NULL);
+  fake_msc_stats *s = fake_msc_stats_get(m);
+  uint8_t b[8 * 512], r[512];
+  motif(b, sizeof b, 29);
+  for (int i = 0; i < 2; i++) {
+    fl_bdev *d = NULL;
+    TT_ASSERT_EQ(ouvrir_usb(m, false, &d), FL_OK);
+    fake_msc_reset_stats(m);
+    fake_msc_sense_op(m, 0x2A, 0x06, ascs[i], 0x00, 1); /* une seule fois : un réessai réussirait */
+    TT_ASSERT_EQ(fl_bdev_write(d, 2048, 8, b), FL_EIO);
+    TT_ASSERT_EQ(s->op[0x2A], 1); /* pas de réessai */
+    TT_ASSERT_EQ(s->writes_ok, 0);
+    TT_ASSERT_EQ(fl_bdev_flush(d), FL_EIO);
+    TT_ASSERT_EQ(s->op[0x35], 0);
+    TT_ASSERT_EQ(fl_bdev_read(d, 0, 1, r), FL_OK); /* pas mort : la lecture continue */
+    TT_ASSERT(!fl_usb_bdev_write_protected(d));
+    fl_bdev_close(d);
+  }
+  fake_msc_free(m);
+  TT_ASSERT_EQ(meme_image(img, "gpt-luks2.img"), 1);
+  unlink(img);
+}
+
+/* Remise à zéro sur SYNCHRONIZE CACHE : flush FL_EIO, sans réessai, et durablement. */
+static void test_usb_ua_29_sync(void) {
+  char img[4096];
+  fake_msc *m = faux_rw("gpt-luks2.img", img, sizeof img);
+  TT_ASSERT(m != NULL);
+  fl_bdev *d = NULL;
+  TT_ASSERT_EQ(ouvrir_usb(m, false, &d), FL_OK);
+  fake_msc_stats *s = fake_msc_stats_get(m);
+  fake_msc_reset_stats(m);
+  fake_msc_sense_op(m, 0x35, 0x06, 0x29, 0x00, 1);
+  TT_ASSERT_EQ(fl_bdev_flush(d), FL_EIO);
+  TT_ASSERT_EQ(s->op[0x35], 1); /* pas de réessai */
+  TT_ASSERT_EQ(fl_bdev_flush(d), FL_EIO); /* le cache perdu ne revient pas */
+  TT_ASSERT_EQ(s->op[0x35], 1);
+  TT_ASSERT(!fl_usb_bdev_sync_unsupported(d));
+  fl_bdev_close(d);
+  fake_msc_free(m);
+  unlink(img);
+}
+
+/* Remise à zéro vue sur une lecture : la lecture est réessayée, mais le flush suivant rend FL_EIO
+ * (des écritures acquittées ont pu être perdues avec le cache). */
+static void test_usb_ua_29_lecture(void) {
+  const char *fx = "gpt-luks2.img";
+  char img[4096];
+  fake_msc *m = faux_rw(fx, img, sizeof img);
+  TT_ASSERT(m != NULL);
+  fl_bdev *d = NULL;
+  TT_ASSERT_EQ(ouvrir_usb(m, false, &d), FL_OK);
+  fake_msc_stats *s = fake_msc_stats_get(m);
+  TT_ASSERT_EQ(fl_bdev_flush(d), FL_OK);
+  fake_msc_reset_stats(m);
+  fake_msc_sense_op(m, 0x28, 0x06, 0x29, 0x00, 1);
+  uint8_t a[512], b[512];
+  TT_ASSERT_EQ(fl_bdev_read(d, 1, 1, a), FL_OK);
+  TT_ASSERT_EQ(s->op[0x28], 2); /* réessayée */
+  TT_ASSERT_EQ(lire_ref(fx, 512, 512, b), 0);
+  TT_ASSERT_MEM_EQ(a, b, 512);
+  TT_ASSERT_EQ(fl_bdev_flush(d), FL_EIO);
+  TT_ASSERT_EQ(s->op[0x35], 0);
+  fl_bdev_close(d);
+  fake_msc_free(m);
+  unlink(img);
+}
+
+/* Pendant l'ouverture, UNIT ATTENTION (même « support changé ») est réessayée : l'ouverture réussit,
+ * et le périphérique ouvert fonctionne (ni mort, ni flush en échec). */
+static void test_usb_ua_ouverture(void) {
+  char img[4096];
+  fake_msc *m = faux_rw("gpt-luks2.img", img, sizeof img);
+  TT_ASSERT(m != NULL);
+  fake_msc_stats *s = fake_msc_stats_get(m);
+  static const uint8_t ops[3] = {0x00 /* TEST UNIT READY */, 0x25 /* READ CAPACITY */, 0x1A /* MODE SENSE */};
+  static const uint8_t ascs[2] = {0x28, 0x29};
+  uint8_t r[512], b[512];
+  motif(b, sizeof b, 7);
+  for (int i = 0; i < 3; i++) {
+    for (int k = 0; k < 2; k++) {
+      fl_bdev *d = NULL;
+      fake_msc_reset_stats(m);
+      fake_msc_sense_op(m, ops[i], 0x06, ascs[k], 0x00, 1);
+      TT_ASSERT_EQ(ouvrir_usb(m, false, &d), FL_OK);
+      TT_ASSERT_EQ(s->op[ops[i]], 2); /* réessayée */
+      TT_ASSERT(!d->read_only);
+      TT_ASSERT_EQ(fl_bdev_read(d, 0, 1, r), FL_OK);
+      TT_ASSERT_EQ(fl_bdev_write(d, 4096, 1, b), FL_OK);
+      TT_ASSERT_EQ(fl_bdev_flush(d), FL_OK);
+      fl_bdev_close(d);
+    }
+  }
+  /* en lecture seule aussi */
+  fl_bdev *d = NULL;
+  fake_msc_sense_next(m, 0x06, 0x28, 0x00);
+  TT_ASSERT_EQ(ouvrir_usb(m, true, &d), FL_OK);
+  TT_ASSERT_EQ(fl_bdev_read(d, 0, 1, r), FL_OK);
+  fl_bdev_close(d);
+  fake_msc_free(m);
+  unlink(img);
+}
+
 /* Pile complète en écriture : luks2-rw-reel.img par le faux disque → partitions → LUKS2 → ext4 :
  * création d'un fichier, démontage, puis e2fsck -fn propre sur l'ext4 extrait (PC seulement). */
+static bool g_pile_sautee;
+
 static void test_usb_pile_ecriture(void) {
   if (!fu_tools_available()) {
-    fprintf(stderr, "test_usb_pile_ecriture sauté : e2fsck/debugfs absents\n");
+    fprintf(stderr, "test_usb_pile_ecriture sauté : e2fsck/debugfs absents ou Android\n");
+    g_pile_sautee = true;
     return;
   }
   char img[4096];
@@ -1000,6 +1300,7 @@ int main(void) {
   TT_RUN(test_usb_messages);
   TT_RUN(test_usb_arguments);
   TT_RUN(test_usb_cdb_lecture);
+  TT_RUN(test_usb_cdb_ecriture);
   TT_RUN(test_usb_capacite);
   TT_RUN(test_usb_capacite16);
   TT_RUN(test_usb_lecture_identique);
@@ -1028,6 +1329,16 @@ int main(void) {
   TT_RUN(test_usb_protection_sens);
   TT_RUN(test_usb_ecriture_disparition);
   TT_RUN(test_usb_lecture_seule_respectee);
+  TT_RUN(test_usb_ecriture_4k);
+  TT_RUN(test_usb_ua_28_ecriture);
+  TT_RUN(test_usb_ua_28_lecture);
+  TT_RUN(test_usb_ua_29_ecriture);
+  TT_RUN(test_usb_ua_29_sync);
+  TT_RUN(test_usb_ua_29_lecture);
+  TT_RUN(test_usb_ua_ouverture);
   TT_RUN(test_usb_pile_ecriture);
+  /* Tous les autres tests ont tourné ; seul le juge e2fsck manque : code 77 (SKIP_RETURN_CODE du label
+   * ecriture), sauf échec. */
+  if (!tt_failures && g_pile_sautee) return 77;
   TT_MAIN_END();
 }

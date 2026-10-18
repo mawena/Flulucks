@@ -40,7 +40,15 @@ if [ "$BUILD" = 1 ]; then
 fi
 
 # Tests, dans l'ordre ; test_luks2_lent est le plus long (Argon2 aux paramètres exacts du disque).
-TESTS=(test_error test_crypto test_luks1 test_luks2 test_ext4 test_usb test_cache test_banc test_luks2_lent)
+# Une entrée peut porter un argument après le nom du binaire (comme dans CTest : test_crc32c_debit).
+TESTS=(test_error test_crypto test_luks1 test_luks2 test_crc32c "test_crc32c debit" test_ext4 test_usb test_cache
+       test_banc test_luks2_lent)
+# Binaires à pousser, sans doublon.
+BINS=()
+for t in "${TESTS[@]}"; do
+  b="${t%% *}"
+  case " ${BINS[*]} " in *" $b "*) ;; *) BINS+=("$b") ;; esac
+done
 # Images et fichiers nécessaires (sous-ensemble : le Wi-Fi est lent).
 FIXTURES=(ext4-plain.img ext4-rw-1k.img gpt-luks2.img whole-luks2-4k.img whole-luks2-2slots.img whole-luks1-xts.img
           mbr-luks1-essiv.img whole-luks2-exact.img luks2-entete-abime.img luks-tronque.img
@@ -48,13 +56,13 @@ FIXTURES=(ext4-plain.img ext4-rw-1k.img gpt-luks2.img whole-luks2-4k.img whole-l
           ext4-rw-reel.img ext4-nom255.img ext4-trou-dossier.img ext4-trou-dossier.blocs ext4-indirect.img ext4-entrees-hostiles.img
           tree/sous-dossier/données.bin)
 
-for t in "${TESTS[@]}"; do [ -x "$BUILD_DIR/$t" ] || { echo "binaire absent : $BUILD_DIR/$t" >&2; exit 1; }; done
+for b in "${BINS[@]}"; do [ -x "$BUILD_DIR/$b" ] || { echo "binaire absent : $BUILD_DIR/$b" >&2; exit 1; }; done
 for f in "${FIXTURES[@]}"; do [ -e "$FIX_SRC/$f" ] || { echo "fixture absente : $FIX_SRC/$f (lancer ctest -R generate_fixtures)" >&2; exit 1; }; done
 
 adb_ get-state >/dev/null
 echo "Téléphone : $(adb_ shell getprop ro.product.model | tr -d '\r') (Android $(adb_ shell getprop ro.build.version.release | tr -d '\r'), $(adb_ shell getprop ro.product.cpu.abi | tr -d '\r'))"
 adb_ shell "mkdir -p $REMOTE/bin $REMOTE/fixtures/tree/sous-dossier $REMOTE/tmp"
-for t in "${TESTS[@]}"; do adb_ push "$BUILD_DIR/$t" "$REMOTE/bin/$t" >/dev/null; done
+for b in "${BINS[@]}"; do adb_ push "$BUILD_DIR/$b" "$REMOTE/bin/$b" >/dev/null; done
 adb_ shell "chmod 755 $REMOTE/bin/*"
 for f in "${FIXTURES[@]}"; do
   size=$(stat -c %s "$FIX_SRC/$f")
@@ -78,6 +86,8 @@ for t in "${TESTS[@]}"; do
   clean_out=$(printf '%s\n' "$out" | tr -d '\r' | { grep -v '^__EXIT=' || true; })
   if [ "$code" = 0 ] || [ "$code" = 77 ]; then printf '%s\n' "$clean_out" | tail -n 8; else printf '%s\n' "$clean_out" | tail -n 60; fi
   if [ "$code" = 0 ]; then SUMMARY+=("OK     $t  ${secs} s")
+  elif [ "$code" = 77 ] && printf '%s\n' "$clean_out" | grep -q '^\[OK\]'; then
+    SUMMARY+=("OK     $t  ${secs} s (juge e2fsck sauté : code 77, réservé au PC)")
   elif [ "$code" = 77 ]; then SUMMARY+=("SAUTÉ  $t  (code 77, banc réservé au PC)")
   else SUMMARY+=("ECHEC  $t  (code ${code:-?}, ${secs} s)"); FAILED=1; fi
 done

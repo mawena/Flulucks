@@ -62,7 +62,7 @@ static int usb_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
 
 /* fl_bdev_write a déjà refusé un périphérique ouvert en lecture seule (FL_EROFS, rien n'est
  * envoyé). 64 Kio au plus par WRITE. DATA PROTECT → FL_EROFS et protection collante ; après un
- * FL_ENODEV, plus rien n'est envoyé. */
+ * FL_ENODEV (débranchement, support changé), plus rien n'est envoyé. */
 static int usb_write(fl_bdev *d, uint64_t lba, uint32_t count, const void *buf) {
   usb_priv *p = d->priv;
 #if SIZE_MAX < UINT64_MAX
@@ -93,11 +93,22 @@ static int usb_write(fl_bdev *d, uint64_t lba, uint32_t count, const void *buf) 
   return rc;
 }
 
+/* Après une UNIT ATTENTION de remise à zéro vue depuis l'ouverture (u.ua_reset), le cache volatil du
+ * disque a pu perdre des écritures déjà acquittées : un SYNCHRONIZE CACHE réussi mentirait, le flush
+ * rend FL_EIO (durablement) sans rien envoyer. DATA PROTECT → protection collante. */
 static int usb_flush(fl_bdev *d) {
   if (d->read_only) return FL_OK;
   usb_priv *p = d->priv;
   pthread_mutex_lock(&p->lock);
-  int rc = p->u.dead ? FL_ENODEV : fl_scsi_sync_cache(&p->u);
+  int rc;
+  if (p->u.dead) {
+    rc = FL_ENODEV;
+  } else if (p->u.ua_reset) {
+    rc = FL_EIO;
+  } else {
+    rc = fl_scsi_sync_cache(&p->u);
+    if (rc == FL_EROFS) p->u.wp = true;
+  }
   pthread_mutex_unlock(&p->lock);
   return rc;
 }
@@ -111,6 +122,15 @@ bool fl_usb_bdev_write_protected(const fl_bdev *d) {
   return wp;
 }
 
+bool fl_usb_bdev_sync_unsupported(const fl_bdev *d) {
+  if (!d || d->ops != &usb_ops) return false;
+  usb_priv *p = d->priv;
+  pthread_mutex_lock(&p->lock);
+  bool r = p->u.sync_unsupported;
+  pthread_mutex_unlock(&p->lock);
+  return r;
+}
+
 static void usb_destroy(fl_bdev *d) {
   usb_priv *p = d->priv;
   if (p) {
@@ -119,7 +139,6 @@ static void usb_destroy(fl_bdev *d) {
   }
   free(d);
 }
-
 
 int fl_usb_bdev_open_ex(const fl_usb_transport *t, uint8_t lun, bool read_only, const fl_usb_clock *clk,
                         fl_bdev **out) {
@@ -152,12 +171,13 @@ int fl_usb_bdev_open_ex(const fl_usb_transport *t, uint8_t lun, bool read_only, 
   if (rc == FL_OK) rc = fl_scsi_wait_ready(&p->u);
   if (rc == FL_OK) rc = fl_scsi_read_capacity(&p->u, &blocks, &bs);
   /* Écriture demandée : MODE SENSE dit si le disque est protégé (verrou d'une carte SD, clé en
-   * lecture seule) ; son échec n'empêche pas l'ouverture et ne force rien. */
+   * lecture seule) ; son échec n'empêche pas l'ouverture et ne force rien, sauf un refus DATA PROTECT
+   * qui vaut protection. */
   if (rc == FL_OK && !read_only) {
     bool wp = false;
     int ms = fl_scsi_mode_sense_wp(&p->u, &wp);
     if (ms == FL_ENODEV) rc = ms;
-    else if (ms == FL_OK && wp) p->u.wp = read_only = true;
+    else if (ms == FL_EROFS || (ms == FL_OK && wp)) p->u.wp = read_only = true;
   }
   if (rc != FL_OK) {
     usb_destroy(d);
@@ -167,6 +187,7 @@ int fl_usb_bdev_open_ex(const fl_usb_transport *t, uint8_t lun, bool read_only, 
   d->sector_size = bs;
   d->sector_count = blocks;
   d->read_only = read_only;
+  p->u.opened = true; /* désormais, UNIT ATTENTION n'est plus réessayée à l'aveugle (scsi.c) */
   *out = d;
   return FL_OK;
 }
