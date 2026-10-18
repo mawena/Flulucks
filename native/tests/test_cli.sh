@@ -118,6 +118,22 @@ run norecov cat "$FX/ext4-plain.img" 0 /hello.txt
 [ ! -s "$TMP/norecov.err" ] || fail "avertissement parasite : $(cat "$TMP/norecov.err")"
 
 # jamais de phrase de passe dans les sorties
+# diagnostic (lecture seule) : image aux options du vrai disque, sous LUKS2 ; puis descripteur abîmé
+run diag diagnostic "$FX/luks2-rw-reel.img" 0 --pass-file "$FX/pass.txt"
+[ "$RC" -eq 0 ] || fail "diagnostic : code $RC"
+grep -q "0 somme(s) fausse(s)" "$TMP/diag.out" || fail "diagnostic : descripteurs"
+grep -q "^verdict .*: écriture autorisée\$" "$TMP/diag.out" || fail "diagnostic : verdict"
+grep -q "erreurs 0\$" "$TMP/diag.out" || fail "diagnostic : parcours"
+cp "$FX/ext4-rw-reel.img" "$TMP/abime.img"
+printf '\125' | dd of="$TMP/abime.img" bs=1 seek=$((4096 + 64 + 12)) conv=notrunc status=none
+cmp -s "$FX/ext4-rw-reel.img" "$TMP/abime.img" && fail "diagnostic : image non abîmée"
+cp "$TMP/abime.img" "$TMP/abime.ref"
+run diagabime diagnostic "$TMP/abime.img" 0
+grep -q "^  groupe 1 : somme calculée" "$TMP/diagabime.out" || fail "diagnostic : groupe 1 non signalé"
+grep -q "^verdict .*: sommes de contrôle invalides\$" "$TMP/diagabime.out" || fail "diagnostic abîmé : verdict"
+cmp -s "$TMP/abime.img" "$TMP/abime.ref" || fail "diagnostic : l'image a été modifiée"
+rm -f "$TMP/abime.img" "$TMP/abime.ref"
+
 for f in "$TMP"/*.out "$TMP"/*.err; do
   case "$f" in "$TMP/bin.out"|"$TMP/gros.out") continue;; esac
   if grep -q "motdepasse-FluLuks" "$f"; then fail "phrase de passe dans $f"; fi

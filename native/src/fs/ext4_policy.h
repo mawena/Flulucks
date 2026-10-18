@@ -5,6 +5,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stdio.h>
 
 #include "fluluks/blockdev.h"
 
@@ -21,5 +22,15 @@
  *   6. somme fausse : superbloc, un descripteur de groupe, superbloc du journal → FL_RO_CSUM ;
  *   7. taille de bloc hors {1, 2, 4} Kio → FL_RO_BLOCKSIZE. */
 int fl_ext4_write_policy(fl_bdev *dev, const uint8_t sb[1024], bool *rw, char reason[128]);
+
+/* Diagnostic, lecture seule : relit le superbloc, applique les mêmes règles sans tenir compte de la
+ * protection en écriture du périphérique (règle 1), et écrit dans out le détail de chaque contrôle
+ * (options, sommes calculées et lues, premiers descripteurs fautifs) puis le verdict. FL_ECORRUPT si
+ * le superbloc n'est pas un superbloc ext4 plausible. */
+int fl_ext4_policy_explain(fl_bdev *dev, FILE *out);
+
+/* Android : écrit ce même détail dans logcat (étiquette FluLuksPolicy), une ligne par contrôle ; ne
+ * contient que des sommes, des options et des numéros de groupe. Sans effet ailleurs. */
+void fl_ext4_policy_log(fl_bdev *dev);
 
 #endif
