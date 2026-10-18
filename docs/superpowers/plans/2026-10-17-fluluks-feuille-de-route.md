@@ -81,10 +81,26 @@ dans le même commit que le travail.
   - **Essais** : refaire la grille avec une clé USB-C sacrifiée (dont le débranchement en cours de
     lecture) et chronométrer le déverrouillage dans l'application.
 
-### Phase 3 — ext4 en écriture
-- [ ] Plan de la phase 3 écrit
-- [ ] *(tâches détaillées à l'écriture du plan : écriture lwext4 + journal, règles de sécurité § 4.2,
-      propriétaire/droits, écriture via DocumentsProvider, batterie `e2fsck`, tests de coupure)*
+### Phase 3 — ext4 en écriture ([plan](2026-10-18-phase3-ext4-ecriture.md))
+- [x] Essai préalable de l'écriture lwext4 face à `e2fsck`
+      ([rapport](../research/2026-10-18-essai-lwext4-ecriture/RAPPORT.md))
+- [x] Plan de la phase 3 écrit
+- [ ] T1 — Dettes de lecture dans lwext4 (noms de 255 octets, trous de dossier, entrées hostiles)
+- [ ] T2 — Tests manquants des phases 1 et 2, `FL_EBUSY` en fermeture, écriture LUKS2
+- [ ] T3 — Banc de non-corruption (images d'écriture, `e2fsck`, `debugfs`, pannes)
+- [ ] T4 — Écriture ext4 (API complète, propriétaire hérité, horodatages)
+- [ ] T5 — Journal sûr (sommes v3, séquence, barrières) et tests de coupure
+- [ ] T6 — Règles de lecture seule du § 4.2 et montage sûr
+- [ ] T7 — crc32c rapide
+- [ ] T8 — Batterie de non-corruption complète (+ vérification par le noyau, par l'utilisateur)
+- [ ] T9 — Écriture USB (WRITE, SYNCHRONIZE CACHE, protection en écriture)
+- [ ] T10 — JNI et VolumeManager en écriture (synchronisation, éjection, débranchement)
+- [ ] T11 — DocumentsProvider en écriture
+- [ ] T12 — Interface Flutter (lecture seule, éjection, avertissements)
+- [ ] *(utilisateur)* Clé sacrifiée branchable en USB-C (clé USB-C ou adaptateur OTG USB-A → USB-C)
+- [ ] *(utilisateur)* Sauvegarde complète du vrai disque avant toute écriture dessus
+- [ ] T13 — Essais sur le Pixel : clé sacrifiée, puis vrai disque
+- [ ] Fusion `feature/ext4-ecriture` → `develop`
 - [ ] Version `v0.2.0`
 
 ### Phase 4 — FAT16 / FAT32 / exFAT (lecture puis écriture)

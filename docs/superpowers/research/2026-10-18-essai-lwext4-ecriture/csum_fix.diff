@@ -1,0 +1,21 @@
+--- /home/charles-gamligo/Work/Mawena/Mobile/Flutter/FluLuks/build/native/third_party/lwext4/src/ext4_journal.c	2026-10-17 13:41:49.000000000 +0000
++++ patched/src/ext4_journal.c	2026-10-18 00:55:13.541946932 +0000
+@@ -300,7 +300,7 @@
+ 
+ 	header->chksum_type = 0;
+ 	header->chksum_size = 0;
+-	header->chksum[0] = jbd_commit_csum(jbd_fs, header);
++	header->chksum[0] = to_be32(jbd_commit_csum(jbd_fs, header));
+ }
+ 
+ #if CONFIG_META_CSUM_ENABLE
+@@ -334,7 +334,8 @@
+ 		checksum = ext4_crc32c(EXT4_CRC32_INIT, jbd_fs->sb.uuid,
+ 				       sizeof(jbd_fs->sb.uuid));
+ 		/* Then calculate crc32c checksum against sequence no. */
+-		checksum = ext4_crc32c(checksum, &sequence,
++		uint32_t be_seq = to_be32(sequence);
++		checksum = ext4_crc32c(checksum, &be_seq,
+ 				sizeof(uint32_t));
+ 		/* Calculate crc32c checksum against tho whole block */
+ 		checksum = ext4_crc32c(checksum, buf,
