@@ -62,6 +62,7 @@ void main() {
     ]);
     expect(api.passphraseRef!.every((b) => b == 0), isTrue);
     expect(field, findsNothing); // dialogue fermé après succès
+    expect(api.unlockWritable, [true]); // écriture demandée par défaut
   });
 
   testWidgets('pendant l\'appel : indicateur et bouton désactivé', (tester) async {

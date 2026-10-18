@@ -32,7 +32,7 @@ DiskMsg disk(List<PartitionMsg> parts, {String id = 'd1'}) => DiskMsg(
       partitions: parts,
     );
 
-VolumeMsg volume({String id = 'v1'}) => VolumeMsg(
+VolumeMsg volume({String id = 'v1', bool readOnly = false, String roReason = ''}) => VolumeMsg(
       id: id,
       diskId: 'd1',
       partIndex: 1,
@@ -40,7 +40,8 @@ VolumeMsg volume({String id = 'v1'}) => VolumeMsg(
       totalBytes: 1000,
       freeBytes: 500,
       needsRecovery: false,
-      roReason: '',
+      roReason: roReason,
+      readOnly: readOnly,
     );
 
 /// Faux pont : enregistre les appels. Les octets de phrase de passe sont copiés à l'appel, et la
@@ -49,7 +50,9 @@ class FakeHostApi implements HostApi {
   List<DiskMsg> disks = [];
   List<VolumeMsg> volumes = [];
   final ejected = <String>[];
-  final mounted = <(String, int)>[];
+  final mounted = <(String, int, bool)>[];
+  final unlockWritable = <bool>[];
+  bool readOnlyPreference = false;
   final permissionRequests = <String>[];
   Uint8List? passphraseRef;
   List<int>? passphraseCopy;
@@ -68,7 +71,8 @@ class FakeHostApi implements HostApi {
   Future<void> requestPermission(String diskId) async => permissionRequests.add(diskId);
 
   @override
-  Future<VolumeMsg> unlock(String diskId, int partIndex, Uint8List passphrase) async {
+  Future<VolumeMsg> unlock(String diskId, int partIndex, Uint8List passphrase, bool writable) async {
+    unlockWritable.add(writable);
     passphraseRef = passphrase;
     passphraseCopy = List<int>.of(passphrase);
     if (gate != null) await gate!.future;
@@ -79,8 +83,8 @@ class FakeHostApi implements HostApi {
   }
 
   @override
-  Future<VolumeMsg> mountPlain(String diskId, int partIndex) async {
-    mounted.add((diskId, partIndex));
+  Future<VolumeMsg> mountPlain(String diskId, int partIndex, bool writable) async {
+    mounted.add((diskId, partIndex, writable));
     return volume();
   }
 
@@ -89,4 +93,10 @@ class FakeHostApi implements HostApi {
 
   @override
   Future<void> openInFiles(String volumeId) async {}
+
+  @override
+  Future<bool> getReadOnlyPreference() async => readOnlyPreference;
+
+  @override
+  Future<void> setReadOnlyPreference(bool value) async => readOnlyPreference = value;
 }

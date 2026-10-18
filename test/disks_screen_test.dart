@@ -39,7 +39,7 @@ void main() {
   testWidgets('volume ouvert : Fichiers et Éjecter, jamais Déverrouiller', (tester) async {
     final api = FakeHostApi()
       ..disks = [disk([part(volumeId: 'v1')])]
-      ..volumes = [volume()];
+      ..volumes = [volume(readOnly: true, roReason: 'ouvert en lecture seule à votre demande')];
     await pump(tester, api);
     expect(find.text("Ouvert — visible dans l'application Fichiers"), findsOneWidget);
     expect(find.text('Ouvrir dans Fichiers'), findsOneWidget);
@@ -55,7 +55,80 @@ void main() {
     await pump(tester, api);
     await tester.tap(find.text('Ouvrir'));
     await tester.pump();
-    expect(api.mounted, [('d1', 1)]);
+    expect(api.mounted, [('d1', 1, true)]);
+  });
+
+  testWidgets('interrupteur lecture seule : écriture non demandée, préférence gardée', (tester) async {
+    final api = FakeHostApi()
+      ..disks = [
+        disk([part(content: 'ext4', encrypted: false), part(index: 2)])
+      ];
+    await pump(tester, api);
+    final sw = find.widgetWithText(SwitchListTile, 'Ouvrir les disques en lecture seule');
+    expect(tester.widget<SwitchListTile>(sw).value, isFalse);
+    await tester.tap(sw);
+    await tester.pump();
+    expect(api.readOnlyPreference, isTrue);
+    expect(tester.widget<SwitchListTile>(sw).value, isTrue);
+    await tester.tap(find.text('Ouvrir'));
+    await tester.pump();
+    expect(api.mounted, [('d1', 1, false)]);
+    await tester.tap(find.text('Déverrouiller'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'bonne');
+    await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.byType(FilledButton)));
+    await tester.pumpAndSettle();
+    expect(api.unlockWritable, [false]);
+  });
+
+  testWidgets('préférence lue au démarrage', (tester) async {
+    await pump(tester, FakeHostApi()..readOnlyPreference = true);
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      isTrue,
+    );
+  });
+
+  testWidgets('volume imposé en lecture seule : la raison', (tester) async {
+    await pump(
+      tester,
+      FakeHostApi()
+        ..disks = [disk([part(volumeId: 'v1')])]
+        ..volumes = [volume(readOnly: true, roReason: 'journal à rejouer : branchez le disque sous Ubuntu')],
+    );
+    expect(find.text('Lecture seule : journal à rejouer : branchez le disque sous Ubuntu'), findsOneWidget);
+    expect(find.text("Ouvert — visible dans l'application Fichiers"), findsOneWidget);
+  });
+
+  testWidgets('volume en écriture : nouveau texte', (tester) async {
+    await pump(
+      tester,
+      FakeHostApi()
+        ..disks = [disk([part(volumeId: 'v1')])]
+        ..volumes = [volume()],
+    );
+    expect(find.text("Ouvert en lecture et écriture — visible dans l'application Fichiers"), findsOneWidget);
+    expect(find.textContaining('Lecture seule'), findsNothing);
+  });
+
+  testWidgets('éjection en cours : indicateur, boutons désactivés ; puis échec affiché', (tester) async {
+    final (state, _) = await pump(
+      tester,
+      FakeHostApi()
+        ..disks = [disk([part(volumeId: 'v1'), part(index: 2, content: 'ext4', encrypted: false)])]
+        ..volumes = [volume()],
+    );
+    state.onEjectStateChanged(true, null);
+    await tester.pump();
+    expect(find.text('Écriture des données en attente…'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Éjecter')).onPressed, isNull);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Ouvrir')).onPressed, isNull);
+    state.onEjectStateChanged(false, 'Éjection impossible : volume occupé');
+    await tester.pump();
+    expect(find.text('Écriture des données en attente…'), findsNothing);
+    expect(find.text('Éjection impossible : volume occupé'), findsOneWidget);
+    expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Éjecter')).onPressed, isNotNull);
   });
 
   testWidgets('sans permission : Autoriser l\'accès', (tester) async {

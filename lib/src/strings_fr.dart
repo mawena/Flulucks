@@ -10,6 +10,9 @@ class Fr {
   static const openInFiles = 'Ouvrir dans Fichiers';
   static const eject = 'Éjecter';
   static const openedInFiles = "Ouvert — visible dans l'application Fichiers";
+  static const openedInFilesRw = "Ouvert en lecture et écriture — visible dans l'application Fichiers";
+  static const readOnlySwitch = 'Ouvrir les disques en lecture seule';
+  static const ejecting = 'Écriture des données en attente…';
   static const needsRecovery =
       "Le volume n'a pas été démonté proprement : contenu possiblement incomplet";
   static const passphrase = 'Phrase de passe';
@@ -21,6 +24,7 @@ class Fr {
 
   static String unsupported(String content) => 'Non pris en charge ($content)';
   static String partitionName(int index) => 'Partition $index';
+  static String readOnly(String reason) => 'Lecture seule : $reason';
   static String unlockTitle(String name) => 'Déverrouiller $name';
 
   static String partitionLine(String? label, int index, int sizeBytes, String content) {

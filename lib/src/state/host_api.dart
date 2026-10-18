@@ -7,10 +7,12 @@ abstract class HostApi {
   Future<List<DiskMsg>> listDisks();
   Future<List<VolumeMsg>> listVolumes();
   Future<void> requestPermission(String diskId);
-  Future<VolumeMsg> unlock(String diskId, int partIndex, Uint8List passphrase);
-  Future<VolumeMsg> mountPlain(String diskId, int partIndex);
+  Future<VolumeMsg> unlock(String diskId, int partIndex, Uint8List passphrase, bool writable);
+  Future<VolumeMsg> mountPlain(String diskId, int partIndex, bool writable);
   Future<void> eject(String volumeId);
   Future<void> openInFiles(String volumeId);
+  Future<bool> getReadOnlyPreference();
+  Future<void> setReadOnlyPreference(bool value);
 }
 
 /// Implémentation réelle : délègue au client Pigeon généré.
@@ -25,12 +27,17 @@ class PigeonHostApi implements HostApi {
   @override
   Future<void> requestPermission(String diskId) => _api.requestPermission(diskId);
   @override
-  Future<VolumeMsg> unlock(String diskId, int partIndex, Uint8List passphrase) =>
-      _api.unlock(diskId, partIndex, passphrase);
+  Future<VolumeMsg> unlock(String diskId, int partIndex, Uint8List passphrase, bool writable) =>
+      _api.unlock(diskId, partIndex, passphrase, writable);
   @override
-  Future<VolumeMsg> mountPlain(String diskId, int partIndex) => _api.mountPlain(diskId, partIndex);
+  Future<VolumeMsg> mountPlain(String diskId, int partIndex, bool writable) =>
+      _api.mountPlain(diskId, partIndex, writable);
   @override
   Future<void> eject(String volumeId) => _api.eject(volumeId);
   @override
   Future<void> openInFiles(String volumeId) => _api.openInFiles(volumeId);
+  @override
+  Future<bool> getReadOnlyPreference() => _api.getReadOnlyPreference();
+  @override
+  Future<void> setReadOnlyPreference(bool value) => _api.setReadOnlyPreference(value);
 }
