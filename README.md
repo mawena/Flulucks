@@ -7,10 +7,13 @@ une vidéo dans VLC, un PDF ou une photo dans les applications habituelles.
 Elle est née d'un besoin simple : utiliser sur un téléphone non rooté (un Pixel 4 XL) le disque
 LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permettait.
 
-> **État actuel : version 0.1.0, lecture seule.** L'écriture sur ext4 (créer, modifier, renommer,
-> supprimer) est en cours de développement (phase 3). Voir la [feuille de route](#feuille-de-route).
+> **État actuel : version 0.2.0, lecture et écriture sur ext4.** L'écriture a été vérifiée sur PC
+> (batteries de non-corruption jugées par `e2fsck`, `debugfs` et le noyau Linux, coupures simulées) et
+> sur le téléphone avec des images, mais **pas encore sur un vrai disque USB** : faites une sauvegarde
+> avant d'écrire sur un disque qui compte, ou activez « Ouvrir les disques en lecture seule ». Voir les
+> [limites](#limites-actuelles).
 
-## Ce que fait la version 0.1.0
+## Ce que fait la version 0.2.0
 
 - **Détecte** un disque USB de stockage de masse branché en USB-C, et demande la permission d'accès.
 - **Lit les tables de partitions** GPT et MBR (partitions étendues comprises), ainsi qu'un disque sans
@@ -19,9 +22,23 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
   - dérivations de clé PBKDF2, Argon2i et Argon2id ;
   - chiffrements aes-xts-plain64, aes-cbc-essiv:sha256 et aes-cbc-plain64.
 - **Lit l'ext4** : journal, extents, dossiers indexés et `metadata_csum`.
+- **Écrit sur l'ext4** (nouveau en 0.2.0) : créer, modifier, renommer, déplacer, copier et supprimer
+  des fichiers et des dossiers, depuis l'application Fichiers ou n'importe quelle application qui
+  enregistre sur le disque.
+  - Le journal est utilisé comme par le noyau : après un débranchement en pleine écriture, Ubuntu
+    rejoue le journal au montage suivant.
+  - Les fichiers créés appartiennent au propriétaire du dossier parent (droits 0644, dossiers 0755)
+    et sont datés à l'heure du téléphone : ils apparaissent normalement sous Ubuntu.
+  - Les données sont synchronisées à la fermeture de chaque fichier et 3 s après la dernière écriture.
+- **Lecture seule quand il le faut**, avec la raison affichée : interrupteur « Ouvrir les disques en
+  lecture seule », disque protégé en écriture, journal à rejouer, système de fichiers marqué en erreur,
+  somme de contrôle fausse, option ext4 non prise en charge en écriture, ou erreur d'écriture en cours
+  de session.
 - **Expose chaque volume ouvert** dans l'application Fichiers, avec accès aléatoire : l'avance rapide
   marche dans VLC.
-- **Éjecte proprement** depuis l'application ou depuis la notification.
+- **Éjecte proprement** depuis l'application ou depuis la notification : écriture des données en
+  attente, démontage, `SYNCHRONIZE CACHE`, effacement de la clé, puis libération de l'USB. Un fichier
+  encore ouvert par une autre application est fermé de force après la synchronisation.
 - **Interface en français.**
 
 Mesures sur un Pixel 4 XL avec le vrai disque (LUKS2, Argon2id à 1 Gio de mémoire) :
@@ -30,7 +47,12 @@ Mesures sur un Pixel 4 XL avec le vrai disque (LUKS2, Argon2id à 1 Gio de mémo
 
 ### Limites actuelles
 
-- **Lecture seule** : aucune commande d'écriture n'est envoyée au disque.
+- **Écriture non essayée sur un vrai disque USB.** Elle est vérifiée sur PC et, sur le téléphone, avec
+  des images et un faux disque USB simulé ; l'essai sur un vrai disque (tâche 13 de la phase 3) reste à
+  faire. Sauvegardez avant d'écrire sur un disque important.
+- **Écriture refusée** (le volume s'ouvre en lecture seule, avec la raison) sur un ext4 sans journal,
+  sans extents (ancien ext3 converti), à journal externe, avec un journal à sommes v1 ou v2, ou avec
+  une option inconnue de FluLuks. Le journal doit avoir été rejoué (disque bien démonté sous Ubuntu).
 - **FAT16/32, exFAT et NTFS** sont détectés mais pas encore pris en charge (phases 4 et 5).
 - **LVM, BitLocker, btrfs, XFS…** sont signalés comme « non pris en charge ».
 - **Boîtiers USB** : seuls ceux qui proposent le protocole *Bulk-Only Transport* fonctionnent, ce qui est
@@ -49,9 +71,10 @@ Mesures sur un Pixel 4 XL avec le vrai disque (LUKS2, Argon2id à 1 Gio de mémo
   débranchement.
 - **Le contenu du disque est traité comme hostile**, de même que ce qu'envoient les autres applications.
   Toutes les structures lues sur le disque sont vérifiées avant usage.
-- **En écriture (à venir), le moindre doute fait passer le volume en lecture seule.** C'est le cas d'une
-  option ext4 inconnue, d'un journal à rejouer ou d'une somme de contrôle fausse, et l'application affiche
-  la raison.
+- **En écriture, le moindre doute fait passer le volume en lecture seule.** C'est le cas d'une option
+  ext4 inconnue, d'un journal à rejouer ou d'une somme de contrôle fausse, et l'application affiche la
+  raison. Après une erreur d'écriture en cours de session, plus rien n'est écrit : le disque garde la
+  dernière transaction validée, que le journal sait récupérer.
 
 ## Installation
 
@@ -78,7 +101,11 @@ La construction demande les outils listés plus bas, dans [Développement](#dév
 3. Touchez **Ouvrir dans Fichiers**. Le disque apparaît aussi dans le sélecteur de fichiers de toutes les
    applications.
 4. Pour finir, touchez **Éjecter**, dans l'application ou dans la notification « Disque ouvert », avant
-   de débrancher le disque.
+   de débrancher le disque. Si vous avez écrit, attendez la fin de « Écriture des données en
+   attente… ».
+
+Pour n'ouvrir les disques qu'en lecture, activez **Ouvrir les disques en lecture seule** dans l'écran
+**Disques** avant de déverrouiller.
 
 ## Comment ça marche
 
@@ -117,15 +144,22 @@ Bibliothèques utilisées :
 # moteur natif sur PC, avec ASan/UBSan (les images de test sont générées sans root)
 cmake -S native -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Debug -DFL_TESTS=ON -DFL_SANITIZE=ON
 cmake --build build/native
-ctest --test-dir build/native --output-on-failure -LE lent
+ctest --test-dir build/native --output-on-failure -LE lent    # environ 10 min
+ctest --test-dir build/native --output-on-failure -L lent     # batterie longue, environ 1 h 30
+sudo tools/fixtures/verify_rw_with_kernel.sh build/native/batterie   # images écrites, jugées par le noyau
 
 # moteur natif sur le téléphone (écrit seulement dans /data/local/tmp/fluluks/)
 tools/android/run_native_tests.sh <numéro-adb>
 
 # Kotlin et Flutter
-(cd android && ./gradlew testDebugUnitTest connectedDebugAndroidTest)
+(cd android && ./gradlew testDebugUnitTest)
+(cd android && ./gradlew connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true)
+tools/android/check_image.sh <numéro-adb> engine-ecriture.img   # e2fsck des images écrites sur le téléphone
 flutter test && flutter analyze
 ```
+
+Diagnostic en lecture seule d'un disque refusé en écriture (sommes calculées et lues, parcours de
+l'arborescence) : `sudo build/native/fluluks-cli diagnostic /dev/sdX <n°>`.
 
 Plus de détails sur le moteur, l'outil `fluluks-cli` et la vérification par le noyau Linux :
 [native/README.md](native/README.md).
@@ -154,7 +188,7 @@ Le dépôt suit git flow :
 |---|---|---|
 | 1 | Moteur natif en lecture sur PC | — |
 | 2 | Android en lecture : « mon disque dans VLC » | **v0.1.0** |
-| 3 | ext4 en écriture (en cours) | v0.2.0 |
+| 3 | ext4 en écriture (essai sur un vrai disque à faire) | **v0.2.0** |
 | 4 | FAT16 / FAT32 / exFAT | v0.3.0 |
 | 5 | NTFS | v0.4.0 |
 | 6 | Finitions : explorateur intégré, copies avec progression, réglages, robustesse | v1.0.0 |
