@@ -201,6 +201,24 @@ static void test_politique_vrai_disque_rw(void) {
   }
 }
 
+/* Journal de 1 Gio (disque de 421 Gio de l'utilisateur, 2026-10-18) : extents de 32768 blocs, longueur
+ * codée 0x8000, et arbre à un niveau d'index (8 extents). La politique les lisait comme vides : journal
+ * « introuvable », compté comme somme fausse → lecture seule « sommes de contrôle invalides ». */
+static void test_politique_journal_extents_pleins(void) {
+  char img[4096];
+  vol v;
+  uint8_t data[5000];
+  remplir(data, sizeof data, 2);
+  TT_ASSERT(copie_de("ext4-rw-journal-gros.img", img, sizeof img) == 0);
+  TT_ASSERT_EQ(vol_monter(&v, img, 0, 0), FL_OK);
+  TT_ASSERT(en_ecriture(v.fs));
+  TT_ASSERT(lire_hello(v.fs));
+  TT_ASSERT_EQ(ecrire_fichier(v.fs, "/p.txt", data, sizeof data), FL_OK);
+  TT_ASSERT_EQ(vol_demonter(&v), FL_OK);
+  TT_ASSERT_EQ(e2fsck_propre(img), 0);
+  unlink(img);
+}
+
 static void test_politique_sans_journal(void) {
   char img[4096];
   vol v;
@@ -611,6 +629,7 @@ int main(void) {
   }
   fl_fs_set_clock(horloge);
   TT_RUN(test_politique_vrai_disque_rw);
+  TT_RUN(test_politique_journal_extents_pleins);
   TT_RUN(test_politique_sans_journal);
   TT_RUN(test_politique_meta_bg);
   TT_RUN(test_politique_orphan_present);

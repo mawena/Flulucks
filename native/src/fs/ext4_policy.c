@@ -13,6 +13,10 @@
 #include "fs/ext4_policy.h"
 #include "fs/ro_reasons.h"
 
+#ifdef __ANDROID__
+#include <android/log.h>
+#endif
+
 /* Options connues en écriture (lwext4 corrigé) ; RECOVER relève de la règle 4. */
 #define W_INCOMPAT                                                                                  \
   (EXT4_FINCOM_FILETYPE | EXT4_FINCOM_EXTENTS | EXT4_FINCOM_64BIT | EXT4_FINCOM_FLEX_BG |           \
@@ -39,6 +43,7 @@ typedef struct {
   uint32_t bs, desc_size, groups;
   uint64_t blocks;
   bool csum, gdt_csum; /* metadata_csum, uninit_bg */
+  FILE *trace;         /* diagnostic (fl_ext4_policy_explain) : détail de chaque contrôle, ou NULL */
 } ctx;
 
 static int read_block(const ctx *c, uint64_t blk, void *buf) {
@@ -78,12 +83,25 @@ static int check_descs(const ctx *c, bool *ok, uint8_t *d0) {
   if (!b) return FL_ENOMEM;
   int rc = FL_OK;
   *ok = true;
-  for (uint32_t g = 0; g < c->groups && *ok; g++) {
+  uint32_t bad = 0;
+  /* En diagnostic, tous les groupes sont vérifiés (compte et premiers fautifs). */
+  for (uint32_t g = 0; g < c->groups && (*ok || c->trace); g++) {
     if (g % per == 0 && (rc = read_block(c, gdt + g / per, b)) != FL_OK) break;
     const uint8_t *d = b + (size_t)(g % per) * c->desc_size;
     if (g == 0) memcpy(d0, d, c->desc_size);
-    if ((c->csum || c->gdt_csum) && desc_csum(c, g, d) != le16(d + 0x1E)) *ok = false;
+    if (!(c->csum || c->gdt_csum)) continue;
+    uint16_t calc = desc_csum(c, g, d), lu = le16(d + 0x1E);
+    if (calc != lu) {
+      *ok = false;
+      if (c->trace && bad < 10)
+        fprintf(c->trace, "  groupe %u : somme calculée 0x%04x, lue 0x%04x, drapeaux 0x%04x\n", g, calc, lu,
+                le16(d + 0x12));
+      bad++;
+    }
   }
+  if (c->trace)
+    fprintf(c->trace, "descripteurs de groupe : %u groupes, %u octets chacun, table au bloc %llu, %u somme(s) fausse(s)%s\n",
+            c->groups, c->desc_size, (unsigned long long)gdt, bad, (c->csum || c->gdt_csum) ? "" : " (pas de sommes)");
   free(b);
   return rc;
 }
@@ -108,7 +126,10 @@ static int first_block(const ctx *c, uint32_t flags, const uint8_t *iblock, uint
     }
     const uint8_t *e = node + 12; /* entrées triées : la première couvre le bloc 0, s'il existe */
     if (depth == 0) {
-      uint16_t len = le16(e + 4) & 0x7FFF;
+      /* ee_len : jusqu'à 32768 (0x8000 compris), extent initialisé ; au-delà, non écrit, longueur
+       * ee_len - 32768 (ext4_ext_get_actual_len). Un journal de 1 Gio est fait d'extents de 32768. */
+      uint16_t raw = le16(e + 4);
+      uint32_t len = raw <= 0x8000 ? raw : raw - 0x8000u;
       if (le32(e) == 0 && len) *phys = (uint64_t)le16(e + 6) << 32 | le32(e + 8);
       break;
     }
@@ -150,13 +171,14 @@ static void set(bool *rw, char reason[128], const char *r) {
   snprintf(reason, 128, "%s", r ? r : "");
 }
 
-int fl_ext4_write_policy(fl_bdev *dev, const uint8_t sb[1024], bool *rw, char reason[128]) {
-  if (dev->read_only) {
+static int policy(fl_bdev *dev, const uint8_t sb[1024], bool ignore_wp, FILE *trace, bool *rw,
+                  char reason[128]) {
+  if (dev->read_only && !ignore_wp) {
     set(rw, reason, FL_RO_WP);
     return FL_OK;
   }
   uint32_t compat = le32(sb + 0x5C), incompat = le32(sb + 0x60), ro_compat = le32(sb + 0x64);
-  ctx c = {.dev = dev, .sb = sb, .bs = 1024u << le32(sb + 0x18)};
+  ctx c = {.dev = dev, .sb = sb, .bs = 1024u << le32(sb + 0x18), .trace = trace};
   c.desc_size = (incompat & EXT4_FINCOM_64BIT) ? le16(sb + 0xFE) : 32;
   c.blocks = le32(sb + 0x04);
   if (incompat & EXT4_FINCOM_64BIT) c.blocks |= (uint64_t)le32(sb + 0x150) << 32;
@@ -164,6 +186,10 @@ int fl_ext4_write_policy(fl_bdev *dev, const uint8_t sb[1024], bool *rw, char re
   c.csum = ro_compat & EXT4_FRO_COM_METADATA_CSUM;
   c.gdt_csum = !c.csum && (ro_compat & EXT4_FRO_COM_GDT_CSUM);
   bool journal = compat & EXT4_FCOM_HAS_JOURNAL;
+  if (trace)
+    fprintf(trace, "superbloc : blocs de %u octets, %llu blocs, compat 0x%x, incompat 0x%x, ro_compat 0x%x, état 0x%x, "
+            "erreurs %u\n", c.bs, (unsigned long long)c.blocks, compat, incompat, ro_compat, le16(sb + 0x3A),
+            le32(sb + 0x194));
 
   /* 2. Options. Avant toute lecture qui en dépend (meta_bg déplace les descripteurs). */
   if ((incompat & ~(uint32_t)W_INCOMPAT) || !(incompat & EXT4_FINCOM_EXTENTS) ||
@@ -183,6 +209,13 @@ int fl_ext4_write_policy(fl_bdev *dev, const uint8_t sb[1024], bool *rw, char re
     if (rc == FL_ECORRUPT) jsb_ok = false;
     else if (rc != FL_OK) return rc;
     if (jsb_ok && (be32(jsb) != JBD_MAGIC_NUMBER || (be32(jsb + 4) != 3 && be32(jsb + 4) != 4))) jsb_ok = false;
+    if (trace) {
+      if (rc == FL_ECORRUPT) fputs("journal : superbloc du journal introuvable (inode 8 illisible)\n", trace);
+      else
+        fprintf(trace, "journal : magic 0x%08x, type %u, compat 0x%x, incompat 0x%x, ro_compat 0x%x, début %u, séquence %u\n",
+                be32(jsb), be32(jsb + 4), be32(jsb + 0x24), be32(jsb + 0x28), be32(jsb + 0x2C), be32(jsb + 0x1C),
+                be32(jsb + 0x18));
+    }
     /* Journal v2 : options incompat hors de celles écrites correctement, ou toute option compat
      * (JBD_FEATURE_COMPAT_CHECKSUM, sommes v1 : lwext4 ne les écrit pas comme jbd2) ou ro_compat. */
     if (jsb_ok && be32(jsb + 4) == 4 &&
@@ -208,12 +241,17 @@ int fl_ext4_write_policy(fl_bdev *dev, const uint8_t sb[1024], bool *rw, char re
   }
   /* 6. Sommes : superbloc, descripteurs, superbloc du journal (v3 : crc32c sur 1024 octets, champ
    * s_checksum en 0xFC à 0). Un superbloc de journal illisible compte comme une somme fausse. */
-  bool sb_ok = !c.csum || ext4_crc32c(EXT4_CRC32_INIT, sb, 0x3FC) == le32(sb + 0x3FC);
+  uint32_t sb_calc = ext4_crc32c(EXT4_CRC32_INIT, sb, 0x3FC);
+  bool sb_ok = !c.csum || sb_calc == le32(sb + 0x3FC);
+  if (trace && c.csum)
+    fprintf(trace, "somme du superbloc : calculée 0x%08x, lue 0x%08x\n", sb_calc, le32(sb + 0x3FC));
   if (jsb_ok && (be32(jsb + 0x28) & JBD_FEATURE_INCOMPAT_CSUM_V3)) {
     uint8_t t[1024];
     memcpy(t, jsb, sizeof t);
     memset(t + 0xFC, 0, 4);
-    jsb_ok = ext4_crc32c(EXT4_CRC32_INIT, t, sizeof t) == be32(jsb + 0xFC);
+    uint32_t j_calc = ext4_crc32c(EXT4_CRC32_INIT, t, sizeof t);
+    jsb_ok = j_calc == be32(jsb + 0xFC);
+    if (trace) fprintf(trace, "somme du superbloc du journal : calculée 0x%08x, lue 0x%08x\n", j_calc, be32(jsb + 0xFC));
   }
   if (!sb_ok || !descs_ok || !jsb_ok) {
     set(rw, reason, FL_RO_CSUM);
@@ -226,4 +264,47 @@ int fl_ext4_write_policy(fl_bdev *dev, const uint8_t sb[1024], bool *rw, char re
   }
   set(rw, reason, NULL);
   return FL_OK;
+}
+
+int fl_ext4_write_policy(fl_bdev *dev, const uint8_t sb[1024], bool *rw, char reason[128]) {
+  return policy(dev, sb, false, NULL, rw, reason);
+}
+
+int fl_ext4_policy_explain(fl_bdev *dev, FILE *out) {
+  uint8_t sb[1024];
+  int rc = fl_bdev_read_bytes(dev, 1024, sizeof sb, sb);
+  if (rc != FL_OK) return rc;
+  uint64_t nblocks = le32(sb + 0x04);
+  if (le32(sb + 0x60) & EXT4_FINCOM_64BIT) nblocks |= (uint64_t)le32(sb + 0x150) << 32;
+  if (le16(sb + 0x38) != 0xEF53 || le32(sb + 0x18) > 6 || le32(sb + 0x20) == 0 || le32(sb + 0x14) >= nblocks ||
+      ((le32(sb + 0x60) & EXT4_FINCOM_64BIT) && (le16(sb + 0xFE) < 32 || le16(sb + 0xFE) > 1024 ||
+                                                 (le16(sb + 0xFE) & (le16(sb + 0xFE) - 1)))))
+    return FL_ECORRUPT;
+  bool rw = false;
+  char reason[128];
+  rc = policy(dev, sb, true, out, &rw, reason);
+  if (rc != FL_OK) return rc;
+  fprintf(out, "verdict (protection en écriture du disque ignorée) : %s\n",
+          rw ? "écriture autorisée" : reason);
+  return FL_OK;
+}
+
+void fl_ext4_policy_log(fl_bdev *dev) {
+#ifdef __ANDROID__
+  char *buf = NULL;
+  size_t len = 0;
+  FILE *m = open_memstream(&buf, &len);
+  if (!m) return;
+  int rc = fl_ext4_policy_explain(dev, m);
+  fclose(m);
+  if (rc != FL_OK) __android_log_print(ANDROID_LOG_WARN, "FluLuksPolicy", "diagnostic : %s", fl_strerror(rc));
+  for (char *line = buf, *nl; line && *line; line = nl ? nl + 1 : NULL) {
+    nl = strchr(line, '\n');
+    if (nl) *nl = 0;
+    __android_log_write(ANDROID_LOG_WARN, "FluLuksPolicy", line);
+  }
+  free(buf);
+#else
+  (void)dev;
+#endif
 }
