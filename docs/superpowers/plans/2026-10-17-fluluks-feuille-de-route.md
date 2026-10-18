@@ -97,6 +97,21 @@ dans le même commit que le travail.
 - [x] T10 — JNI et VolumeManager en écriture (synchronisation, éjection, débranchement) *(tests JVM et natifs PC verts, `test_batterie_lent` : 35 min en Debug + ASan ; à passer sur le Pixel, injoignable depuis le conteneur : `connectedDebugAndroidTest` puis `tools/android/check_image.sh <serial>`)*
 - [x] T11 — DocumentsProvider en écriture *(tests JVM verts, dont `WriteOpsTest` sur un système de fichiers en mémoire ; `ProviderWriteTest` compilé, à passer sur le Pixel puis `tools/android/check_image.sh <serial> provider-plein.img`)*
 - [x] T12 — Interface Flutter (lecture seule, éjection, avertissements)
+- Relecture et corrections de T4 à T12 (faites hors de la boucle de relecture, dans une autre session) :
+  - [x] Vérification sur PC du travail récupéré *(2026-10-18 : suite native rapide 20/20 sous ASan/UBSan,
+        0 erreur ; `flutter analyze` propre ; `flutter test` 21/21 ; tests JVM verts)*
+  - [x] Relectures rétroactives de T4 à T12 *(T12 approuvée ; T4, T5, T6, T7, T8, T9, T10-11 à corriger :
+        5 défauts critiques, tous sans effet sur le vrai disque tant qu'aucune écriture n'y est faite)*
+  - [ ] Correctif T9 : avertissement USB « support changé » ou « reset » pendant l'écriture *(critique)* + T7 : crc32c dans les tests du téléphone
+  - [ ] Correctif T10-T11 : éjection en échec, provider *(en parallèle, branche `fix/p3-ejection`)*
+  - [ ] Correctif journal (T5, T6) : journaux à somme v1 refusés en écriture, blocs échappés, octets non
+        initialisés, juge et barrières *(critique)*
+  - [ ] Correctif écriture et politique (T4, T6) : erreur d'E/S pendant une écriture, `rmdir` sur disque
+        hostile, sommes fausses avalées, lecture seule collante jusqu'au démontage *(critique)*
+  - [ ] Correctif T8 : batterie (cadence 200 pas, profondeur 40, copies supprimées en échec)
+  - [ ] Passage sur le Pixel : tests natifs (`run_native_tests.sh`), `connectedDebugAndroidTest`,
+        `check_image.sh`
+  - [ ] Relecture finale de toute la branche
 - [ ] *(utilisateur)* Clé sacrifiée branchable en USB-C (clé USB-C ou adaptateur OTG USB-A → USB-C)
 - [ ] *(utilisateur)* Sauvegarde complète du vrai disque avant toute écriture dessus
 - [ ] T13 — Essais sur le Pixel : clé sacrifiée, puis vrai disque
