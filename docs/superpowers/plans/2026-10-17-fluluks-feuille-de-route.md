@@ -103,7 +103,7 @@ dans le même commit que le travail.
   - [x] Relectures rétroactives de T4 à T12 *(T12 approuvée ; T4, T5, T6, T7, T8, T9, T10-11 à corriger :
         5 défauts critiques, tous sans effet sur le vrai disque tant qu'aucune écriture n'y est faite)*
   - [x] Correctif T9 : avertissement USB « support changé » ou « reset » pendant l'écriture *(critique)* + T7 : crc32c dans les tests du téléphone *(UNIT ATTENTION après l'ouverture : 0x28 → disque mort, autre → `FL_EIO` sans réessai et flush en échec ; `test_crc32c` et son débit ajoutés à `run_native_tests.sh` ; PC 20/20, arm64 compilé)*
-  - [ ] Correctif T10-T11 : éjection en échec, provider *(en parallèle, branche `fix/p3-ejection`)*
+  - [x] Correctif T10-T11 : éjection en échec, provider *(en parallèle, branche `fix/p3-ejection`, fusionnée ; JVM 46/46, natifs PC 20/20)*
   - [x] Correctif journal (T5, T6) : journaux à somme v1 refusés en écriture, blocs échappés, octets non
         initialisés, juge et barrières *(critique)* *(correctif lwext4 0007 : somme d'étiquette sur le
         bloc échappé — sans lui, `e2fsck` rejetait le bloc au rejeu —, blocs du journal à zéro ; v1 et
