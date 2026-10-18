@@ -301,17 +301,25 @@ le commit, rejeu par `e2fsck -E journal_only`), `test_ext4_barrieres` vérifie l
   illisible, ou à la somme fausse : `EBADMSG`) remontent par `ext4_ext_free_blocks`,
   `ext4_ext_remove_blocks`, `ext4_ext_remove_idx`, `ext4_ext_remove_leaf` et
   `ext4_extent_remove_space`, qui les jetaient : une troncature validait un inode sans ses extents (ou à
-  la taille nulle) avec des blocs encore alloués.
+  la taille nulle) avec des blocs encore alloués. Dans une feuille, l'extent n'est modifié qu'après la
+  libération ; un nœud d'index l'est avant (le volume est alors gelé). Un nœud d'index sans entrée est
+  refusé, comme par le noyau.
 - 0009, journal : à l'annulation d'une transaction, la restauration d'un bloc depuis sa copie validée
   ne copie plus depuis NULL quand cette copie est illisible (`ext4_assert` absent des builds) ; le bloc
   reste rattaché à la transaction validée (sinon, utilisation après libération au point de contrôle).
 
-Côté colle (`ext4_glue.c`) : lwext4 annule une transaction en échec sans défaire les blocs déjà modifiés
-dans son cache, que la transaction suivante écrirait. Dès qu'un volume passe en lecture seule en cours
-de session (erreur d'écriture, somme fausse, ou échec d'une opération d'écriture autre que le disque
-plein : `RO_IOERR`, `RO_CSUM`, `RO_CORRUPT`, `RO_ABORT`), il est gelé : plus rien n'atteint le disque,
-ni fermeture, ni sync, ni démontage (qui rend `FL_EIO`, journal laissé à rejouer). Le disque garde la
-dernière transaction validée. `rmdir` : un dossier dont le parcours s'arrête sur la borne d'entrées
+Côté colle (`ext4_glue.c`) : après un échec, l'état de lwext4 n'est plus sûr (opération en partie
+faite, restauration impossible depuis le journal, `ext4_fwrite` qui valide sa transaction même en échec).
+Dès qu'un volume passe en lecture seule en cours de session (erreur d'écriture, somme fausse, ou échec
+d'une opération d'écriture : `RO_IOERR`, `RO_CSUM`, `RO_CORRUPT`, `RO_ABORT`), il est gelé : plus rien
+n'atteint le disque, ni fermeture, ni démontage (qui rend `FL_EIO`, journal laissé à rejouer), et
+`fl_fs_sync` rend `FL_EIO` (un client ne croit jamais son `fsync` réussi). Le disque garde la dernière
+transaction validée. Ne gèlent pas : `ENOTSUP` et `EFBIG` (refus de `ext4_fwrite` avant toute
+modification), et le disque plein (`ENOSPC` : à l'annulation, lwext4 jette du cache les blocs modifiés
+et restaure depuis le journal ceux d'une transaction validée), sauf si une lecture a échoué pendant la
+session. Un fichier à blocs indirects (volume converti depuis ext3) est refusé à l'ouverture en
+écriture (`FL_ENOTSUP`), avant toute troncature ; les écritures dans le dernier bloc logique sont
+refusées (`FL_EINVAL`) avant lwext4. `rmdir` : un dossier dont le parcours s'arrête sur la borne d'entrées
 ignorées n'est plus déclaré vide (`ext4_dir_rm`, récursif, aurait supprimé la suite).
 
 Tests (`test_ext4_politique.c`) : `test_politique_somme_en_cours` (gel jusqu'au démontage, rejeu),
@@ -335,6 +343,12 @@ malveillant ne peut pas en changer entre la validation et le montage). Sans cett
 superbloc avec `s_log_block_size = 30` provoque un comportement indéfini dans lwext4 dès le montage.
 
 ## Limites connues de lwext4 (non corrigées)
+
+- `ext4_ext_split_node` : si une découpe d'arbre d'extents sur plusieurs niveaux échoue en `ENOSPC` au
+  deuxième niveau, les extents déjà sortis de la feuille n'y sont pas remis, et `ext4_fwrite` valide la
+  transaction (avant que la colle ne gèle). Il faut un arbre de profondeur 2 au moins avec un nœud
+  d'index plein (environ 115 000 extents dans un seul fichier, blocs de 4 Kio) et un disque plein au bloc
+  près. Correction propre : allouer tous les blocs avant de modifier l'arbre, comme le noyau.
 
 - Blocs de 64 Kio sans `metadata_csum` : une entrée qui couvre tout le bloc a une longueur codée 0 ou 65535
   (65536 pour le noyau) ; `ext4_dir_find_in_block` (comme déjà `ext4_dir_iterator_set` en amont) la traite

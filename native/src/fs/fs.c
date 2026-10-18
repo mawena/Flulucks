@@ -30,7 +30,9 @@ int64_t fl_fs_now(void) {
 }
 
 void fl_fs_go_read_only(fl_fs *fs, const char *reason) {
-  if (atomic_load(&fs->read_only)) return;
+  bool attendu = false;
+  /* un seul gagnant : ro_reason n'est écrit qu'une fois, avant read_only, puis plus jamais */
+  if (atomic_load(&fs->read_only) || !atomic_compare_exchange_strong(&fs->went_ro, &attendu, true)) return;
   snprintf(fs->ro_reason, sizeof fs->ro_reason, "%s", reason);
   atomic_store(&fs->read_only, true);
 }
@@ -154,7 +156,10 @@ int fl_fs_rename(fl_fs *fs, const char *from, const char *to) {
 
 int fl_fs_sync(fl_fs *fs) {
   if (!fs) return FL_EINVAL;
-  if (fs->read_only || !fs->ops->sync) return FL_OK;
+  /* monté en lecture seule : rien à écrire ; passé en lecture seule en cours de session : des données
+   * ont pu ne pas être écrites, le dire (un client ne doit pas croire son fsync réussi) */
+  if (atomic_load(&fs->read_only)) return atomic_load(&fs->went_ro) ? FL_EIO : FL_OK;
+  if (!fs->ops->sync) return FL_OK;
   return fs->ops->sync(fs);
 }
 

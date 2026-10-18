@@ -1,6 +1,6 @@
-From 801acdea4e90b3a174f396902ae3f8a5b85f7a0f Mon Sep 17 00:00:00 2001
+From 9fbef7dd1e55eda36eaad3dcb2a1169f51cd4bf8 Mon Sep 17 00:00:00 2001
 From: mawena <gamligocharles@gmail.com>
-Date: Sun, 18 Oct 2026 13:03:32 +0000
+Date: Sun, 18 Oct 2026 14:56:39 +0000
 Subject: [PATCH] =?UTF-8?q?fix:=20extents=20=E2=80=94=20en-t=C3=AAte=20rac?=
  =?UTF-8?q?ine=20v=C3=A9rifi=C3=A9,=20erreurs=20de=20lib=C3=A9ration=20rem?=
  =?UTF-8?q?ont=C3=A9es=20(FluLuks)?=
@@ -16,6 +16,8 @@ ses blocs alloués) et un eh_depth démesuré dimensionnait l'allocation du
 chemin. La racine est maintenant vérifiée comme un bloc de l'arbre (magique,
 nombre d'entrées, au plus 4 entrées, profondeur au plus 5, comme le noyau),
 sans somme de queue (la somme de l'inode la couvre) : EFSCORRUPTED sinon.
+Un nœud d'index sans entrée (racine ou bloc) est aussi refusé, comme le
+noyau : la recherche dichotomique suivait une entrée quelconque.
 
 ext4_ext_free_blocks jetait le code de ext4_balloc_free_blocks (bitmap
 illisible, ou à la somme fausse : EBADMSG). Une troncature retirait alors
@@ -26,11 +28,11 @@ ext4_ext_remove_idx, ext4_ext_remove_leaf et ext4_extent_remove_space (qui
 jetait aussi le code de ext4_ext_remove_leaf et de ext4_ext_dirty) ; l'extent
 n'est modifié qu'après la libération.
 ---
- src/ext4_extent.c | 56 +++++++++++++++++++++++++++++++++++++----------
- 1 file changed, 45 insertions(+), 11 deletions(-)
+ src/ext4_extent.c | 63 ++++++++++++++++++++++++++++++++++++++---------
+ 1 file changed, 52 insertions(+), 11 deletions(-)
 
 diff --git a/src/ext4_extent.c b/src/ext4_extent.c
-index dd09f9f..3ae3248 100644
+index dd09f9f..b21ccc8 100644
 --- a/src/ext4_extent.c
 +++ b/src/ext4_extent.c
 @@ -129,6 +129,8 @@ struct ext4_extent_header {
@@ -60,7 +62,20 @@ index dd09f9f..3ae3248 100644
  }
  
  static uint16_t ext4_ext_space_block(struct ext4_inode_ref *inode_ref)
-@@ -870,6 +876,20 @@ static int ext4_find_extent(struct ext4_inode_ref *inode_ref, ext4_lblk_t block,
+@@ -752,6 +758,12 @@ static int ext4_ext_check(struct ext4_inode_ref *inode_ref,
+ 		error_msg = "invalid eh_entries";
+ 		goto corrupted;
+ 	}
++	/* An index node without entries points nowhere (kernel rule):
++	 * the binary search would follow garbage */
++	if (eh->entries_count == 0 && depth > 0) {
++		error_msg = "index node without entries";
++		goto corrupted;
++	}
+ 
+ 	tail = find_ext4_extent_tail(eh);
+ 	if (ext4_sb_feature_ro_com(sb, EXT4_FRO_COM_METADATA_CSUM)) {
+@@ -870,6 +882,21 @@ static int ext4_find_extent(struct ext4_inode_ref *inode_ref, ext4_lblk_t block,
  	eh = ext_inode_hdr(inode_ref->inode);
  	depth = ext_depth(inode_ref->inode);
  
@@ -71,6 +86,7 @@ index dd09f9f..3ae3248 100644
 +	if (to_le16(eh->magic) != EXT4_EXTENT_MAGIC ||
 +	    eh->max_entries_count == 0 ||
 +	    to_le16(eh->entries_count) > to_le16(eh->max_entries_count) ||
++	    (eh->entries_count == 0 && depth > 0) ||
 +	    to_le16(eh->max_entries_count) >
 +		(sizeof(inode_ref->inode->blocks) -
 +		 sizeof(struct ext4_extent_header)) /
@@ -81,7 +97,7 @@ index dd09f9f..3ae3248 100644
  	if (path) {
  		ext4_ext_drop_refs(inode_ref, path, 0);
  		if (depth > path[0].maxdepth) {
-@@ -1517,7 +1537,7 @@ out:
+@@ -1517,7 +1544,7 @@ out:
  	return ret;
  }
  
@@ -90,7 +106,7 @@ index dd09f9f..3ae3248 100644
  				   struct ext4_extent *ex, ext4_lblk_t from,
  				   ext4_lblk_t to)
  {
-@@ -1530,7 +1550,7 @@ static void ext4_ext_remove_blocks(struct ext4_inode_ref *inode_ref,
+@@ -1530,7 +1557,7 @@ static void ext4_ext_remove_blocks(struct ext4_inode_ref *inode_ref,
  		 "Freeing %" PRIu32 " at %" PRIu64 ", %" PRIu32 "\n", from,
  		 start, len);
  
@@ -99,7 +115,7 @@ index dd09f9f..3ae3248 100644
  }
  
  static int ext4_ext_remove_idx(struct ext4_inode_ref *inode_ref,
-@@ -1557,7 +1577,9 @@ static int ext4_ext_remove_idx(struct ext4_inode_ref *inode_ref,
+@@ -1557,7 +1584,9 @@ static int ext4_ext_remove_idx(struct ext4_inode_ref *inode_ref,
  
  	ext4_dbg(DEBUG_EXTENT, "IDX: Freeing %" PRIu32 " at %" PRIu64 ", %d\n",
  		 to_le32(path[i].index->first_block), leaf, 1);
@@ -110,7 +126,7 @@ index dd09f9f..3ae3248 100644
  
  	/*
  	 * We may need to correct the paths after the first extents/indexes in
-@@ -1631,7 +1653,11 @@ static int ext4_ext_remove_leaf(struct ext4_inode_ref *inode_ref,
+@@ -1631,7 +1660,11 @@ static int ext4_ext_remove_leaf(struct ext4_inode_ref *inode_ref,
  			}
  		}
  
@@ -123,7 +139,7 @@ index dd09f9f..3ae3248 100644
  		/*
  		 * Set the first block of the extent if it is presented.
  		 */
-@@ -1737,7 +1763,9 @@ int ext4_extent_remove_space(struct ext4_inode_ref *inode_ref, ext4_lblk_t from,
+@@ -1737,7 +1770,9 @@ int ext4_extent_remove_space(struct ext4_inode_ref *inode_ref, ext4_lblk_t from,
  		if (unwritten)
  			ext4_ext_mark_unwritten(ex);
  
@@ -134,7 +150,7 @@ index dd09f9f..3ae3248 100644
  
  		newex.first_block = to_le32(to + 1);
  		newex.block_count = to_le16(ee_block + len - 1 - to);
-@@ -1777,8 +1805,12 @@ int ext4_extent_remove_space(struct ext4_inode_ref *inode_ref, ext4_lblk_t from,
+@@ -1777,8 +1812,12 @@ int ext4_extent_remove_space(struct ext4_inode_ref *inode_ref, ext4_lblk_t from,
  			if (leaf_to > to)
  				leaf_to = to;
  
@@ -149,7 +165,7 @@ index dd09f9f..3ae3248 100644
  			ext4_ext_drop_refs(inode_ref, path + i, 0);
  			i--;
  			continue;
-@@ -1814,10 +1846,12 @@ int ext4_extent_remove_space(struct ext4_inode_ref *inode_ref, ext4_lblk_t from,
+@@ -1814,10 +1853,12 @@ int ext4_extent_remove_space(struct ext4_inode_ref *inode_ref, ext4_lblk_t from,
  				/*
  				 * Garbage entries will finally be cleared here.
  				 */

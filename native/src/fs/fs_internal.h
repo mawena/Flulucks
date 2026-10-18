@@ -42,6 +42,9 @@ struct fl_fs {
   /* Peut passer à vrai en cours de session (lecture seule collante, fl_fs_go_read_only), lu sans
    * verrou ; ro_reason est écrit avant, et n'est plus modifié ensuite. */
   _Atomic bool read_only;
+  /* Lecture seule prise en cours de session (et non au montage) : fl_fs_sync rend alors FL_EIO, des
+   * données ont pu ne pas être écrites. Posé une seule fois, par fl_fs_go_read_only. */
+  _Atomic bool went_ro;
   char ro_reason[128];
   void *priv;
 };
@@ -57,8 +60,8 @@ typedef int (*fl_fs_mount_fn)(fl_bdev *dev, bool want_rw, fl_fs **out);
 
 int fl_ext4_mount(fl_bdev *dev, bool want_rw, fl_fs **out);
 
-/* Lecture seule collante : pose la raison puis read_only (une seule fois ; les suivantes sont sans
- * effet). À appeler sous le verrou du système de fichiers. */
+/* Lecture seule collante : pose la raison puis read_only (une seule fois, même entre fils : les
+ * suivantes sont sans effet). */
 void fl_fs_go_read_only(fl_fs *fs, const char *reason);
 
 /* Heure des horodatages (secondes Unix) : l'horloge de fl_fs_set_clock, sinon time(). */

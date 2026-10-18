@@ -1,6 +1,6 @@
-From 5f46542a618a88e2e9acadab2411fb3b239d62ff Mon Sep 17 00:00:00 2001
+From d1f56d893a40eac5bf3f56c7083f26ff763b6aa1 Mon Sep 17 00:00:00 2001
 From: mawena <gamligocharles@gmail.com>
-Date: Sun, 18 Oct 2026 13:03:32 +0000
+Date: Sun, 18 Oct 2026 14:56:39 +0000
 Subject: [PATCH] =?UTF-8?q?fix:=20journal=20=E2=80=94=20annulation=20sans?=
  =?UTF-8?q?=20relecture=20possible=20(FluLuks)?=
 MIME-Version: 1.0

@@ -244,12 +244,20 @@ class WriteOpsTest {
     }
 
     @Test fun depthLimitIsExact() {
-        e.hostile = { p -> if (p.count { it == '/' } < WriteOps.MAX_DEPTH) listOf("d" to "d") else emptyList() }
+        // un nœud de profondeur k sous /b a k + 1 « / » : jusqu'à la profondeur MAX_DEPTH exactement
+        e.hostile = { p -> if (p.count { it == '/' } <= WriteOps.MAX_DEPTH) listOf("d" to "d") else emptyList() }
         dir("/b")
-        // 256 niveaux sous /b : accepté par le parcours (échoue ensuite sur l'arbre factice, pas sur la borne)
+        // profondeur MAX_DEPTH atteinte : acceptée par le parcours (l'arbre factice échoue ensuite, pas la borne)
         try { w.delete("/b") } catch (ex: Exception) {
             assertFalse(ex.message, ex.message == WriteOps.TOO_DEEP)
         }
+        // un niveau de plus : refusé par la borne, avant toute écriture
+        e.hostile = { p -> if (p.count { it == '/' } <= WriteOps.MAX_DEPTH + 1) listOf("d" to "d") else emptyList() }
+        val before = e.ops
+        try { w.delete("/b"); fail("profondeur MAX_DEPTH + 1 acceptée") } catch (ex: FileNotFoundException) {
+            assertEquals(WriteOps.TOO_DEEP, ex.message)
+        }
+        assertEquals(before, e.ops)
     }
 
     @Test fun copyWithSymlinkSaysSo() {

@@ -213,6 +213,7 @@ class VolumeManagerTest {
     }
 
     @Test fun ejectFailureKeepsVolume() = runBlocking {
+        engine.readOnly = false
         val v = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
         engine.syncResult = EngineError.FL_ENOSPC
         VolumeManager.eject(v.id)
@@ -225,6 +226,21 @@ class VolumeManagerTest {
         VolumeManager.eject(v.id)
         assertEquals(listOf(v), VolumeManager.volumes.value)
         assertEquals(0, engine.closedDisks.size)
+    }
+
+    /** Le vidage échoue et le moteur gèle le volume : démontage enchaîné, avertissement, disque libéré. */
+    @Test fun ejectAfterFreezeUnmounts() = runBlocking {
+        engine.readOnly = false
+        val v = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
+        engine.syncResult = EngineError.FL_EIO
+        engine.readOnly = true // gelé par le moteur pendant ce sync
+        engine.roReason = "erreur d'écriture : volume passé en lecture seule"
+        engine.unmountResult = EngineError.FL_EIO
+        VolumeManager.eject(v.id)
+        assertTrue(engine.events.contains("unmount"))
+        assertTrue(VolumeManager.volumes.value.isEmpty())
+        assertEquals(1, engine.closedDisks.size)
+        assertTrue(VolumeManager.ejectError.value!!.contains("Vérifiez le disque sous Ubuntu"))
     }
 
     @Test fun ejectUnmountErrorForgetsDeadVolume() = runBlocking {

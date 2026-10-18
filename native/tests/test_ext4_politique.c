@@ -353,7 +353,7 @@ static void test_politique_somme_en_cours(void) {
   TT_ASSERT(lecture_seule(v.fs, FL_RO_CSUM));
   TT_ASSERT_EQ(fl_fs_mkdir(v.fs, "/apres"), FL_EROFS);
   TT_ASSERT_EQ(ecrire_fichier(v.fs, "/apres.txt", "b", 1), FL_EROFS);
-  TT_ASSERT_EQ(fl_fs_sync(v.fs), FL_OK); /* rien à faire en lecture seule */
+  TT_ASSERT_EQ(fl_fs_sync(v.fs), FL_EIO); /* gelé en cours de session : jamais « réussi » */
   TT_ASSERT(lire_hello(v.fs));
   int ru = fl_fs_unmount(v.fs);
   TT_ASSERT_EQ(ru, FL_EIO);
@@ -383,8 +383,8 @@ static int recuperable(const char *img) {
 }
 
 /* Erreur de lecture au milieu d'une opération d'écriture (bitmap lu par ext4_fremove) : FL_EIO,
- * RO_IOERR, et plus rien n'est écrit — lwext4 annule la transaction sans défaire son cache, qui
- * aurait été écrit au démontage. Le disque reste récupérable (rejeu seul), le fichier toujours lié. */
+ * RO_IOERR, et plus rien n'est écrit (avant 0008, la troncature validait même l'inode sans ses blocs).
+ * Le disque reste récupérable (rejeu seul), le fichier toujours lié. */
 static void test_politique_lecture_eio_en_ecriture(void) {
   char img[4096];
   vol v;
@@ -432,6 +432,63 @@ static void test_politique_corruption_en_ecriture(void) {
   TT_ASSERT_EQ(fl_fault_bdev_flushes(v.dev), fl);
   fl_bdev_close(v.dev);
   fl_bdev_close(v.file);
+  unlink(img);
+}
+
+/* Fichier à blocs indirects (volume converti depuis ext3, option extents posée) : lwext4 ne sait pas
+ * l'écrire. L'ouverture en écriture est refusée (FL_ENOTSUP) avant toute troncature — « w » vidait le
+ * fichier puis n'écrivait rien — et le volume reste en écriture. La lecture et la suppression marchent. */
+static void test_politique_fichier_indirect(void) {
+  char img[4096], out[4096];
+  vol v;
+  TT_ASSERT(copie_de("ext4-rw-reel.img", img, sizeof img) == 0);
+  char *const bm[] = {(char *)"debugfs", (char *)"-R", (char *)"bmap /hello.txt 0", img, NULL};
+  TT_ASSERT_EQ(fu_run(bm, out, sizeof out), 0);
+  char *nl = strrchr(out, '\n');
+  if (nl && nl[1] == 0) *nl = 0;
+  char *last = strrchr(out, '\n');
+  unsigned long long blk = strtoull(last ? last + 1 : out, NULL, 10);
+  TT_ASSERT(blk > 0);
+  char cmd[256];
+  TT_ASSERT_EQ(debugfs_w(img, "sif /hello.txt flags 0"), 0);
+  for (int i = 0; i < 15; i++) {
+    snprintf(cmd, sizeof cmd, "sif /hello.txt block[%d] %llu", i, i == 0 ? blk : 0ULL);
+    TT_ASSERT_EQ(debugfs_w(img, cmd), 0);
+  }
+  TT_ASSERT_EQ(e2fsck_propre(img), 0); /* fichier indirect valide */
+  TT_ASSERT_EQ(vol_monter(&v, img, 0, 0), FL_OK);
+  TT_ASSERT(en_ecriture(v.fs));
+  TT_ASSERT(lire_hello(v.fs));
+  fl_file *f = NULL;
+  TT_ASSERT_EQ(fl_fs_open(v.fs, "/hello.txt", FL_O_RDWR | FL_O_TRUNC, &f), FL_ENOTSUP);
+  TT_ASSERT_EQ(fl_fs_open(v.fs, "/hello.txt", FL_O_RDWR, &f), FL_ENOTSUP);
+  TT_ASSERT(lire_hello(v.fs)); /* contenu intact */
+  TT_ASSERT(en_ecriture(v.fs));
+  TT_ASSERT_EQ(fl_fs_mkdir(v.fs, "/apres"), FL_OK);
+  TT_ASSERT_EQ(fl_fs_unlink(v.fs, "/hello.txt"), FL_OK);
+  TT_ASSERT_EQ(vol_demonter(&v), FL_OK);
+  TT_ASSERT_EQ(e2fsck_propre(img), 0);
+  unlink(img);
+}
+
+/* Écriture dans le dernier bloc logique (2^32 - 1), que lwext4 refuse : FL_EINVAL avant lwext4, le
+ * volume reste en écriture (avant : EFBIG gelait le volume, à la portée de n'importe quel client). */
+static void test_politique_dernier_bloc(void) {
+  char img[4096];
+  vol v;
+  TT_ASSERT(copie_de("ext4-rw-reel.img", img, sizeof img) == 0);
+  TT_ASSERT_EQ(vol_monter(&v, img, 0, 0), FL_OK);
+  fl_file *f = NULL;
+  TT_ASSERT_EQ(fl_fs_open(v.fs, "/loin.bin", FL_O_RDWR | FL_O_CREAT, &f), FL_OK);
+  uint64_t fin = (uint64_t)4096 << 32;
+  TT_ASSERT_EQ(fl_file_pwrite(f, "x", 1, fin - 4096), FL_EINVAL);
+  TT_ASSERT_EQ(fl_file_truncate(f, fin), FL_EINVAL);
+  TT_ASSERT_EQ(fl_file_pwrite(f, "x", 1, fin - 4096 - 1), 1); /* avant-dernier bloc : permis */
+  TT_ASSERT_EQ(fl_file_close(f), FL_OK);
+  TT_ASSERT(en_ecriture(v.fs));
+  TT_ASSERT_EQ(fl_fs_unlink(v.fs, "/loin.bin"), FL_OK);
+  TT_ASSERT_EQ(vol_demonter(&v), FL_OK);
+  TT_ASSERT_EQ(e2fsck_propre(img), 0);
   unlink(img);
 }
 
@@ -564,6 +621,8 @@ int main(void) {
   TT_RUN(test_politique_somme_en_cours);
   TT_RUN(test_politique_lecture_eio_en_ecriture);
   TT_RUN(test_politique_corruption_en_ecriture);
+  TT_RUN(test_politique_fichier_indirect);
+  TT_RUN(test_politique_dernier_bloc);
   TT_RUN(test_politique_etat_pendant_montage);
   TT_RUN(test_politique_premier_montage_sobre);
   TT_RUN(test_politique_disque_mort);

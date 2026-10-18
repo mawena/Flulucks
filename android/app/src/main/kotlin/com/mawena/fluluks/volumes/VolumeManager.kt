@@ -463,9 +463,16 @@ object VolumeManager {
                 val m = mounts[id] ?: continue
                 pendingSync.remove(id)?.invoke()
                 val rcSync = engine.sync(m.handle)
-                if (rcSync < 0) { // volume intact côté natif : gardé
-                    _ejectError.value = msgEjectFailed(EngineError(rcSync).message ?: "erreur $rcSync")
-                    continue
+                if (rcSync < 0) {
+                    // Le moteur a pu geler le volume pendant cette synchronisation (disque qui refuse le
+                    // vidage) : plus rien ne s'écrira, autant démonter tout de suite (avertissement plus
+                    // bas). Sinon le volume est intact côté natif : gardé, l'éjection pourra être refaite.
+                    val wasWritable = !m.state.readOnly
+                    refreshLocked(id)
+                    if (!(wasWritable && mounts[id]?.state?.readOnly == true)) {
+                        _ejectError.value = msgEjectFailed(EngineError(rcSync).message ?: "erreur $rcSync")
+                        continue
+                    }
                 }
                 val rc = engine.unmount(m.handle, false)
                 if (rc == EngineError.FL_EBUSY) { // fichier ouvert : volume intact, gardé

@@ -121,7 +121,10 @@ dans le même commit que le travail.
         vert en 83 min)*
   - [ ] Passage sur le Pixel : tests natifs (`run_native_tests.sh`), `connectedDebugAndroidTest`,
         `check_image.sh`
-  - [ ] Relecture finale de toute la branche
+  - [x] Relecture finale de toute la branche *(depuis T12 ; corrigés : fichier à blocs indirects vidé
+        puis volume gelé en « w » — refus à l'ouverture —, dernier bloc logique, `fsync` réussi après gel,
+        éjection après gel, accès hors verrou, nœud d'index vide (0008) ; découpe d'extents à 2 niveaux
+        sur disque plein laissée en limite connue ; PC 20/20, JVM 48/48)*
 - [ ] *(utilisateur)* Clé sacrifiée branchable en USB-C (clé USB-C ou adaptateur OTG USB-A → USB-C)
 - [ ] *(utilisateur)* Sauvegarde complète du vrai disque avant toute écriture dessus
 - [ ] T13 — Essais sur le Pixel : clé sacrifiée, puis vrai disque

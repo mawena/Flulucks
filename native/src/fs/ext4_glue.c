@@ -63,12 +63,14 @@ typedef struct {
   uint32_t block_size;
   uint32_t inodes_count;
   uint64_t max_bytes; /* au-delà, les numéros de bloc logique (32 bits) débordent */
+  uint64_t max_write; /* fin d'écriture au plus : lwext4 refuse le dernier bloc logique (EFBIG) */
   bool needs_recovery;
   bool rw;            /* monté en écriture, journal démarré */
   bool io_err;        /* une écriture ou une barrière a échoué : plus rien n'est écrit (g_lock) */
   bool io_wp;         /* l'échec venait d'une protection en écriture signalée (FL_EROFS) */
   bool frozen;        /* passé en lecture seule en cours de session : plus rien n'est écrit, démontage
                        * compris (g_lock) */
+  bool rd_fail;       /* une lecture a échoué sur le volume en écriture (g_lock) : voir wr_err */
   fl_fs *fs;          /* pour la lecture seule collante */
   uint8_t sb[1024];   /* superbloc validé, octets [1024, 2048) du disque (tenu à jour) */
 } ext4_vol;
@@ -127,7 +129,10 @@ static int bd_bread(struct ext4_blockdev *bd, void *buf, uint64_t blk_id, uint32
   if (blk_cnt == 0) return EOK;
   /* taille du tampon en octets représentable (fl_bdev vérifie les bornes du disque) */
   if ((uint64_t)blk_cnt > (uint64_t)SIZE_MAX / v->dev->sector_size) return EIO;
-  if (fl_bdev_read(v->dev, blk_id, blk_cnt, buf) != FL_OK) return EIO;
+  if (fl_bdev_read(v->dev, blk_id, blk_cnt, buf) != FL_OK) {
+    v->rd_fail = true; /* sous g_lock : lwext4 n'est appelé que sous ce verrou */
+    return EIO;
+  }
   /* lwext4 relit le superbloc : il doit voir exactement celui qui a été validé, même si
    * un périphérique malveillant répond autre chose à la deuxième lecture. */
   uint64_t start = blk_id * v->dev->sector_size; /* < taille du disque, vérifiée ci-dessus */
@@ -180,9 +185,10 @@ static int bd_bflush(struct ext4_blockdev *bd) {
  * (RO_WP si le disque signale sa protection) ; une somme fausse vue par lwext4 (EBADMSG) sur un volume
  * en écriture → RO_CSUM ; un échec d'une opération d'écriture (autre que FL_ENOSPC) → RO_IOERR,
  * RO_CORRUPT ou RO_ABORT. Le volume est alors gelé (frozen) : plus rien n'atteint le disque, ni
- * fermeture, ni sync, ni démontage. lwext4 annule une transaction en échec sans défaire les blocs déjà
- * modifiés dans son cache (ils seraient écrits par la transaction suivante) ; le disque garde
- * l'état de la dernière transaction validée, que le journal sait récupérer. Les écritures suivantes
+ * fermeture, ni sync, ni démontage. Après un échec, l'état de lwext4 n'est plus sûr (une opération
+ * partiellement faite, une restauration impossible depuis le journal, ext4_fwrite qui valide sa
+ * transaction même en échec) ; le disque garde l'état de la dernière transaction validée, que le
+ * journal sait récupérer. Les écritures suivantes
  * rendent FL_EROFS (fs.c), la lecture continue. rd_err : code lwext4 d'une lecture ; wr_err : d'une
  * écriture, qui rend FL_EIO si une écriture a échoué pendant l'opération (lwext4 ignore les erreurs
  * d'écriture de son cache). Sous g_lock. */
@@ -205,11 +211,16 @@ static int wr_fl(ext4_vol *v, int rc) {
   sticky(v, EOK);
   return stopped(v) && (rc == FL_OK || rc == FL_EIO) ? FL_EIO : rc;
 }
-/* Disque plein : lwext4 échoue avant de modifier quoi que ce soit (allocation), le volume reste en
- * écriture (test_batterie_disque_plein). Tout autre échec gèle le volume. */
+/* Échecs sans conséquence sur le disque, qui laissent le volume en écriture : ENOTSUP et EFBIG (refus
+ * de ext4_fwrite avant toute modification : fichier à blocs indirects, dernier bloc logique) ; disque
+ * plein (ENOSPC : à l'annulation, lwext4 jette du cache les blocs modifiés et restaure depuis le journal
+ * ceux d'une transaction validée — test_batterie_disque_plein), sauf si une lecture a échoué pendant
+ * la session (rd_fail : une restauration depuis le journal a pu échouer, le cache n'est plus sûr). Tout
+ * autre échec gèle le volume. */
 static int wr_err(ext4_vol *v, int e) {
   sticky(v, e);
-  if (v->rw && e != EOK && e != ENOSPC && !v->frozen)
+  bool sans_effet = e == EOK || e == ENOTSUP || e == EFBIG || (e == ENOSPC && !v->rd_fail);
+  if (v->rw && !sans_effet && !v->frozen)
     go_ro(v, e == EIO ? FL_RO_IOERR : e == EFSCORRUPTED ? FL_RO_CORRUPT : FL_RO_ABORT);
   return wr_fl(v, map_err(e));
 }
@@ -307,8 +318,9 @@ static int e_statfs(fl_fs *fs, fl_statfs *out) {
   struct ext4_mount_stats st;
   pthread_mutex_lock(&g_lock);
   int r = ext4_mount_point_stats(v->mp, &st);
+  int rc = r != EOK ? rd_err(v, r) : FL_OK; /* sticky lit et pose l'état du volume : sous g_lock */
   pthread_mutex_unlock(&g_lock);
-  if (r != EOK) return rd_err(v, r);
+  if (rc != FL_OK) return rc;
   uint64_t free_blocks = st.free_blocks_count < st.blocks_count ? st.free_blocks_count : st.blocks_count;
   /* blocks_count × block_size ≤ taille du disque (vérifié au montage) */
   out->total_bytes = st.blocks_count * st.block_size;
@@ -462,6 +474,11 @@ static int e_open(fl_fs *fs, const char *path, int flags, fl_file **out) {
     uint32_t t = inode_type(&in);
     if (t == EXT4_INODE_MODE_DIRECTORY) rc = FL_EISDIR;
     else if (t != EXT4_INODE_MODE_FILE) rc = FL_ENOTSUP; /* pas de suivi de lien */
+    /* Fichier à blocs indirects (volume converti depuis ext3) : ext4_fwrite le refuse (ENOTSUP). Refus
+     * dès l'ouverture en écriture, avant toute troncature : « w » viderait le fichier puis
+     * n'écrirait rien. */
+    else if ((flags & (FL_O_RDWR | FL_O_TRUNC)) && !(to_le32(in.flags) & EXT4_INODE_FLAG_EXTENTS))
+      rc = FL_ENOTSUP;
   } else if (rc == FL_ENOENT && (flags & FL_O_CREAT)) {
     rc = parent_ok(v, path);
     creer = rc == FL_OK;
@@ -510,8 +527,9 @@ static int64_t e_pread(fl_file *f, void *buf, size_t len, uint64_t off) {
   pthread_mutex_lock(&g_lock);
   int r = ext4_fseek(&h->f, (int64_t)off, SEEK_SET);
   if (r == EOK) r = ext4_fread(&h->f, buf, len, &got); /* rien au-delà de la fin */
+  int rc = r != EOK ? rd_err(v, r) : FL_OK;
   pthread_mutex_unlock(&g_lock);
-  if (r != EOK) return rd_err(v, r);
+  if (rc != FL_OK) return rc;
   return (int64_t)got;
 }
 
@@ -521,7 +539,7 @@ static int64_t e_pwrite(fl_file *f, const void *buf, size_t len, uint64_t off) {
   ext4_vol *v = f->fs->priv;
   ext4_fh *h = f->priv;
   if (len == 0) return 0;
-  if (off > v->max_bytes || len > v->max_bytes - off || len > INT64_MAX) return FL_EINVAL;
+  if (off > v->max_write || len > v->max_write - off || len > INT64_MAX) return FL_EINVAL;
   size_t done = 0;
   pthread_mutex_lock(&g_lock);
   h->written = true;
@@ -537,7 +555,7 @@ static int64_t e_pwrite(fl_file *f, const void *buf, size_t len, uint64_t off) {
 static int e_truncate(fl_file *f, uint64_t size) {
   ext4_vol *v = f->fs->priv;
   ext4_fh *h = f->priv;
-  if (size > v->max_bytes) return FL_EINVAL;
+  if (size > v->max_write) return FL_EINVAL;
   pthread_mutex_lock(&g_lock);
   h->written = true;
   int rc = stopped(v) ? FL_EIO : wr_err(v, (ext4_ftruncate(&h->f, size)));
@@ -759,6 +777,7 @@ int fl_ext4_mount(fl_bdev *dev, bool want_rw, fl_fs **out) {
   v->block_size = sbi.block_size;
   v->inodes_count = sbi.inodes_count;
   v->max_bytes = (uint64_t)sbi.block_size << 32;
+  v->max_write = (uint64_t)sbi.block_size * UINT32_MAX;
   v->needs_recovery = sbi.recover;
   v->rw = want_rw && permis;
   v->bdif.open = bd_open;

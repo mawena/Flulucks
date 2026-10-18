@@ -323,6 +323,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
             EngineError.FL_EROFS -> readOnlyMessage(documentId)
             EngineError.FL_EEXIST -> "Un élément porte déjà ce nom"
             EngineError.FL_EBUSY -> "Fichier en cours d'utilisation"
+            EngineError.FL_ENOTSUP -> "Écriture impossible : fichier à l'ancien format ext3 (blocs indirects)"
             else -> "Document introuvable ou illisible"
         })
     } catch (e: Exception) {
