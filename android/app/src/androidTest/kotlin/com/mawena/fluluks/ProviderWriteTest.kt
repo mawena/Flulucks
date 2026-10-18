@@ -7,6 +7,9 @@ import android.provider.DocumentsContract.Document
 import android.provider.DocumentsContract.Root
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import android.system.OsConstants
+import com.mawena.fluluks.engine.EngineError
+import com.mawena.fluluks.provider.FluLuksDocumentsProvider
 import com.mawena.fluluks.volumes.VolumeManager
 import java.io.File
 import java.io.FileInputStream
@@ -268,6 +271,14 @@ class ProviderWriteTest {
         } catch (e: FileNotFoundException) {
             assertTrue(e.message, e.message!!.startsWith("Volume en lecture seule : "))
         }
+        for (mode in listOf("w", "rw", "wt", "rwt", "wa")) { // ouverture en écriture : message exact
+            try {
+                cr.openFileDescriptor(docUri("/hello.txt"), mode)?.close()
+                fail("mode $mode accepté")
+            } catch (e: FileNotFoundException) {
+                assertEquals("Volume en lecture seule : ouvert en lecture seule à votre demande", e.message)
+            }
+        }
         cr.query(DocumentsContract.buildChildDocumentsUri(auth, "$vol:/"), null, null, null, null)!!.use { c ->
             while (c.moveToNext()) assertEquals(0, c.getInt(c.getColumnIndexOrThrow(Document.COLUMN_FLAGS)))
         }
@@ -334,12 +345,26 @@ class ProviderWriteTest {
             failed = e
         }
         assertNotNull("aucune erreur après $written octets", failed)
+        val text = generateSequence<Throwable>(failed) { it.cause }.joinToString(" / ") { it.toString() }
+        assertTrue(
+            "pas une erreur de disque plein : $text",
+            text.contains("ENOSPC") || text.contains("No space left") || text.contains("plus d'espace disponible"),
+        )
         assertTrue(DocumentsContract.deleteDocument(cr, uri))
         assertFalse(exists("/plein.bin"))
         // le volume reste utilisable
         val after = create("/", "après.txt")
         write(after, "ok".toByteArray())
         assertEquals("ok", String(read(after)))
+    }
+
+    @Test fun writeErrnoMapping() {
+        val m = FluLuksDocumentsProvider.Companion
+        assertEquals(OsConstants.ENOSPC, m.errnoFor(EngineError.FL_ENOSPC))
+        assertEquals(OsConstants.EROFS, m.errnoFor(EngineError.FL_EROFS))
+        assertEquals(OsConstants.ENXIO, m.errnoFor(EngineError.FL_ENODEV))
+        assertEquals(OsConstants.EIO, m.errnoFor(EngineError.FL_EIO))
+        assertEquals(OsConstants.EIO, m.errnoFor(EngineError.FL_ECORRUPT))
     }
 
     @Test fun crossVolumeUnsupported() {

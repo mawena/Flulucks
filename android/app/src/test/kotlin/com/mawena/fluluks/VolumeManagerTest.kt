@@ -24,6 +24,7 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
     var statfsFails = false
     var label = "MonDisque"
     var readOnly = true
+    var roReason = "lecture seule"
     var syncResult = 0
     var unmountResult = 0
     var syncs = 0
@@ -52,7 +53,7 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
         return if (!force && openFiles > 0) EngineError.FL_EBUSY else if (!force) unmountResult else 0
     }
     override fun statfs(vol: Long) = if (statfsFails) """{"total":""".toByteArray() else
-        """{"total":1000,"free":400,"label":"$label","read_only":$readOnly,"ro_reason":"${if (readOnly) "lecture seule" else ""}","needs_recovery":false}""".toByteArray()
+        """{"total":1000,"free":400,"label":"$label","read_only":$readOnly,"ro_reason":"${if (readOnly) roReason else ""}","needs_recovery":false}""".toByteArray()
     override fun stat(vol: Long, path: ByteArray) = ByteArray(0)
     override fun list(vol: Long, path: ByteArray) = ByteArray(0)
     override fun openFile(vol: Long, path: ByteArray, flags: Int): Long { openFiles++; return next++ }
@@ -269,6 +270,66 @@ class VolumeManagerTest {
         VolumeManager.noteWrite("inconnu") // volume absent : rien
         delayer.advance(SYNC)
         assertEquals(1, engine.syncs)
+    }
+
+    @Test fun markSyncedClearsOnlyIfNoNewWrite() = runBlocking {
+        val v = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
+        VolumeManager.noteWrite(v.id)
+        val gen = VolumeManager.writeGeneration(v.id)
+        VolumeManager.markSynced(v.id, gen) // synchronisation faite par le provider (fermeture, fsync)
+        assertFalse(VolumeManager.hasUnsyncedWrites(v.id))
+        VolumeManager.noteWrite(v.id)
+        VolumeManager.markSynced(v.id, gen) // une écriture est arrivée depuis : encore à synchroniser
+        assertTrue(VolumeManager.hasUnsyncedWrites(v.id))
+        VolumeManager.onUsbDetachedName(disk)
+        assertEquals(listOf(VolumeManager.MSG_DETACH_DURING_WRITE), warnings)
+    }
+
+    @Test fun writeRequestedOnReadOnlyVolumeRemounts() = runBlocking {
+        engine.roReason = "ouvert en lecture seule à votre demande"
+        val ro = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = false)
+        assertTrue(ro.readOnly)
+        val h1 = VolumeManager.nativeVolume(ro.id)
+        engine.readOnly = false
+        val rw = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
+        assertFalse(rw.readOnly)
+        assertEquals(2, engine.mountCalls)
+        assertEquals(true, engine.lastWritable)
+        assertEquals(listOf(h1 to false), engine.unmounts)
+        assertEquals(listOf(rw), VolumeManager.volumes.value)
+        assertEquals(0L, VolumeManager.nativeVolume(ro.id))
+        // et l'inverse : lecture seule demandée sur un volume en écriture
+        engine.readOnly = true
+        val back = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = false)
+        assertTrue(back.readOnly)
+        assertEquals(3, engine.mountCalls)
+        // même mode : le volume ouvert est rendu tel quel
+        assertEquals(back, VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = false))
+        assertEquals(3, engine.mountCalls)
+    }
+
+    @Test fun modeChangeRefusedWhileFileOpen() = runBlocking {
+        engine.roReason = "ouvert en lecture seule à votre demande"
+        val ro = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = false)
+        engine.openFile(VolumeManager.nativeVolume(ro.id), "/a".toByteArray())
+        engine.readOnly = false
+        try {
+            VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
+            fail("EngineError attendue")
+        } catch (e: EngineError) {
+            assertEquals(EngineError.FL_EBUSY, e.code)
+            assertEquals(VolumeManager.msgModeChange(true, VolumeManager.MSG_FILES_OPEN), e.message)
+        }
+        assertEquals(listOf(ro), VolumeManager.volumes.value) // volume d'origine intact
+        assertEquals(1, engine.mountCalls)
+    }
+
+    @Test fun hardReadOnlyVolumeIsNotRemounted() = runBlocking {
+        engine.roReason = "disque protégé en écriture"
+        val ro = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
+        assertTrue(ro.readOnly)
+        assertEquals(ro, VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true))
+        assertEquals(1, engine.mountCalls)
     }
 
     @Test fun detachDuringWriteWarns() = runBlocking {

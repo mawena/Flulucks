@@ -127,7 +127,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         documentId: String?, mode: String?, signal: CancellationSignal?,
     ): ParcelFileDescriptor {
         val m = OpenMode.parse(mode) // IllegalArgumentException pour un mode inconnu, avant guard
-        return guard("openDocument") {
+        return guard("openDocument", documentId) {
             val (vol, path) = resolve(documentId)
             val bytes = path.toByteArray(Charsets.UTF_8)
             val st = FsStat.parse(NativeEngine.stat(vol.handle, bytes))
@@ -135,6 +135,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
             if (m.write) requireWritable(vol)
             val flags = if (!m.write) OpenFlags.RDONLY else OpenFlags.RDWR or (if (m.truncate) OpenFlags.TRUNC else 0)
             val file = EngineError.check(NativeEngine.openFile(vol.handle, bytes, flags))
+            if (m.truncate) VolumeManager.noteWrite(vol.state.id) // la troncature est une écriture
             try {
                 val size = if (m.truncate) 0L else st.size
                 val target = if (!m.write) null else WriteTarget(vol.state.id, vol.handle, if (m.append) size else 0L) {
@@ -152,7 +153,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
     // ------------------------------------------------------------------ écriture
 
     override fun createDocument(parentDocumentId: String?, mimeType: String?, displayName: String?): String =
-        guard("createDocument") {
+        guard("createDocument", parentDocumentId) {
             val (vol, parent) = resolve(parentDocumentId)
             requireWritable(vol)
             val path = synchronized(writeLock) {
@@ -162,7 +163,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
             DocumentIds.encode(vol.state.id, path)
         }
 
-    override fun deleteDocument(documentId: String?) = guard("deleteDocument") {
+    override fun deleteDocument(documentId: String?) = guard("deleteDocument", documentId) {
         val (vol, path) = resolve(documentId)
         requireWritable(vol)
         try {
@@ -172,7 +173,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         }
     }
 
-    override fun renameDocument(documentId: String?, displayName: String?): String = guard("renameDocument") {
+    override fun renameDocument(documentId: String?, displayName: String?): String = guard("renameDocument", documentId) {
         val (vol, path) = resolve(documentId)
         requireWritable(vol)
         val target = synchronized(writeLock) { WriteOps(NativeEngine, vol.handle).rename(path, displayName) }
@@ -184,7 +185,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         sourceDocumentId: String?, sourceParentDocumentId: String?, targetParentDocumentId: String?,
     ): String {
         sameVolume(sourceDocumentId, targetParentDocumentId)
-        return guard("moveDocument") {
+        return guard("moveDocument", sourceDocumentId) {
             val (vol, path) = resolve(sourceDocumentId)
             val (_, target) = resolve(targetParentDocumentId)
             requireWritable(vol)
@@ -196,7 +197,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
 
     override fun copyDocument(sourceDocumentId: String?, targetParentDocumentId: String?): String {
         sameVolume(sourceDocumentId, targetParentDocumentId)
-        return guard("copyDocument") {
+        return guard("copyDocument", sourceDocumentId) {
             val (vol, path) = resolve(sourceDocumentId)
             val (_, target) = resolve(targetParentDocumentId)
             requireWritable(vol)
@@ -249,7 +250,18 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
 
     private fun requireWritable(vol: Resolved) {
         val m = liveMode(vol.state, vol.handle)
-        if (m.readOnly) throw FileNotFoundException(if (m.reason.isBlank()) READ_ONLY else "$READ_ONLY : ${m.reason}")
+        if (m.readOnly) throw FileNotFoundException(readOnlyText(m.reason))
+    }
+
+    private fun readOnlyText(reason: String) = if (reason.isBlank()) READ_ONLY else "$READ_ONLY : $reason"
+
+    /** « Volume en lecture seule : <raison> » pour un FL_EROFS du moteur (raison relue via statfs). */
+    private fun readOnlyMessage(documentId: String?): String {
+        val volId = documentId?.let { DocumentIds.decode(it) }?.first ?: return READ_ONLY
+        val state = VolumeManager.volume(volId) ?: return READ_ONLY
+        val handle = VolumeManager.nativeVolume(volId)
+        if (handle <= 0) return READ_ONLY
+        return readOnlyText(liveMode(state, handle).reason)
     }
 
     private fun docFlags(type: FileType, isRoot: Boolean, writable: Boolean): Int {
@@ -297,7 +309,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
     }
 
     /** Seules FileNotFoundException et SecurityException sortent ; le reste devient un message français. */
-    private inline fun <T> guard(op: String, block: () -> T): T = try {
+    private inline fun <T> guard(op: String, documentId: String? = null, block: () -> T): T = try {
         block()
     } catch (e: FileNotFoundException) {
         throw e
@@ -308,7 +320,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         throw FileNotFoundException(when (e.code) {
             EngineError.FL_ENODEV -> VOLUME_CLOSED
             EngineError.FL_ENOSPC -> "Disque plein"
-            EngineError.FL_EROFS -> READ_ONLY
+            EngineError.FL_EROFS -> readOnlyMessage(documentId)
             EngineError.FL_EEXIST -> "Un élément porte déjà ce nom"
             EngineError.FL_EBUSY -> "Fichier en cours d'utilisation"
             else -> "Document introuvable ou illisible"
@@ -392,7 +404,9 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
 
         override fun onFsync() {
             val w = write ?: return
+            val gen = VolumeManager.writeGeneration(w.volumeId)
             val rc = NativeEngine.sync(w.volume)
+            if (rc >= 0) VolumeManager.markSynced(w.volumeId, gen)
             if (rc < 0) {
                 warnOnce("sync", rc)
                 throw ErrnoException("fsync", errno(rc))
@@ -402,8 +416,11 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         override fun onRelease() {
             if (!released.compareAndSet(false, true)) return
             chunk = null
+            val gen = write?.let { VolumeManager.writeGeneration(it.volumeId) } ?: 0L
             val rc = NativeEngine.closeFile(file) // FL_EINVAL si le volume a été éjecté entre-temps
             if (write != null) {
+                // la fermeture d'un fichier écrit par ce descripteur synchronise le volume
+                if (rc >= 0 && bytesWritten > 0) VolumeManager.markSynced(write.volumeId, gen)
                 if (rc < 0 && rc != EngineError.FL_EINVAL) Log.w(TAG, "closeFile : code $rc")
                 write.onClosed()
             }
@@ -416,12 +433,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
             if (!warned) { warned = true; Log.w(TAG, "$op : code $code") } // une fois par fichier
         }
 
-        private fun errno(code: Int) = when (code) {
-            EngineError.FL_ENOSPC -> OsConstants.ENOSPC
-            EngineError.FL_EROFS -> OsConstants.EROFS
-            EngineError.FL_ENODEV -> OsConstants.ENXIO
-            else -> OsConstants.EIO
-        }
+        private fun errno(code: Int) = errnoFor(code)
     }
 
     /** Modes de [openDocument], ceux de ParcelFileDescriptor.parseMode. */
@@ -446,6 +458,14 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         private const val MAX_WRITE = 4 shl 20 // FJ_PREAD_MAX
         private const val READ_ONLY = "Volume en lecture seule"
         private val writeLock = Any()
+
+        /** Code du moteur → errno rendu au client par onWrite / onFsync. */
+        internal fun errnoFor(code: Int): Int = when (code) {
+            EngineError.FL_ENOSPC -> OsConstants.ENOSPC
+            EngineError.FL_EROFS -> OsConstants.EROFS
+            EngineError.FL_ENODEV -> OsConstants.ENXIO
+            else -> OsConstants.EIO
+        }
 
         private val ioHandler: Handler by lazy { Handler(HandlerThread("fluluks-io").also { it.start() }.looper) }
 
