@@ -186,7 +186,7 @@ mk_rw ext4-rw-gros.img 8G b -b 4096 -I 256 -O ^orphan_file,^metadata_csum_seed  
 # sous un niveau d'index ; la politique d'écriture les a d'abord lus comme vides (creux, lazy_journal_init).
 mk_rw ext4-rw-journal-gros.img 4G c -b 4096 -I 256 -J size=1024 -E lazy_journal_init=1 -O ^orphan_file,^metadata_csum_seed
 ex8="$(DBG -R 'ex <8>' ext4-rw-journal-gros.img)"
-grep -Eq '^ *0/ *1 ' <<<"$ex8" && grep -Eq ' 32768 *$' <<<"$ex8" ||
+grep -Eq '^ *0/ *1 ' <<<"$ex8" && grep -Eq '^ *1/ *1 +1/ *[0-9]+ +0 - +32767 .* 32768 *$' <<<"$ex8" ||
   { echo "ext4-rw-journal-gros.img : journal sans index ou sans extent de 32768 blocs" >&2; echo "$ex8" >&2; exit 1; }
 for img in ext4-rw-*.img; do
   f="$(LC_ALL=C dumpe2fs -h "$img" 2>/dev/null | grep -E '^Filesystem features:')"

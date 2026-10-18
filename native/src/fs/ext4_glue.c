@@ -768,7 +768,7 @@ int fl_ext4_mount(fl_bdev *dev, bool want_rw, fl_fs **out) {
   bool permis = false;
   char raison[128] = "";
   if (want_rw) rc = fl_ext4_write_policy(dev, v->sb, &permis, raison);
-  if (rc == FL_OK && want_rw && !permis && !strcmp(raison, FL_RO_CSUM)) fl_ext4_policy_log(dev);
+  if (rc == FL_OK && want_rw && !permis && !strcmp(raison, FL_RO_CSUM)) fl_ext4_policy_log(dev, v->sb);
   if (rc != FL_OK) {
     vol_free(fs, v);
     return rc;

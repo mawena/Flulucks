@@ -246,7 +246,7 @@ static int open_fs(const char *path, const char *idx_s, const char *passfile, ct
   if (pr.content != FL_CONTENT_EXT4) return fail_err(FL_ENOTSUP);
   if (explain) {
     puts("== contrôles faits au montage en écriture (§ 4.2) ==");
-    if ((e = fl_ext4_policy_explain(target, stdout)) != FL_OK) fprintf(stderr, "fluluks-cli: diagnostic : %s\n", fl_strerror(e));
+    if ((e = fl_ext4_policy_explain(target, NULL, stdout)) != FL_OK) fprintf(stderr, "fluluks-cli: diagnostic : %s\n", fl_strerror(e));
     fflush(stdout);
   }
   if ((e = fl_fs_mount(target, FL_CONTENT_EXT4, false, &c->fs)) != FL_OK) return fail_err(e);
@@ -301,7 +301,7 @@ static int cmd_ls(ctx *c, const char *path) {
 
 typedef struct {
   unsigned long long dirs, files, others, errors;
-} walk_stats;
+} walk_stats; /* un dossier sous la borne de profondeur compte comme une erreur (non parcouru) */
 
 static void walk_err(walk_stats *w, const char *what, const char *path, int e) {
   if (w->errors++ < 100) printf("  ERREUR %s %s : %s\n", what, path, fl_strerror(e));
@@ -324,6 +324,7 @@ static void walk(ctx *c, char *path, size_t len, unsigned depth, walk_stats *w) 
     if (e != FL_OK) walk_err(w, "inode", path, e);
     else if (st.type == FL_FT_DIR) {
       if (depth < 256) walk(c, path, len + 1 + nl, depth + 1, w);
+      else walk_err(w, "dossier trop profond (non parcouru)", path, FL_EINVAL);
     } else if (st.type == FL_FT_FILE) {
       w->files++;
       fl_file *f = NULL;

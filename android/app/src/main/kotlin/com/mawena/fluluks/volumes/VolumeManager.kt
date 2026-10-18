@@ -476,9 +476,11 @@ object VolumeManager {
                 }
                 var rc = engine.unmount(m.handle, false)
                 if (rc == EngineError.FL_EBUSY) {
-                    // Fichier encore ouvert par une autre application (lecteur vidéo…) : les données sont
-                    // déjà synchronisées, et le démontage forcé ferme ces fichiers puis resynchronise avant
-                    // de démonter. L'application reçoit ensuite une erreur d'E/S (Ruling P12 de la phase 3).
+                    // Fichier encore ouvert par une autre application (lecteur vidéo…) : le démontage forcé
+                    // ferme ces fichiers (chaque fichier écrit est synchronisé) puis resynchronise avant de
+                    // démonter ; l'application reçoit ensuite une erreur d'E/S (Ruling P12 de la phase 3).
+                    // Sur un volume gelé (sync en échec ci-dessus), rien n'est écrit et le démontage rend
+                    // une erreur : message « Éjection incomplète ».
                     rc = engine.unmount(m.handle, true)
                 }
                 // Toute autre erreur : le moteur a déjà détruit le volume (clé effacée, poignée invalide).

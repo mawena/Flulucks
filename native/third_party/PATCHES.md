@@ -338,7 +338,8 @@ rejeu du journal est nécessaire), `test_politique_corruption_en_ecriture` (raci
   bien qu'une écriture loin au-delà de la fin d'un fichier non vide visait un bloc physique hors du
   système de fichiers ; le groupe correspondant n'existe pas (`EFSCORRUPTED`, le volume était gelé).
   Comme le noyau (`ext4_mb_initialize_context`), une cible hors du système de fichiers devient le
-  premier bloc de données ; `ext4_balloc_try_alloc_block` répond « pas libre » pour un tel bloc.
+  premier bloc de données. `ext4_balloc_try_alloc_block` (sans appelant aujourd'hui, garde par
+  précaution) répond « pas libre » pour un tel bloc.
 
 Test : `test_politique_suppression_gros_creux` (20 Mio de données, 1 octet à 1 Tio, suppression en au
 plus 64 vidages de cache — 10 mesurés —, `e2fsck` propre).
