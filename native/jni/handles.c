@@ -60,8 +60,22 @@ static slot *lookup(int64_t h, int type) {
   return s;
 }
 
+/* Enregistre un objet. Un enfant (volume, fichier) n'est jamais enregistré sous un parent en cours de
+ * fermeture : FL_EBUSY (transitoire, la fermeture du parent va aboutir) ; parent disparu : FL_EINVAL.
+ * L'appelant libère l'objet quand le résultat est < 0. */
 static int64_t tab_put(int type, int64_t parent, void *obj) {
   pthread_mutex_lock(&g_mu);
+  if (parent != 0) {
+    slot *ps = lookup(parent, type - 1); /* T_VOL -> T_DISK, T_FILE -> T_VOL */
+    if (!ps) {
+      pthread_mutex_unlock(&g_mu);
+      return FL_EINVAL;
+    }
+    if (ps->closing) {
+      pthread_mutex_unlock(&g_mu);
+      return FL_EBUSY;
+    }
+  }
   for (unsigned k = 0; k < FJ_MAX; k++) {
     unsigned i = (g_next + k) % FJ_MAX;
     slot *s = &g_tab[i];
@@ -168,6 +182,20 @@ static void close_children(int64_t parent, int type, destroy_fn fn) {
     pthread_cond_wait(&g_cv, &g_mu);
   }
   pthread_mutex_unlock(&g_mu);
+}
+
+int fj_debug_slot(int64_t h, unsigned *refs, bool *closing) {
+  int rc = FL_EINVAL;
+  pthread_mutex_lock(&g_mu);
+  for (int t = T_DISK; t <= T_FILE && rc != FL_OK; t++) {
+    slot *s = lookup(h, t);
+    if (!s) continue;
+    if (refs) *refs = s->refs;
+    if (closing) *closing = s->closing;
+    rc = FL_OK;
+  }
+  pthread_mutex_unlock(&g_mu);
+  return rc;
 }
 
 unsigned fj_debug_used(void) {
@@ -438,7 +466,19 @@ int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t pas
 int fj_unmount(int64_t vol, bool force) {
   pthread_mutex_lock(&g_mu);
   slot *s = lookup(vol, T_VOL);
-  if (!s || s->closing) {
+  if (!s) {
+    pthread_mutex_unlock(&g_mu);
+    return FL_EINVAL;
+  }
+  if (!force) {
+    /* le disque parent ferme ses volumes : ce démontage-ci n'a plus rien à faire, et n'est pas une erreur de poignée */
+    slot *ps = lookup(s->parent, T_DISK);
+    if (ps && ps->closing) {
+      pthread_mutex_unlock(&g_mu);
+      return FL_EBUSY;
+    }
+  }
+  if (s->closing) {
     pthread_mutex_unlock(&g_mu);
     return FL_EINVAL;
   }

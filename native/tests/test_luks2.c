@@ -1,9 +1,11 @@
 #define _DEFAULT_SOURCE
+#define _FILE_OFFSET_BITS 64
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #include "crypto/fl_crypto.h"
 #include "fluluks/blockdev.h"
 #include "fluluks/error.h"
@@ -435,6 +437,144 @@ static void test_luks2_choix_entete(void) {
   mem_free(&mi);
 }
 
+/* Un en-tête avec label et sous-système (champs de l'en-tête binaire : label à 24, sous-système à 208)
+ * se déverrouille comme n'importe quel autre ; les deux copies sont re-signées. */
+static void test_luks2_label(void) {
+  memimg mi;
+  TT_ASSERT_EQ(mem_load(&mi, "whole-luks2-4k.img"), 0);
+  for (int c = 0; c < 2; c++) {
+    uint8_t *h = mi.m + (c ? HDR : 0);
+    memset(h + 24, 0, 48);
+    memcpy(h + 24, "Étiquette FluLuks", strlen("Étiquette FluLuks"));
+    memset(h + 208, 0, 48);
+    memcpy(h + 208, "sous-systeme", strlen("sous-systeme"));
+    resigner(h);
+  }
+  unlock_attendu(&mi, "pass.txt", FL_OK);
+  /* label et sous-système remplissant les 48 octets sans NUL final : aucune lecture hors champ */
+  for (int c = 0; c < 2; c++) {
+    uint8_t *h = mi.m + (c ? HDR : 0);
+    memset(h + 24, 'L', 48);
+    memset(h + 208, 'S', 48);
+    resigner(h);
+  }
+  unlock_attendu(&mi, "pass.txt", FL_OK);
+  mem_free(&mi);
+}
+
+/* --- écriture : aller-retour sur une copie de l'image aux paramètres exacts du vrai disque
+ * (argon2id t=7, 1 Gio, 4 fils). Seul test à les utiliser en écriture. --- */
+static int copier_fichier(const char *src, const char *dst) {
+  FILE *a = fopen(src, "rb"), *b = fopen(dst, "wb");
+  int ok = a && b;
+  static unsigned char buf[1u << 20];
+  size_t n;
+  while (ok && (n = fread(buf, 1, sizeof buf, a)) > 0) ok = fwrite(buf, 1, n, b) == n;
+  if (a) fclose(a);
+  if (b && fclose(b) != 0) ok = 0;
+  return ok;
+}
+
+static void remplir(uint8_t *p, size_t n, uint32_t graine) {
+  for (size_t i = 0; i < n; i++) {
+    graine = graine * 1103515245u + 12345u;
+    p[i] = (uint8_t)(graine >> 16);
+  }
+}
+
+static fl_bdev *ouvrir_copie(const char *copie, bool lecture_seule, fl_luks **l) {
+  char pass[256];
+  size_t n = lire_pass(pass, sizeof pass, "pass.txt");
+  fl_bdev *d = NULL, *dec = NULL;
+  *l = NULL;
+  if (n == 0 || fl_file_bdev_open(copie, 512, lecture_seule, &d) != FL_OK) return NULL;
+  if (fl_luks_open(d, l) != FL_OK || fl_luks_unlock(*l, pass, n, &dec) != FL_OK) {
+    fl_luks_close(*l);
+    *l = NULL;
+    fl_bdev_close(d);
+    return NULL;
+  }
+  return dec;
+}
+
+static void aller_retour(const char *copie) {
+  char orig[4096]; /* tt_fixture rend un tampon statique */
+  snprintf(orig, sizeof orig, "%s", tt_fixture("whole-luks2-exact.img"));
+  TT_ASSERT(copier_fichier(orig, copie));
+  fl_luks *l = NULL;
+  fl_bdev *dec = ouvrir_copie(copie, false, &l);
+  TT_ASSERT(dec != NULL);
+  fl_bdev *parent = l->dev;
+  TT_ASSERT(!dec->read_only);
+  uint64_t n = dec->sector_count;
+  TT_ASSERT(n > 1002);
+  /* trois écritures : un secteur à 0, un à 1000, trois secteurs terminant le disque (dernier - 2 .. dernier) */
+  static const struct { uint64_t lba; uint32_t cnt; } ecr[3] = {{0, 1}, {1000, 1}, {0, 3}};
+  uint64_t lba[3] = {ecr[0].lba, ecr[1].lba, n - 3};
+  uint8_t data[3][3 * 512], avant[3][3 * 512];
+  for (int i = 0; i < 3; i++) {
+    TT_ASSERT_EQ(fl_bdev_read(dec, lba[i], ecr[i].cnt, avant[i]), FL_OK);
+    remplir(data[i], sizeof data[i], 77u + (uint32_t)i);
+    TT_ASSERT(memcmp(avant[i], data[i], ecr[i].cnt * 512u) != 0);
+    TT_ASSERT_EQ(fl_bdev_write(dec, lba[i], ecr[i].cnt, data[i]), FL_OK);
+  }
+  TT_ASSERT_EQ(fl_bdev_flush(dec), FL_OK);
+  fl_bdev_close(dec);
+  fl_luks_close(l);
+  fl_bdev_close(parent);
+
+  /* le texte chiffré a changé, et seulement aux 5 secteurs écrits */
+  FILE *a = fopen(orig, "rb"), *b = fopen(copie, "rb");
+  TT_ASSERT(a && b);
+  uint8_t sa[512], sb[512];
+  uint64_t diff[16], nd = 0;
+  for (uint64_t s = 0; fread(sa, 1, 512, a) == 512 && fread(sb, 1, 512, b) == 512; s++)
+    if (memcmp(sa, sb, 512) != 0 && nd < 16) diff[nd++] = s;
+  fclose(a);
+  fclose(b);
+  TT_ASSERT_EQ(nd, 5);
+  uint64_t base = diff[0]; /* secteur brut du LBA 0 : début de la zone de données */
+  TT_ASSERT(base > 0);
+  TT_ASSERT_EQ(diff[1], base + 1000);
+  TT_ASSERT_EQ(diff[2], base + n - 3);
+  TT_ASSERT_EQ(diff[3], base + n - 2);
+  TT_ASSERT_EQ(diff[4], base + n - 1);
+  FILE *f = fopen(copie, "rb");
+  TT_ASSERT(f != NULL);
+  for (int i = 0; i < 3; i++) {
+    uint8_t raw[3 * 512];
+    int ok = fseeko(f, (off_t)((base + lba[i]) * 512), SEEK_SET) == 0 && fread(raw, 1, ecr[i].cnt * 512u, f) == ecr[i].cnt * 512u;
+    if (!ok || memcmp(raw, data[i], ecr[i].cnt * 512u) == 0 || memcmp(raw, avant[i], ecr[i].cnt * 512u) == 0) {
+      fprintf(stderr, "texte chiffré inattendu au LBA %llu\n", (unsigned long long)lba[i]);
+      tt_failures++;
+      fclose(f);
+      return;
+    }
+  }
+  fclose(f);
+
+  /* on rouvre, on redéverrouille : les mêmes octets */
+  dec = ouvrir_copie(copie, true, &l);
+  TT_ASSERT(dec != NULL);
+  parent = l->dev;
+  TT_ASSERT_EQ(dec->sector_count, n);
+  for (int i = 0; i < 3; i++) {
+    uint8_t rd[3 * 512];
+    TT_ASSERT_EQ(fl_bdev_read(dec, lba[i], ecr[i].cnt, rd), FL_OK);
+    TT_ASSERT_MEM_EQ(rd, data[i], ecr[i].cnt * 512u);
+  }
+  fl_bdev_close(dec);
+  fl_luks_close(l);
+  fl_bdev_close(parent);
+}
+
+static void test_luks2_ecriture_aller_retour(void) {
+  char copie[4096];
+  snprintf(copie, sizeof copie, "%s", tt_fixture("tmp-ecriture-aller-retour.img"));
+  aller_retour(copie);
+  unlink(copie); /* même en cas d'échec : TT_ASSERT ne fait que quitter aller_retour */
+}
+
 /* Plus grande mémoire Argon2 parmi les slots utilisables, en Kio ; 0 pour PBKDF2 ou LUKS1. */
 static void kdf_attendu(const char *nom, int partitionne, uint32_t attendu) {
   fl_bdev *d = ouvrir(nom), *s = NULL;
@@ -472,6 +612,7 @@ int main(void) {
   TT_RUN(test_luks2_priorite_et_digest);
   TT_RUN(test_luks2_slot_non_supporte_ignore);
   TT_RUN(test_luks2_magie_abimee);
+  TT_RUN(test_luks2_label);
   TT_RUN(test_luks2_choix_entete);
   TT_RUN(test_luks2_gpt_argon2id);
   TT_RUN(test_luks2_4k_argon2i);
@@ -481,5 +622,6 @@ int main(void) {
   TT_RUN(test_luks2_tronque);
   TT_RUN(test_luks_max_kdf_memory);
   TT_RUN(test_luks2_taille_dynamique_impaire);
+  TT_RUN(test_luks2_ecriture_aller_retour);
   TT_MAIN_END();
 }

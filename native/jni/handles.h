@@ -42,7 +42,9 @@ int fj_scan(int64_t disk, fl_json *out);
 /* Ouvre la partition d'indice part_index : tranche, fl_probe, déverrouillage LUKS si besoin
  * (pass peut être NULL pour un volume en clair), puis ext4 en lecture seule. Poignée volume ou fl_err. */
 int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t passlen);
-/* Sans force : FL_EBUSY si un fichier est ouvert. Avec force : ferme les fichiers (en attendant les
+/* Sans force : FL_EBUSY si un fichier est ouvert, ou si le disque parent est en cours de fermeture
+ * (c'est lui qui démontera le volume). Un enregistrement d'enfant (fj_mount, fj_open_file) sous un
+ * parent en cours de fermeture rend aussi FL_EBUSY. Avec force : ferme les fichiers (en attendant les
  * lectures en cours) puis démonte. */
 int fj_unmount(int64_t vol, bool force);
 
@@ -56,6 +58,8 @@ int64_t fj_open_file(int64_t vol, const char *path);
 int64_t fj_pread(int64_t file, void *buf, size_t len, uint64_t off);
 int fj_close_file(int64_t file);
 
+/* Références et état « en fermeture » d'une entrée (tests) ; FL_EINVAL si la poignée est invalide. */
+int fj_debug_slot(int64_t h, unsigned *refs, bool *closing);
 /* Nombre d'entrées occupées (tests). */
 unsigned fj_debug_used(void);
 

@@ -2,6 +2,9 @@
 """Images forgées : signatures, MBR étendu, GPT abîmé / hors bornes.
   craft.py sig NOM OUT | mbr-etendue OUT | gpt-secours OUT | gpt-hors-bornes OUT
          | ext4-entrees-hostiles IMG BLOC INODE GENERATION
+         | gpt-hostile VARIANTE OUT | ebr-boucle OUT
+  gpt-hostile : nent-enorme | esize-zero | esize-impair | entrees-hors-disque
+                (les deux en-têtes portent le défaut, avec leur somme de contrôle valide)
 """
 import struct, sys, uuid, zlib
 
@@ -43,7 +46,7 @@ def mbr_etendue(out):
 LINUX = uuid.UUID("0FC63DAF-8483-4772-8E79-3D69D8477DE4")
 
 
-def gpt(total_sectors, parts, corrupt_primary_crc=False):
+def gpt(total_sectors, parts, corrupt_primary_crc=False, nent=128, esize=128, ent_off=0):
     """parts: [(first, last, nom)]. Retourne l'image (octets)."""
     img = bytearray(total_sectors * 512)
     img[0:512] = mbr_sector([struct.pack("<B3sB3sII", 0, b"\0\2\0", 0xEE, b"\xff\xff\xff", 1,
@@ -63,7 +66,7 @@ def gpt(total_sectors, parts, corrupt_primary_crc=False):
         struct.pack_into("<IIII", h, 8, 0x00010000, 92, 0, 0)
         struct.pack_into("<QQQQ", h, 24, cur, bak, 34, last_lba - 33)
         h[56:72] = disk_guid
-        struct.pack_into("<QIII", h, 72, arr_lba, 128, 128, arr_crc)
+        struct.pack_into("<QIII", h, 72, arr_lba + ent_off, nent, esize, arr_crc)
         struct.pack_into("<I", h, 16, zlib.crc32(bytes(h)))
         return h
 
@@ -76,6 +79,17 @@ def gpt(total_sectors, parts, corrupt_primary_crc=False):
     img[(last_lba - 32) * 512:(last_lba - 32) * 512 + len(arr)] = arr
     img[last_lba * 512:last_lba * 512 + 92] = back
     return img
+
+
+def ebr_boucle(out):
+    """MBR étendu dont la chaîne d'EBR reboucle : A -> B -> C -> B. Trois logiques (5, 6, 7) puis arrêt."""
+    img = bytearray(16 << 20)
+    img[0:512] = mbr_sector([mbr_entry(0x0C, 2048, 8192), mbr_entry(0x05, 10240, 12288)])
+    # étendue : début 10240, longueur 12288 ; liens relatifs au début de l'étendue
+    for rel, ptype, nxt in ((0, 0x83, 4096), (4096, 0x83, 8192), (8192, 0x83, 4096)):
+        entries = [mbr_entry(ptype, 2048, 1024), mbr_entry(0x05, nxt, 1024)]
+        img[(10240 + rel) * 512:(10241 + rel) * 512] = mbr_sector(entries)
+    open(out, "wb").write(img)
 
 
 def crc32c(crc, data):
@@ -147,6 +161,12 @@ def main():
         open(sys.argv[2], "wb").write(gpt(16384, [(2048, 4095, "un"), (4096, 8191, "deux")], True))
     elif c == "gpt-hors-bornes":
         open(sys.argv[2], "wb").write(gpt(16384, [(2048, 4095, "un"), (4096, 100000, "deux")]))
+    elif c == "gpt-hostile":
+        v = {"nent-enorme": dict(nent=0x10000000), "esize-zero": dict(esize=0),
+             "esize-impair": dict(esize=130), "entrees-hors-disque": dict(ent_off=1 << 20)}[sys.argv[2]]
+        open(sys.argv[3], "wb").write(gpt(16384, [(2048, 4095, "un")], **v))
+    elif c == "ebr-boucle":
+        ebr_boucle(sys.argv[2])
     elif c == "ext4-entrees-hostiles":
         ext4_entrees_hostiles(sys.argv[2], int(sys.argv[3]), int(sys.argv[4]), int(sys.argv[5]))
     else:

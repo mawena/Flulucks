@@ -210,6 +210,10 @@ head -c 4096 whole-luks2-4k.img > luks-tronque.img
 truncate -s 16M mbr-etendue.img;  $PY "$HERE/craft.py" mbr-etendue mbr-etendue.img
 $PY "$HERE/craft.py" gpt-secours gpt-secours.img
 $PY "$HERE/craft.py" gpt-hors-bornes gpt-hors-bornes.img
+for v in nent-enorme esize-zero esize-impair entrees-hors-disque; do
+  $PY "$HERE/craft.py" gpt-hostile "$v" "gpt-hostile-$v.img"
+done
+$PY "$HERE/craft.py" ebr-boucle ebr-boucle.img
 truncate -s 32M fat16.img; mkfs.vfat -F 16 -n FLUFAT16 fat16.img >/dev/null
 truncate -s 64M fat32.img; mkfs.vfat -F 32 -n FLUFAT32 fat32.img >/dev/null
 truncate -s 32M ntfs.img;  mkfs.ntfs -F -f -q -L FLUNTFS ntfs.img

@@ -369,6 +369,67 @@ static void test_demontage_force_pendant_lectures(void) { lecteurs(1); }
 static void test_fermeture_disque_pendant_lectures(void) { lecteurs(2); }
 static void test_fermeture_fichier_pendant_lectures(void) { lecteurs(3); }
 
+/* ---- fermeture du disque en cours : FL_EBUSY au lieu d'un FL_EINVAL transitoire ---- */
+
+typedef struct {
+  int64_t disk, rc;
+  const char *pass;
+  size_t passlen;
+} tache;
+
+static void *tache_monter(void *arg) {
+  tache *t = arg;
+  t->rc = fj_mount(t->disk, 0, t->pass, t->passlen);
+  return NULL;
+}
+
+static void *tache_fermer(void *arg) {
+  tache *t = arg;
+  t->rc = fj_close_disk(t->disk);
+  return NULL;
+}
+
+/* Attend (au plus 60 s) que la poignée ait au moins `refs` références et l'état `closing` voulu. */
+static int attendre_etat(int64_t h, unsigned refs, bool closing) {
+  for (int i = 0; i < 60000; i++) {
+    unsigned r = 0;
+    bool c = false;
+    if (fj_debug_slot(h, &r, &c) == FL_OK && r >= refs && c == closing) return 1;
+    attendre_ms(1);
+  }
+  return 0;
+}
+
+/* Un fj_mount lent (Argon2 aux paramètres du vrai disque) tient une référence sur le disque ; un
+ * fj_close_disk le marque « en fermeture » et attend. Pendant ce temps :
+ *   - fj_unmount(v1, false) rend FL_EBUSY (le disque démontera v1 lui-même) ;
+ *   - le fj_mount qui se termine ne peut plus enregistrer son volume : FL_EBUSY, et rien ne fuit. */
+static void test_handles_ebusy_fermeture(void) {
+  char pass[256];
+  size_t n = lire_pass(pass, sizeof pass, "pass.txt");
+  TT_ASSERT(n > 0);
+  int64_t d = fj_open_image(tt_fixture("whole-luks2-exact.img"));
+  TT_ASSERT(d > 0);
+  int64_t v1 = fj_mount(d, 0, pass, n);
+  TT_ASSERT(v1 > 0);
+  tache monte = {d, 0, pass, n}, ferme = {d, 0, NULL, 0};
+  pthread_t ta, tb;
+  TT_ASSERT_EQ(pthread_create(&ta, NULL, tache_monter, &monte), 0);
+  int ok_a = attendre_etat(d, 1, false);
+  TT_ASSERT_EQ(pthread_create(&tb, NULL, tache_fermer, &ferme), 0);
+  int ok_b = attendre_etat(d, 1, true);
+  int64_t um = ok_a && ok_b ? fj_unmount(v1, false) : -9999;
+  pthread_join(ta, NULL);
+  pthread_join(tb, NULL);
+  TT_ASSERT(ok_a && ok_b);
+  TT_ASSERT_EQ(um, FL_EBUSY);
+  TT_ASSERT_EQ(monte.rc, FL_EBUSY);
+  TT_ASSERT_EQ(ferme.rc, FL_OK);
+  TT_ASSERT_EQ(fj_unmount(v1, true), FL_EINVAL);
+  TT_ASSERT_EQ(fj_unmount(v1, false), FL_EINVAL);
+  TT_ASSERT_EQ(fj_debug_used(), 0);
+}
+
 int main(void) {
   srand((unsigned)time(NULL));
   TT_RUN(test_scan_gpt_luks2);
@@ -382,5 +443,6 @@ int main(void) {
   TT_RUN(test_fermeture_disque_pendant_lectures);
   TT_RUN(test_fermeture_fichier_pendant_lectures);
   TT_RUN(test_luks_phrase);
+  TT_RUN(test_handles_ebusy_fermeture);
   TT_MAIN_END();
 }
