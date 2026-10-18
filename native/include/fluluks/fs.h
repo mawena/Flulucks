@@ -70,12 +70,14 @@ int fl_fs_readdir(fl_fs *fs, const char *path, int (*cb)(void *ctx, const fl_dir
 int fl_fs_open(fl_fs *fs, const char *path, int flags, fl_file **out);
 /* Octets lus, 0 = fin, <0 = fl_err. Indépendant de tout curseur : sûr en appels entrelacés. */
 int64_t fl_file_pread(fl_file *f, void *buf, size_t len, uint64_t off);
-/* Octets écrits (= len) ou fl_err, jamais un compte court. Écrire au-delà de la fin laisse un trou,
- * lu comme des zéros. Met à jour mtime et ctime. */
+/* Octets écrits (= len) ou fl_err, jamais un compte court (après une erreur, le fichier garde ce
+ * qui a été écrit, taille comprise). Écrire au-delà de la fin laisse un trou, lu comme des zéros.
+ * Met à jour mtime et ctime. ext4 : FL_ENOTSUP pour un fichier sans extents (ext3). */
 int64_t fl_file_pwrite(fl_file *f, const void *buf, size_t len, uint64_t off);
 /* Vers le bas comme vers le haut (trou lu comme des zéros). Met à jour mtime et ctime. */
 int fl_file_truncate(fl_file *f, uint64_t size);
-/* NULL accepté. Un fichier écrit (ou tronqué) : mtime et ctime mis à jour, puis fl_fs_sync. */
+/* NULL accepté. Un fichier écrit ou tronqué depuis son ouverture : fl_fs_sync (dont le code est
+ * rendu). */
 int fl_file_close(fl_file *f);
 /* Droits 0755 (02755 si le parent a le bit setgid), uid et gid du parent. FL_EEXIST si le chemin
  * existe, FL_ENOENT si le parent n'existe pas. */

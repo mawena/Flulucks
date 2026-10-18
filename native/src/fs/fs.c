@@ -1,15 +1,15 @@
 #include <stdatomic.h>
+#include <stdio.h>
 #include <string.h>
 #include <time.h>
 
 #include "fluluks/error.h"
 #include "fluluks/fs.h"
 #include "fs/fs_internal.h"
+#include "fs/ro_reasons.h"
 
 #define FL_PATH_MAX 4095
 #define FL_NAME_MAX 255
-
-static const char k_ro_phase1[] = "écriture pas encore disponible";
 
 static const struct {
   fl_content kind;
@@ -55,12 +55,16 @@ int fl_fs_mount(fl_bdev *dev, fl_content kind, bool want_rw, fl_fs **out) {
   for (size_t i = 0; i < sizeof k_backends / sizeof k_backends[0]; i++) {
     if (k_backends[i].kind != kind) continue;
     fl_fs *fs = NULL;
-    /* Phase 1 : lecture seule quoi que demande l'appelant. */
-    (void)want_rw;
-    int rc = k_backends[i].mount(dev, false, &fs);
+    /* Lecture seule demandée, ou imposée par le périphérique (disque protégé en écriture, ou
+     * image ouverte ainsi) : raison posée ici. Sinon le système de fichiers décide, et pose
+     * sa raison s'il refuse l'écriture. */
+    bool rw = want_rw && !dev->read_only;
+    int rc = k_backends[i].mount(dev, rw, &fs);
     if (rc != FL_OK) return rc;
-    fs->read_only = true;
-    memcpy(fs->ro_reason, k_ro_phase1, sizeof k_ro_phase1);
+    if (!rw) {
+      fs->read_only = true;
+      snprintf(fs->ro_reason, sizeof fs->ro_reason, "%s", want_rw ? FL_RO_WP : FL_RO_USER);
+    }
     *out = fs;
     return FL_OK;
   }

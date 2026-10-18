@@ -9,7 +9,9 @@
   - `native/third_party/patches/lwext4/0001-fix-lecture-des-trous-parcours-de-dossier-et-inodes-.patch`
     (généré par `git format-patch`, détaillé ci-dessous en 1 à 3) ;
   - `native/third_party/patches/lwext4/0002-lecture-noms-255-trous-de-dossier.patch` (phase 3, T1,
-    détaillé en 4 à 6).
+    détaillé en 4 à 6) ;
+  - `native/third_party/patches/lwext4/0003-ecriture-api-horodatages-trous.patch` (phase 3, T4,
+    détaillé en 7 à 10).
 - Application (`native/cmake/third_party.cmake`, à la configuration CMake) : `src/` et `include/` du
   sous-module sont copiés dans `${CMAKE_BINARY_DIR}/third_party/lwext4`, puis chaque correctif y est
   appliqué par `git apply -p1` (avec `GIT_CEILING_DIRECTORIES`, sinon `git apply` lancé à l'intérieur
@@ -19,12 +21,14 @@
   --build` reconfigure tout seul. Un correctif qui ne s'applique pas fait échouer la configuration.
 - Ajouter un correctif : le préparer dans le sous-module (branche locale), l'exporter par
   `git -C native/third_party/lwext4 format-patch -1 <commit> -o native/third_party/patches/lwext4/` en le
-  numérotant à la suite, puis remettre le sous-module sur `58bcf89`.
+  numérotant à la suite, puis remettre le sous-module sur `58bcf89`. La configuration copie le
+  sous-module tel qu'il est sur le disque : un travail en cours y casse l'application des correctifs
+  (le faire plutôt dans un `git worktree` hors du sous-module).
 
 Aucune fonctionnalité du disque réel (`metadata_csum`, `64bit`, `flex_bg`, `extent`, `huge_file`,
 `dir_nlink`, `extra_isize`, journal présent mais non rejoué…) n'est refusée par lwext4 : le montage en
-lecture seule fonctionne sans correctif. Les correctifs portent sur la justesse de la lecture et sur la
-robustesse face à un disque hostile.
+lecture seule fonctionne sans correctif. Les correctifs 0001 et 0002 portent sur la justesse de la
+lecture et sur la robustesse face à un disque hostile ; 0003 sur l'écriture.
 
 ### 1. `ext4_fread` : trous et extents non écrits lus comme des zéros
 
@@ -117,7 +121,88 @@ Tests :
 
 Test : `test_ext4_entree_hostile_ignoree` (`ext4-entrees-hostiles.img`, fabriquée par `craft.py`).
 
+### 7. Règles de création et horodatages (`ext4_set_policy`, `ext4_inode_set_times`)
+
+L'amont ne tenait aucun horodatage (tout à 0, donc 1970 sous Ubuntu), créait les fichiers en 0666 et
+les dossiers en 0777, en uid/gid 0, sans hériter du bit setgid. `ext4_set_policy(&règle)` pose une
+horloge et les droits des inodes créés ; avec elle, lwext4 tient les horodatages comme le noyau, dans
+la transaction de chaque opération :
+- création : atime, mtime, ctime et crtime (bits d'époque des champs « extra » après 2038 ; crtime si
+  `extra_isize` ≥ 24) ; uid et gid du dossier parent (16 bits hauts compris), droits de la règle, bit
+  setgid hérité par un dossier ;
+- écriture et troncature : mtime et ctime du fichier ;
+- ajout, retrait et renommage d'entrée : mtime et ctime du ou des dossiers parents, ctime de l'inode
+  déplacé ou délié ; dtime d'un inode libéré.
+
+La colle pose `{fl_fs_now, 0644, 0755}` à chaque montage en écriture (§ 4.2 de la spec). Sans règle :
+comportement amont.
+
+Tests : `test_ecriture_proprietaire_herite`, `test_ecriture_horodatages` (dont 2106).
+
+### 8. Écriture de fichiers : trous, blocs partiels, erreurs
+
+- `ext4_fwrite` est réécrit pour les fichiers à extents. L'amont, pour un bloc au-delà de la fin,
+  appelait `ext4_fs_append_inode_dblk`, qui alloue le bloc suivant la fin et non celui visé (une
+  écriture au-delà de la fin atterrissait au mauvais endroit) ; un bloc partiel nouvellement alloué
+  gardait l'ancien contenu du disque autour des données ; l'erreur d'E/S était écrasée par
+  `ext4_fs_put_inode_ref` (EOK avec 0 octet écrit) ; une sortie anticipée laissait le cache en
+  écriture différée. Désormais : trou au-delà de la fin, zéros autour des données d'un bloc neuf,
+  blocs entiers alloués par suites contiguës, taille tenue au fil de l'écriture (une erreur laisse un
+  fichier cohérent, plus court), première erreur rendue. Un fichier adressé par blocs (sans extents)
+  rend `ENOTSUP` ; au-delà de 2³² blocs, `EFBIG`.
+- `ext4_ftruncate` : agrandir crée un trou (l'amont rendait EOK sans effet) ; raccourcir à une taille
+  non alignée met à zéro la fin du nouveau dernier bloc, comme le noyau (`block_truncate_page`).
+- `ext4_fseek` : position au-delà de la fin permise, `SEEK_END` corrigé (le décalage était
+  retranché) ; `ext4_fread` ne lit rien au-delà de la fin.
+- `ext4_extent_remove_space` : quand le début de la plage tombe dans un trou, l'amont ne retirait
+  rien ; supprimer un fichier creux (`clairsemé.bin`) laissait ses blocs alloués (e2fsck « Block bitmap
+  differences »).
+
+Tests : `test_ecriture_trou`, `test_ecriture_troncature`, `test_ecriture_gros_fichier`,
+`test_ecriture_suppression`.
+
+### 9. Dossiers en écriture
+
+- `ext4_dir_dx_init` : racine et feuille (non lues) remplies de zéros ; la somme de la feuille est
+  posée après la mise à 0 de l'inode (avant : e2fsck « passes checks but fails checksum » pour chaque
+  dossier resté vide, défaut de l'essai).
+- `ext4_dir_find_entry`, `ext4_dir_add_entry` : un index htree jugé invalide rend `EFSCORRUPTED`, sans
+  effacer le drapeau d'index (l'amont l'effaçait, même pour une recherche, puis continuait en linéaire).
+- `ext4_dir_try_insert_entry`, `ext4_dir_dx_split_data` : entrées validées comme dans
+  `ext4_dir_find_in_block` (`EFSCORRUPTED` ; une longueur nulle bouclait sans fin), erreur propagée par
+  les appelants au lieu d'être prise pour un bloc plein.
+- `ext4_dir_dx_get_leaf` : le nœud fils d'un index à deux niveaux est lu dans un bloc à lui (avant :
+  dans la racine de l'appelant, rendue jamais, le fils deux fois, sur une erreur à ce niveau).
+- `ext4_dir_dx_split_index` : la limite d'un nouveau nœud tient compte de la queue de somme ; l'amont
+  écrivait une limite que lwext4 lui-même jugeait ensuite invalide (index à deux niveaux avec
+  `metadata_csum`).
+- `ext4_dir_dx_add_entry` : un ajout qui échoue après le partage d'une feuille rend l'erreur (avant :
+  EOK, entrée manquante).
+- `ext4_link` : renommer un dossier linéaire vers un autre parent recalcule la somme du bloc de « .. »
+  (avant : « Directory block checksum does not match »).
+
+Tests : `test_ecriture_dossier_vide`, `test_ecriture_3000`, `test_ecriture_renommage`,
+`test_ecriture_htree_invalide_sans_modif`, `test_interne_htree_invalide_recherche`,
+`test_interne_ajout_longueur_nulle`, `test_interne_htree_2niveaux_erreur`.
+
+### 10. `ext4_dir_rm`
+
+Un dossier à libérer est vidé par `ext4_trunc_inode` avant le retrait de son entrée, comme un fichier
+dans `ext4_fremove`. `ext4_trunc_dir`, qui reconstruisait d'abord un index dans le dossier (et
+échouait en `ENOTSUP` sur un dossier sans extents d'un seul bloc, après avoir retiré l'entrée : dossier
+délié mais alloué), disparaît.
+
+Tests : `test_interne_rmdir_sans_extents`, `test_ext4_dossier_indirect_bloc0`.
+
 ## Protections côté FluLuks (sans correctif lwext4)
+
+En écriture, `ext4_glue.c` vérifie chaque opération avant d'appeler lwext4, dont les fonctions de haut
+niveau ont des effets que l'API n'admet pas : `ext4_fopen2` avec `O_CREAT` crée les dossiers
+intermédiaires (le parent doit exister), `ext4_frename` et `ext4_dir_mk` ne refusent pas tous les cas
+(cible existante, cible sous la source), `ext4_dir_rm` supprime récursivement (le dossier doit être
+vide), `ext4_fremove` sur un fichier ouvert libère son inode sous le descripteur (`FL_EBUSY`).
+L'écriture n'est permise qu'avec journal et extents, et sans option inconnue ; sinon lecture seule avec
+la raison.
 
 `native/src/fs/ext4_glue.c` valide le superbloc avant de laisser lwext4 s'en servir (taille de bloc,
 tailles d'inode et de descripteur, compteurs par groupe, cohérence avec la taille du disque, fonctions
@@ -127,23 +212,17 @@ superbloc avec `s_log_block_size = 30` provoque un comportement indéfini dans l
 
 ## Limites connues de lwext4 (non corrigées)
 
-- `ext4_dir_find_entry` et `ext4_dir_add_entry` effacent encore le drapeau d'index d'un dossier (et
-  marquent l'inode modifié) quand l'index htree est jugé invalide (`EXT4_ERR_BAD_DX_DIR` : version de
-  hachage inconnue, limite fausse…), puis repassent en linéaire. À revoir avant d'écrire.
-- `ext4_dir_try_insert_entry` et `ext4_dir_dx_split_data` (ajout d'entrée) parcourent un bloc de dossier sans
-  valider les longueurs d'entrée. À revoir avant d'écrire.
 - Blocs de 64 Kio sans `metadata_csum` : une entrée qui couvre tout le bloc a une longueur codée 0 ou 65535
   (65536 pour le noyau) ; `ext4_dir_find_in_block` (comme déjà `ext4_dir_iterator_set` en amont) la traite
   comme une corruption. Le vrai disque a des blocs de 4 Kio et `metadata_csum`.
-- `ext4_fwrite` : pour un fichier adressé par blocs (sans extents), `ext4_fs_init_inode_dblk_idx` rend 0 sur
-  un trou, et l'écriture d'un bloc non aligné vise alors le bloc 0 du disque. À revoir avant d'écrire (ou
-  refuser l'écriture sans `extent`).
-- `ext4_dir_rm` délie l'entrée du dossier parent avant `ext4_trunc_dir` : quand ce dernier échoue (dossier
-  sans extents d'un seul bloc → `ENOTSUP`), le dossier reste délié mais non libéré (récupérable par
-  `e2fsck`, sans corruption du bloc 0).
-- `ext4_dir_dx_get_leaf` lit le nœud fils d'un index à deux niveaux dans la structure `ext4_block` de la
-  racine fournie par l'appelant : sur une erreur à ce niveau, la racine n'est pas libérée et le fils l'est
-  deux fois (compteur de références du cache). À revoir avant d'écrire.
+- Un dossier créé par lwext4 est toujours indexé (racine htree et une feuille, 2 blocs), même vide ;
+  le noyau crée un dossier linéaire d'un bloc et ne l'indexe qu'au-delà. Valide pour `e2fsck`.
+- Une opération en plusieurs transactions n'est pas atomique : la suppression d'un fichier ou d'un
+  dossier tronque d'abord (transactions de 16 Mio au plus), puis retire l'entrée ; une coupure entre les
+  deux laisse une entrée vers un fichier vide, que `e2fsck` accepte.
+- Journal : les sommes jbd2 v3 écrites par lwext4 sont fausses et la séquence repart de 0 à chaque
+  session (essai du 2026-10-18) ; correctif 0004 (T5). D'ici là, seul un démontage propre laisse le
+  disque propre : une coupure en pleine écriture n'est pas récupérable proprement par Ubuntu.
 - Les liens symboliques ne sont pas suivis ; `fl_fs_open` sur un lien rend `FL_ENOTSUP`.
 - Les sommes de contrôle `metadata_csum` des inodes, des descripteurs et des dossiers ne sont vérifiées
   qu'à titre d'avertissement (seule celle du superbloc est bloquante).

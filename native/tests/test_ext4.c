@@ -12,6 +12,7 @@
 #include "fluluks/fs.h"
 #include "fluluks/luks.h"
 #include "fluluks/partition.h"
+#include "fs/ro_reasons.h"
 #include "ext4.h"
 #include "ext4_blockdev.h"
 #include "ext4_crc32.h"
@@ -334,7 +335,8 @@ static void test_ext4_lecture_seule(void) {
   fl_bdev *d = ouvrir("ext4-plain.img");
   TT_ASSERT(d != NULL);
   fl_fs *fs = NULL;
-  TT_ASSERT_EQ(fl_fs_mount(d, FL_CONTENT_EXT4, true, &fs), FL_OK); /* want_rw ignoré */
+  /* image ouverte en lecture seule : want_rw donne la lecture seule « disque protégé » */
+  TT_ASSERT_EQ(fl_fs_mount(d, FL_CONTENT_EXT4, true, &fs), FL_OK);
   fl_file *f = (fl_file *)0x1;
   TT_ASSERT_EQ(fl_fs_open(fs, "/hello.txt", FL_O_RDWR, &f), FL_EROFS);
   TT_ASSERT(f == NULL);
@@ -354,7 +356,7 @@ static void test_ext4_lecture_seule(void) {
   TT_ASSERT_EQ(fl_fs_statfs(fs, &s), FL_OK);
   TT_ASSERT(s.read_only);
   TT_ASSERT_STR_EQ(s.label, "FLUTEST");
-  TT_ASSERT_STR_EQ(s.ro_reason, "écriture pas encore disponible");
+  TT_ASSERT_STR_EQ(s.ro_reason, FL_RO_WP);
   TT_ASSERT(!s.needs_recovery);
   TT_ASSERT_EQ(s.total_bytes, 64u << 20);
   TT_ASSERT(s.free_bytes > 0 && s.free_bytes < s.total_bytes);
@@ -1191,8 +1193,9 @@ static void test_ext4_trou_de_dossier_ajout(void) {
   TT_ASSERT_EQ(sb, 0);
 }
 
-/* Dossiers adressés par blocs (sans extents) : ext4_dir_dx_init (appelé par ext4_dir_rm via
- * ext4_trunc_dir) ne doit jamais prendre le bloc 0 du disque pour un bloc de dossier. */
+/* Dossiers adressés par blocs (sans extents) : ext4_dir_dx_init ne doit jamais prendre le bloc 0
+ * du disque pour un bloc de dossier, ni ext4_dir_rm (qui l'appelait via ext4_trunc_dir avant le
+ * correctif 0003, et supprime maintenant un dossier vide sans index). */
 static void test_ext4_dossier_indirect_bloc0(void) {
   struct ext4_fs *fs;
   bool monte;
@@ -1207,7 +1210,7 @@ static void test_ext4_dossier_indirect_bloc0(void) {
       ext4_fs_put_inode_ref(&dir);
     }
     rr = ext4_dir_rm("/tt/r");    /* le parcours de /r bute sur le trou */
-    rv = ext4_dir_rm("/tt/vide"); /* un seul bloc : le bloc logique 1 serait à allouer */
+    rv = ext4_dir_rm("/tt/vide"); /* un seul bloc : vidé puis libéré, sans dx_init */
     bas = g_mem.bas;
     sb = g_mem.sb;
   }
@@ -1215,7 +1218,7 @@ static void test_ext4_dossier_indirect_bloc0(void) {
   TT_ASSERT_EQ(rm, EOK);
   TT_ASSERT_EQ(rx, EFSCORRUPTED);
   TT_ASSERT_EQ(rr, EFSCORRUPTED);
-  TT_ASSERT_EQ(rv, ENOTSUP);
+  TT_ASSERT_EQ(rv, EOK);
   TT_ASSERT_EQ(bas, 0);
   TT_ASSERT_EQ(sb, 0);
 }

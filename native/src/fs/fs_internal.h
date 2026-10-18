@@ -22,7 +22,7 @@ typedef struct {
   /* off < taille et len > 0 ne sont pas garantis : à vérifier par l'implémentation. */
   int64_t (*pread)(fl_file *f, void *buf, size_t len, uint64_t off);
   int (*close)(fl_file *f);
-  /* Écriture (phase 4+) ; NULL tant que non implémenté. */
+  /* Écriture ; NULL si le système de fichiers ne l'implémente pas. */
   int64_t (*pwrite)(fl_file *f, const void *buf, size_t len, uint64_t off);
   int (*truncate)(fl_file *f, uint64_t size);
   int (*mkdir)(fl_fs *fs, const char *path);

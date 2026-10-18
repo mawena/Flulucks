@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -258,33 +259,39 @@ static void test_banc_modele(void) {
       unlink(copie);
       continue;
     }
+    /* droits des fichiers de tree/ : ceux de l'umask de make_fixtures.sh (0664 ou 0644) */
+    char ph[4200];
+    struct stat sh;
+    snprintf(ph, sizeof ph, "%s/hello.txt", tree);
+    TT_ASSERT_EQ(stat(ph, &sh), 0);
+    const unsigned mf = sh.st_mode & 07777;
     tm_set_quiet(1);
 #define DIFFERENT(mod) ((!fs || tm_check_fl(mod, fs) > 0) && tm_check_debugfs(mod, copie) > 0)
 #define IDENTIQUE(mod) ((!fs || tm_check_fl(mod, fs) == 0) && tm_check_debugfs(mod, copie) == 0)
-    TT_ASSERT_EQ(tm_apply_file(m, "/hello.txt", "Bonjour FluLuk5\n", 16, getuid(), getgid(), 0664), 0);
+    TT_ASSERT_EQ(tm_apply_file(m, "/hello.txt", "Bonjour FluLuk5\n", 16, getuid(), getgid(), mf), 0);
     int ok1 = DIFFERENT(m);
     tm_free(m);
     m = tm_clone(base);
     TT_ASSERT(m != NULL);
     TT_ASSERT_EQ(tm_apply_unlink(m, "/hello.txt"), 0); /* sur le volume : fichier en trop */
     int ok2 = DIFFERENT(m);
-    TT_ASSERT_EQ(tm_apply_file(m, "/hello.txt", "Bonjour FluLuks\n", 16, getuid(), getgid(), 0664), 0);
-    TT_ASSERT_EQ(tm_apply_file(m, "/fantome", "x", 1, getuid(), getgid(), 0664), 0); /* manquant */
+    TT_ASSERT_EQ(tm_apply_file(m, "/hello.txt", "Bonjour FluLuks\n", 16, getuid(), getgid(), mf), 0);
+    TT_ASSERT_EQ(tm_apply_file(m, "/fantome", "x", 1, getuid(), getgid(), mf), 0); /* manquant */
     int ok3 = DIFFERENT(m);
     TT_ASSERT_EQ(tm_apply_unlink(m, "/fantome"), 0);
     int ok4 = IDENTIQUE(m); /* remis à l'identique */
-    TT_ASSERT_EQ(tm_apply_attrs(m, "/hello.txt", getuid() + 1, getgid(), 0664), 0);
+    TT_ASSERT_EQ(tm_apply_attrs(m, "/hello.txt", getuid() + 1, getgid(), mf), 0);
     int ok5 = DIFFERENT(m);
     /* gros.bin (5 Mio, plusieurs tranches) : le même contenu en mémoire donne le même condensat que le
      * fichier lu sur disque ; un octet changé au milieu est vu. */
-    TT_ASSERT_EQ(tm_apply_attrs(m, "/hello.txt", getuid(), getgid(), 0664), 0);
+    TT_ASSERT_EQ(tm_apply_attrs(m, "/hello.txt", getuid(), getgid(), mf), 0);
     uint8_t *gros = malloc((size_t)5 << 20);
     TT_ASSERT(gros != NULL);
     for (size_t k = 0; k < ((size_t)5 << 20); k++) gros[k] = (uint8_t)((k * 31 + 7) & 0xFF);
-    TT_ASSERT_EQ(tm_apply_file(m, "/gros.bin", gros, (size_t)5 << 20, getuid(), getgid(), 0664), 0);
+    TT_ASSERT_EQ(tm_apply_file(m, "/gros.bin", gros, (size_t)5 << 20, getuid(), getgid(), mf), 0);
     int ok6 = IDENTIQUE(m);
     gros[(size_t)2500000] ^= 1;
-    TT_ASSERT_EQ(tm_apply_file(m, "/gros.bin", gros, (size_t)5 << 20, getuid(), getgid(), 0664), 0);
+    TT_ASSERT_EQ(tm_apply_file(m, "/gros.bin", gros, (size_t)5 << 20, getuid(), getgid(), mf), 0);
     int ok7 = DIFFERENT(m);
     free(gros);
 #undef DIFFERENT

@@ -1,0 +1,1336 @@
+From e4e546988cf736f71226fcd9bd96a9f1beb2a854 Mon Sep 17 00:00:00 2001
+From: mawena <gamligocharles@gmail.com>
+Date: Sun, 18 Oct 2026 08:26:36 +0000
+Subject: [PATCH] =?UTF-8?q?fix:=20=C3=A9criture=20(horodatages,=20propri?=
+ =?UTF-8?q?=C3=A9taire=20h=C3=A9rit=C3=A9,=20trous,=20dossiers)=20(FluLuks?=
+ =?UTF-8?q?)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Ce que l'écriture de FluLuks demande à lwext4 (phase 3, T4). Constats
+de l'essai du 2026-10-18 (docs/superpowers/research/2026-10-18-essai-
+lwext4-ecriture/RAPPORT.md), des limites notées par le correctif 0002
+(third_party/PATCHES.md), et des défauts trouvés par
+native/tests/test_ext4_ecriture.c (e2fsck -fn comme juge).
+
+Règles de création et horloge :
+- ext4_set_policy (nouvelle) pose une horloge et les droits des inodes
+  créés. Avec elle, lwext4 tient les horodatages comme le noyau, dans la
+  transaction de chaque opération : création (atime, mtime, ctime et
+  crtime, avec les bits d'époque après 2038), écriture et troncature
+  (mtime, ctime), ajout, retrait et renommage d'entrée (mtime et ctime
+  des dossiers parents, ctime de l'inode déplacé ou délié), dtime d'un
+  inode libéré. Un inode créé reçoit l'uid et le gid de son dossier
+  parent (16 bits hauts compris), les droits de la règle, et un dossier
+  hérite du bit setgid. Sans règle (défaut) : comportement amont
+  (horodatages à 0, uid et gid 0, 0666 et 0777).
+- ext4_inode_set_times (nouvelle) : horodatage 64 bits, champs « extra »
+  remplis selon extra_isize ; crtime dès que extra_isize >= 24.
+
+Fichiers :
+- ext4_fwrite réécrit pour les fichiers à extents : une écriture au-delà
+  de la fin laisse un trou (l'amont allouait le bloc suivant la fin, à
+  la place du bon, via ext4_fs_append_inode_dblk) ; un bloc partiel
+  nouvellement alloué reçoit des zéros autour des données (l'amont y
+  laissait l'ancien contenu du disque) ; les blocs entiers sont alloués
+  par suites contiguës. L'erreur n'est plus écrasée par
+  ext4_fs_put_inode_ref (EOK avec wcnt = 0 sur une erreur d'E/S), le
+  mode d'écriture différée du cache est toujours rétabli, et la taille
+  suit ce qui est écrit. Un fichier adressé par blocs (sans extents)
+  rend ENOTSUP : ext4_fs_init_inode_dblk_idx y donne 0, le bloc 0 du
+  disque, pour un trou. Au-delà de 2^32 blocs : EFBIG.
+- ext4_ftruncate : agrandir change la taille (trou, lu comme des zéros ;
+  l'amont rendait EOK sans rien faire). Raccourcir à une taille non
+  alignée met à zéro la fin du nouveau dernier bloc, comme le noyau
+  (block_truncate_page), pour qu'un agrandissement ultérieur lise des
+  zéros. Plus de double déverrouillage sur erreur.
+- ext4_fseek : une position au-delà de la fin est permise, SEEK_END
+  ajoute le décalage (l'amont le retranchait) ; ext4_fread ne lit rien
+  à une position au-delà de la fin.
+- ext4_extent_remove_space : quand le début de la plage tombe dans un
+  trou, les extents qui suivent sont retirés (l'amont ne retirait rien :
+  supprimer un fichier creux laissait ses blocs alloués, e2fsck « Block
+  bitmap differences »).
+
+Dossiers :
+- ext4_dir_dx_init : les deux blocs (racine et feuille, non lus) sont
+  remplis de zéros, et la somme de la feuille est posée après la mise à
+  0 de l'inode (l'amont la posait avant, sur l'ancien contenu du bloc :
+  e2fsck « passes checks but fails checksum » pour chaque dossier resté
+  vide).
+- ext4_dir_find_entry, ext4_dir_add_entry : un index htree jugé invalide
+  (EXT4_ERR_BAD_DX_DIR) rend EFSCORRUPTED ; l'amont effaçait le drapeau
+  d'index du dossier, même pour une simple recherche, et continuait en
+  linéaire sur un dossier qu'il ne savait pas lire.
+- ext4_dir_try_insert_entry, ext4_dir_dx_split_data : chaque en-tête
+  d'entrée et chaque nom doivent tenir dans le bloc, sinon EFSCORRUPTED
+  (une longueur nulle bouclait sans fin ; un nom plus long que son
+  entrée faisait déborder l'espace libre). ext4_dir_add_entry et
+  ext4_dir_dx_add_entry propagent cette erreur au lieu de la prendre pour
+  un bloc plein.
+- ext4_dir_dx_get_leaf : le nœud fils d'un index à deux niveaux est lu
+  dans un bloc à lui ; l'amont le lisait dans le root_block de
+  l'appelant, qui, sur une erreur à ce niveau, rendait le fils deux fois
+  et jamais la racine (compteurs de références du cache).
+- ext4_dir_dx_split_index : la limite d'un nouveau nœud tient compte de
+  la queue de somme (metadata_csum), comme le noyau ; l'amont la
+  retranchait après avoir calculé la limite, et lwext4 jugeait ensuite
+  invalide l'index à deux niveaux qu'il venait d'écrire.
+- ext4_dir_dx_add_entry : un ajout qui échoue après le partage d'une
+  feuille rend l'erreur (l'amont rendait EOK, l'entrée manquante).
+- ext4_link (renommage d'un dossier linéaire vers un autre parent) : la
+  somme du bloc suit le nouveau « .. » (l'amont la laissait fausse).
+- ext4_dir_rm : un dossier à libérer est vidé (ext4_trunc_inode) avant
+  le retrait de son entrée, comme un fichier dans ext4_fremove ;
+  ext4_trunc_dir, qui reconstruisait d'abord un index dans un dossier
+  sur le point d'être libéré, disparaît. L'amont retirait l'entrée puis
+  échouait (ENOTSUP) sur un dossier sans extents d'un seul bloc : dossier
+  délié mais toujours alloué. Sur un échec de lecture du dossier, la
+  référence du parent est rendue.
+---
+ include/ext4.h       |  23 ++
+ include/ext4_inode.h |  17 ++
+ include/ext4_types.h |   1 +
+ src/ext4.c           | 535 ++++++++++++++++++++++++-------------------
+ src/ext4_dir.c       |  62 +++--
+ src/ext4_dir_idx.c   |  91 ++++++--
+ src/ext4_extent.c    |  17 +-
+ src/ext4_inode.c     |  31 +++
+ 8 files changed, 473 insertions(+), 304 deletions(-)
+
+diff --git a/include/ext4.h b/include/ext4.h
+index 972a87f..1d78b58 100644
+--- a/include/ext4.h
++++ b/include/ext4.h
+@@ -268,6 +268,29 @@ int ext4_cache_write_back(const char *path, bool on);
+  * @return  Standard error code. */
+ int ext4_cache_flush(const char *path);
+ 
++/**@brief   Creation rules and clock (all mount points).*/
++struct ext4_policy {
++	/**@brief   Current time (seconds since the epoch), for timestamps.*/
++	int64_t (*now)(void);
++	/**@brief   Permission bits of a created regular file (e.g. 0644).*/
++	uint16_t file_mode;
++	/**@brief   Permission bits of a created directory (e.g. 0755); the
++	 *          setgid bit of the parent is added.*/
++	uint16_t dir_mode;
++};
++
++/**@brief   Set the creation rules and clock. With a policy, lwext4 keeps
++ *          timestamps like the kernel does (creation: atime, mtime, ctime and
++ *          crtime; write and truncate: mtime and ctime of the file; link,
++ *          unlink and rename: mtime and ctime of the parent directories,
++ *          ctime of the moved or unlinked i-node; dtime of a freed i-node),
++ *          and a created i-node takes the uid and gid of its parent
++ *          directory and the policy mode. NULL (default): upstream behaviour
++ *          (times at 0, uid and gid 0, modes 0666 and 0777).
++ *
++ * @param   p Policy (copied), or NULL.*/
++void ext4_set_policy(const struct ext4_policy *p);
++
+ /********************************FILE OPERATIONS*****************************/
+ 
+ /**@brief   Remove file by path.
+diff --git a/include/ext4_inode.h b/include/ext4_inode.h
+index 11fd1d9..bee2006 100644
+--- a/include/ext4_inode.h
++++ b/include/ext4_inode.h
+@@ -221,6 +221,23 @@ void ext4_inode_set_extra_isize(struct ext4_sblock *sb,
+ 				struct ext4_inode *inode,
+ 				uint16_t size);
+ 
++/**@brief Time fields for @ref ext4_inode_set_times (may be combined). */
++#define EXT4_INODE_ATIME 0x1
++#define EXT4_INODE_CTIME 0x2
++#define EXT4_INODE_MTIME 0x4
++#define EXT4_INODE_CRTIME 0x8
++
++/**@brief Set time fields of an i-node to a 64-bit POSIX time: low 32 bits
++ *        in the base field, epoch bits in the "extra" field when the i-node
++ *        has room for it (extra_isize), nanoseconds at 0. crtime exists only
++ *        when extra_isize >= 24.
++ * @param sb    Superblock
++ * @param inode I-node
++ * @param which EXT4_INODE_ATIME, _CTIME, _MTIME, _CRTIME (or'ed)
++ * @param t     Time (seconds since the epoch) */
++void ext4_inode_set_times(struct ext4_sblock *sb, struct ext4_inode *inode,
++			  uint32_t which, int64_t t);
++
+ /**@brief Get address of block, where are extended attributes located.
+  * @param inode I-node
+  * @param sb    Superblock
+diff --git a/include/ext4_types.h b/include/ext4_types.h
+index c9cdd34..c7f7694 100644
+--- a/include/ext4_types.h
++++ b/include/ext4_types.h
+@@ -420,6 +420,7 @@ struct ext4_inode {
+ 
+ #pragma pack(pop)
+ 
++#define EXT4_INODE_MODE_SGID 0x0400
+ #define EXT4_INODE_MODE_FIFO 0x1000
+ #define EXT4_INODE_MODE_CHARDEV 0x2000
+ #define EXT4_INODE_MODE_DIRECTORY 0x4000
+diff --git a/src/ext4.c b/src/ext4.c
+index df41e8e..62a81a4 100644
+--- a/src/ext4.c
++++ b/src/ext4.c
+@@ -52,6 +52,7 @@
+ #include <ext4_dir_idx.h>
+ #include <ext4_xattr.h>
+ #include <ext4_journal.h>
++#include <ext4_extent.h>
+ 
+ 
+ #include <stdlib.h>
+@@ -112,6 +113,67 @@ static struct ext4_block_devices s_bdevices[CONFIG_EXT4_BLOCKDEVS_COUNT];
+ /**@brief   Mountpoints.*/
+ static struct ext4_mountpoint s_mp[CONFIG_EXT4_MOUNTPOINTS_COUNT];
+ 
++/**@brief   Creation rules and clock (@ref ext4_set_policy); NULL: upstream
++ *          behaviour.*/
++static struct ext4_policy s_policy;
++static bool s_policy_set;
++
++void ext4_set_policy(const struct ext4_policy *p)
++{
++	s_policy_set = p && p->now;
++	if (s_policy_set)
++		s_policy = *p;
++}
++
++/**@brief   Set time fields of an i-node to the policy clock (no-op without
++ *          policy) and mark it dirty.*/
++static void ext4_touch(struct ext4_inode_ref *ref, uint32_t which)
++{
++	if (!s_policy_set)
++		return;
++	ext4_inode_set_times(&ref->fs->sb, ref->inode, which, s_policy.now());
++	ref->dirty = true;
++}
++
++/**@brief   Deletion time of a freed i-node: the policy clock, or -1 as
++ *          upstream did.*/
++static uint32_t ext4_del_time(void)
++{
++	return s_policy_set ? (uint32_t)s_policy.now() : (uint32_t)-1L;
++}
++
++/**@brief   Attributes of a new i-node from its parent directory (policy
++ *          only): uid and gid of the parent, policy mode (a directory also
++ *          inherits the setgid bit), all four times set to now.*/
++static void ext4_inherit(struct ext4_inode_ref *parent,
++			 struct ext4_inode_ref *child)
++{
++	struct ext4_sblock *sb = &child->fs->sb;
++	struct ext4_inode *p = parent->inode, *c = child->inode;
++	uint32_t type, mode;
++
++	if (!s_policy_set)
++		return;
++
++	type = ext4_inode_type(sb, c);
++	mode = ext4_inode_get_mode(sb, c) & 0xFFF;
++	if (type == EXT4_INODE_MODE_DIRECTORY)
++		mode = (s_policy.dir_mode & 0xFFF) |
++		       (ext4_inode_get_mode(sb, p) & EXT4_INODE_MODE_SGID);
++	else if (type == EXT4_INODE_MODE_FILE)
++		mode = s_policy.file_mode & 0xFFF;
++	ext4_inode_set_mode(sb, c, type | mode);
++
++	/* uid/gid with their high 16 bits (osd2.linux2) */
++	c->uid = p->uid;
++	c->gid = p->gid;
++	c->osd2.linux2.uid_high = p->osd2.linux2.uid_high;
++	c->osd2.linux2.gid_high = p->osd2.linux2.gid_high;
++
++	ext4_touch(child, EXT4_INODE_ATIME | EXT4_INODE_CTIME |
++			  EXT4_INODE_MTIME | EXT4_INODE_CRTIME);
++}
++
+ int ext4_device_register(struct ext4_blockdev *bd,
+ 			 const char *dev_name)
+ {
+@@ -227,6 +289,10 @@ static int ext4_link(struct ext4_mountpoint *mp, struct ext4_inode_ref *parent,
+ 	if (r != EOK)
+ 		return r;
+ 
++	ext4_touch(parent, EXT4_INODE_MTIME | EXT4_INODE_CTIME);
++	if (rename)
++		ext4_touch(ch, EXT4_INODE_CTIME);
++
+ 	/* Fill new dir -> add '.' and '..' entries.
+ 	 * Also newly allocated inode should have 0 link count.
+ 	 */
+@@ -278,10 +344,16 @@ static int ext4_link(struct ext4_mountpoint *mp, struct ext4_inode_ref *parent,
+ 		struct ext4_dir_search_result res;
+ 		if (!idx) {
+ 			r = ext4_dir_find_entry(&res, ch, "..", strlen(".."));
+-			if (r != EOK)
+-				return EIO;
++			if (r != EOK) {
++				ext4_dir_destroy_result(ch, &res);
++				return r == ENOENT ? EFSCORRUPTED : r;
++			}
+ 
++			/* The block checksum follows the new ".." (upstream
++			 * left it stale: "Directory block checksum does not
++			 * match") */
+ 			ext4_dir_en_set_inode(res.dentry, parent->index);
++			ext4_dir_set_csum(ch, (void *)res.block.data);
+ 			ext4_trans_set_block_dirty(res.block.buf);
+ 			r = ext4_dir_destroy_result(ch, &res);
+ 			if (r != EOK)
+@@ -335,21 +407,8 @@ static int ext4_unlink(struct ext4_mountpoint *mp,
+ 		parent->dirty = true;
+ 	}
+ 
+-	/*
+-	 * TODO: Update timestamps of the parent
+-	 * (when we have wall-clock time).
+-	 *
+-	 * ext4_inode_set_change_inode_time(parent->inode, (uint32_t) now);
+-	 * ext4_inode_set_modification_time(parent->inode, (uint32_t) now);
+-	 * parent->dirty = true;
+-	 */
+-
+-	/*
+-	 * TODO: Update timestamp for inode.
+-	 *
+-	 * ext4_inode_set_change_inode_time(child->inode,
+-	 *     (uint32_t) now);
+-	 */
++	ext4_touch(parent, EXT4_INODE_MTIME | EXT4_INODE_CTIME);
++	ext4_touch(child, EXT4_INODE_CTIME);
+ 	if (ext4_inode_get_links_cnt(child->inode)) {
+ 		ext4_fs_inode_links_count_dec(child);
+ 		child->dirty = true;
+@@ -889,39 +948,6 @@ Finish:
+ 	return r;
+ }
+ 
+-static int ext4_trunc_dir(struct ext4_mountpoint *mp,
+-			  struct ext4_inode_ref *parent,
+-			  struct ext4_inode_ref *dir)
+-{
+-	int r = EOK;
+-	bool is_dir = ext4_inode_is_type(&mp->fs.sb, dir->inode,
+-			EXT4_INODE_MODE_DIRECTORY);
+-	uint32_t block_size = ext4_sb_get_block_size(&mp->fs.sb);
+-	if (!is_dir)
+-		return EINVAL;
+-
+-#if CONFIG_DIR_INDEX_ENABLE
+-	/* Initialize directory index if supported */
+-	if (ext4_sb_feature_com(&mp->fs.sb, EXT4_FCOM_DIR_INDEX)) {
+-		r = ext4_dir_dx_init(dir, parent);
+-		if (r != EOK)
+-			return r;
+-
+-		r = ext4_trunc_inode(mp, dir->index,
+-				     EXT4_DIR_DX_INIT_BCNT * block_size);
+-		if (r != EOK)
+-			return r;
+-	} else
+-#endif
+-	{
+-		r = ext4_trunc_inode(mp, dir->index, block_size);
+-		if (r != EOK)
+-			return r;
+-	}
+-
+-	return ext4_fs_truncate_inode(dir, 0);
+-}
+-
+ /*
+  * NOTICE: if filetype is equal to EXT4_DIRENTRY_UNKNOWN,
+  * any filetype of the target dir entry will be accepted.
+@@ -1001,6 +1027,7 @@ static int ext4_generic_open2(ext4_file *f, const char *path, int flags,
+ 				break;
+ 
+ 			ext4_fs_inode_blocks_init(fs, &child_ref);
++			ext4_inherit(&ref, &child_ref);
+ 
+ 			/*Link with root dir.*/
+ 			r = ext4_link(mp, &ref, &child_ref, path, len, false);
+@@ -1262,6 +1289,7 @@ static int ext4_remove_orig_reference(const char *path, uint32_t name_off,
+ 		ext4_fs_inode_links_count_dec(parent_ref);
+ 		parent_ref->dirty = true;
+ 	}
++	ext4_touch(parent_ref, EXT4_INODE_MTIME | EXT4_INODE_CTIME);
+ Finish:
+ 	return r;
+ }
+@@ -1521,7 +1549,7 @@ int ext4_fremove(const char *path)
+ 
+ 	/*Link count is zero, the inode should be freed. */
+ 	if (!ext4_inode_get_links_cnt(child.inode)) {
+-		ext4_inode_set_del_time(child.inode, -1L);
++		ext4_inode_set_del_time(child.inode, ext4_del_time());
+ 
+ 		r = ext4_fs_free_inode(&child);
+ 		if (r != EOK)
+@@ -1603,48 +1631,81 @@ int ext4_fclose(ext4_file *file)
+ 	return EOK;
+ }
+ 
+-static int ext4_ftruncate_no_lock(ext4_file *file, uint64_t size)
++/**@brief   Zero the bytes of the last block of a file from offset @p size
++ *          to the end of that block, so that a later growth (truncate or
++ *          write past the end) reads zeros there, as the kernel does
++ *          (block_truncate_page). No-op for an unmapped block.*/
++static int ext4_zero_block_tail(struct ext4_inode_ref *ref, uint64_t size)
+ {
+-	struct ext4_inode_ref ref;
++	struct ext4_fs *fs = ref->fs;
++	uint32_t block_size = ext4_sb_get_block_size(&fs->sb);
++	uint32_t off = (uint32_t)(size % block_size);
++	ext4_fsblk_t fblk;
++	uint8_t *zeros;
+ 	int r;
+ 
++	if (!off)
++		return EOK;
++
++	r = ext4_fs_get_inode_dblk_idx(ref, (ext4_lblk_t)(size / block_size),
++				       &fblk, true);
++	if (r != EOK || !fblk)
++		return r;
++
++	zeros = ext4_calloc(1, block_size - off);
++	if (!zeros)
++		return ENOMEM;
++	r = ext4_block_writebytes(fs->bdev, fblk * block_size + off, zeros,
++				  block_size - off);
++	ext4_free(zeros);
++	return r;
++}
++
++static int ext4_ftruncate_no_lock(ext4_file *file, uint64_t size)
++{
++	struct ext4_inode_ref ref;
++	int r, r2;
+ 
+ 	r = ext4_fs_get_inode_ref(&file->mp->fs, file->inode, &ref);
+-	if (r != EOK) {
+-		EXT4_MP_UNLOCK(file->mp);
++	if (r != EOK)
+ 		return r;
+-	}
+ 
+ 	/*Sync file size*/
+ 	file->fsize = ext4_inode_get_size(&file->mp->fs.sb, ref.inode);
+-	if (file->fsize <= size) {
+-		r = EOK;
+-		goto Finish;
+-	}
++	if (file->fsize < size) {
++		/* Growing: the new range is a hole, read as zeros. The bytes
++		 * past the old end in its last block are zero already (see
++		 * ext4_zero_block_tail and ext4_fwrite). */
++		ext4_inode_set_size(ref.inode, size);
++		ref.dirty = true;
++		file->fsize = size;
++	} else if (file->fsize > size) {
++		/*Start write back cache mode.*/
++		r = ext4_block_cache_write_back(file->mp->fs.bdev, 1);
++		if (r != EOK)
++			goto Finish;
+ 
+-	/*Start write back cache mode.*/
+-	r = ext4_block_cache_write_back(file->mp->fs.bdev, 1);
+-	if (r != EOK)
+-		goto Finish;
++		r = ext4_trunc_inode(file->mp, ref.index, size);
+ 
+-	r = ext4_trunc_inode(file->mp, ref.index, size);
+-	if (r != EOK)
+-		goto Finish;
++		/*Stop write back cache mode*/
++		ext4_block_cache_write_back(file->mp->fs.bdev, 0);
++
++		if (r == EOK)
++			r = ext4_zero_block_tail(&ref, size);
++		if (r != EOK)
++			goto Finish;
++
++		file->fsize = size;
++	}
+ 
+-	file->fsize = size;
+ 	if (file->fpos > size)
+ 		file->fpos = size;
+ 
+-	/*Stop write back cache mode*/
+-	ext4_block_cache_write_back(file->mp->fs.bdev, 0);
+-
+-	if (r != EOK)
+-		goto Finish;
++	ext4_touch(&ref, EXT4_INODE_MTIME | EXT4_INODE_CTIME);
+ 
+ Finish:
+-	ext4_fs_put_inode_ref(&ref);
+-	return r;
+-
++	r2 = ext4_fs_put_inode_ref(&ref);
++	return r != EOK ? r : r2;
+ }
+ 
+ int ext4_ftruncate(ext4_file *f, uint64_t size)
+@@ -1715,6 +1776,13 @@ int ext4_fread(ext4_file *file, void *buf, size_t size, size_t *rcnt)
+ 	/*Sync file size*/
+ 	file->fsize = ext4_inode_get_size(sb, ref.inode);
+ 
++	/* Position at or past the end (allowed by ext4_fseek): nothing */
++	if (file->fpos >= file->fsize) {
++		r = ext4_fs_put_inode_ref(&ref);
++		EXT4_MP_UNLOCK(file->mp);
++		return r;
++	}
++
+ 	block_size = ext4_sb_get_block_size(sb);
+ 	size = ((uint64_t)size > (file->fsize - file->fpos))
+ 		? ((size_t)(file->fsize - file->fpos)) : size;
+@@ -1854,21 +1922,36 @@ Finish:
+ 	return r;
+ }
+ 
++/**@brief   Maximum number of blocks mapped and written by one step of
++ *          ext4_fwrite() (64 KiB blocks of 512-byte sectors still fit a
++ *          32-bit sector count).*/
++#define EXT4_FWRITE_MAX_RUN 4096
++
++/**@brief   Physical blocks for writing from logical block @p iblk of an
++ *          extent-mapped file: up to @p max contiguous blocks, allocated in
++ *          a hole, zeroed and converted in an unwritten extent. Never block
++ *          0 of the device.*/
++static int ext4_fwrite_map(struct ext4_inode_ref *ref, ext4_lblk_t iblk,
++			   uint32_t max, ext4_fsblk_t *fblk, uint32_t *cnt)
++{
++	int r = ext4_extent_get_blocks(ref, iblk, max, fblk, true, cnt);
++	if (r == EOK && (!*fblk || !*cnt))
++		r = EIO;
++	return r;
++}
++
+ int ext4_fwrite(ext4_file *file, const void *buf, size_t size, size_t *wcnt)
+ {
+-	uint32_t unalg;
+-	uint32_t iblk_idx;
+-	uint32_t iblock_last;
+-	uint32_t ifile_blocks;
+ 	uint32_t block_size;
+-
+-	uint32_t fblock_count;
++	uint64_t isize;
+ 	ext4_fsblk_t fblk;
+-	ext4_fsblk_t fblock_start;
++	uint32_t cnt;
+ 
+ 	struct ext4_inode_ref ref;
+ 	const uint8_t *u8_buf = buf;
+-	int r, rr = EOK;
++	uint8_t *tmp = NULL;
++	size_t done = 0;
++	int r, r2;
+ 
+ 	ext4_assert(file && file->mp);
+ 
+@@ -1878,6 +1961,9 @@ int ext4_fwrite(ext4_file *file, const void *buf, size_t size, size_t *wcnt)
+ 	if (file->flags & O_RDONLY)
+ 		return EPERM;
+ 
++	if (wcnt)
++		*wcnt = 0;
++
+ 	if (!size)
+ 		return EOK;
+ 
+@@ -1887,9 +1973,6 @@ int ext4_fwrite(ext4_file *file, const void *buf, size_t size, size_t *wcnt)
+ 	struct ext4_fs *const fs = &file->mp->fs;
+ 	struct ext4_sblock *const sb = &file->mp->fs.sb;
+ 
+-	if (wcnt)
+-		*wcnt = 0;
+-
+ 	r = ext4_fs_get_inode_ref(fs, file->inode, &ref);
+ 	if (r != EOK) {
+ 		ext4_trans_abort(file->mp);
+@@ -1897,144 +1980,123 @@ int ext4_fwrite(ext4_file *file, const void *buf, size_t size, size_t *wcnt)
+ 		return r;
+ 	}
+ 
+-	/*Sync file size*/
+-	file->fsize = ext4_inode_get_size(sb, ref.inode);
+ 	block_size = ext4_sb_get_block_size(sb);
+ 
+-	iblock_last = (uint32_t)((file->fpos + size) / block_size);
+-	iblk_idx = (uint32_t)(file->fpos / block_size);
+-	ifile_blocks = (uint32_t)((file->fsize + block_size - 1) / block_size);
+-
+-	unalg = (file->fpos) % block_size;
++	/* Writing holes or past the end of a file mapped by indirect blocks
++	 * would need ext4_fs_append_inode_dblk, which only appends (and
++	 * ext4_fs_init_inode_dblk_idx gives 0, block 0 of the device, for a
++	 * hole): only extent-mapped files are written. Logical block numbers
++	 * are 32 bits. */
++	if (!ext4_sb_feature_incom(sb, EXT4_FINCOM_EXTENTS) ||
++	    !ext4_inode_has_flag(ref.inode, EXT4_INODE_FLAG_EXTENTS)) {
++		r = ENOTSUP;
++		goto Finish;
++	}
++	if (file->fpos + size < file->fpos ||
++	    (file->fpos + size - 1) / block_size >= EXT_MAX_BLOCKS) {
++		r = EFBIG;
++		goto Finish;
++	}
+ 
+-	if (unalg) {
+-		size_t len =  size;
+-		uint64_t off;
+-		if (size > (block_size - unalg))
+-			len = block_size - unalg;
++	/*Sync file size*/
++	isize = ext4_inode_get_size(sb, ref.inode);
+ 
+-		r = ext4_fs_init_inode_dblk_idx(&ref, iblk_idx, &fblk);
+-		if (r != EOK)
+-			goto Finish;
++	/*Start write back cache mode.*/
++	r = ext4_block_cache_write_back(fs->bdev, 1);
++	if (r != EOK)
++		goto Finish;
+ 
+-		off = fblk * block_size + unalg;
+-		r = ext4_block_writebytes(file->mp->fs.bdev, off, u8_buf, len);
+-		if (r != EOK)
+-			goto Finish;
++	while (size) {
++		ext4_lblk_t iblk = (ext4_lblk_t)(file->fpos / block_size);
++		uint32_t off = (uint32_t)(file->fpos % block_size);
++		size_t len;
+ 
+-		u8_buf += len;
+-		size -= len;
+-		file->fpos += len;
++		if (!off && size >= block_size) {
++			/* Whole blocks: contiguous runs */
++			size_t want = size / block_size;
++			if (want > EXT4_FWRITE_MAX_RUN)
++				want = EXT4_FWRITE_MAX_RUN;
+ 
+-		if (wcnt)
+-			*wcnt += len;
++			r = ext4_fwrite_map(&ref, iblk, (uint32_t)want, &fblk,
++					    &cnt);
++			if (r != EOK)
++				break;
+ 
+-		iblk_idx++;
+-	}
++			r = ext4_blocks_set_direct(fs->bdev, u8_buf, fblk, cnt);
++			if (r != EOK)
++				break;
+ 
+-	/*Start write back cache mode.*/
+-	r = ext4_block_cache_write_back(file->mp->fs.bdev, 1);
+-	if (r != EOK)
+-		goto Finish;
++			len = (size_t)cnt * block_size;
++		} else {
++			/* Part of a block */
++			len = block_size - off;
++			if (len > size)
++				len = size;
+ 
+-	fblock_start = 0;
+-	fblock_count = 0;
+-	while (size >= block_size) {
++			r = ext4_extent_get_blocks(&ref, iblk, 1, &fblk, false,
++						   NULL);
++			if (r != EOK)
++				break;
+ 
+-		while (iblk_idx < iblock_last) {
+-			if (iblk_idx < ifile_blocks) {
+-				r = ext4_fs_init_inode_dblk_idx(&ref, iblk_idx,
+-								&fblk);
+-				if (r != EOK)
+-					goto Finish;
++			if (fblk) {
++				r = ext4_block_writebytes(fs->bdev,
++					fblk * block_size + off, u8_buf,
++					(uint32_t)len);
+ 			} else {
+-				rr = ext4_fs_append_inode_dblk(&ref, &fblk,
+-							       &iblk_idx);
+-				if (rr != EOK) {
+-					/* Unable to append more blocks. But
+-					 * some block might be allocated already
+-					 * */
++				/* Hole or unwritten extent: the new block
++				 * gets zeros around the data, never stale
++				 * disk content. */
++				if (!tmp && !(tmp = ext4_malloc(block_size))) {
++					r = ENOMEM;
+ 					break;
+ 				}
++				r = ext4_fwrite_map(&ref, iblk, 1, &fblk, &cnt);
++				if (r != EOK)
++					break;
++				memset(tmp, 0, block_size);
++				memcpy(tmp + off, u8_buf, len);
++				r = ext4_blocks_set_direct(fs->bdev, tmp, fblk,
++							   1);
+ 			}
+-
+-			iblk_idx++;
+-
+-			if (!fblock_start) {
+-				fblock_start = fblk;
+-			}
+-
+-			if ((fblock_start + fblock_count) != fblk)
++			if (r != EOK)
+ 				break;
+-
+-			fblock_count++;
+ 		}
+ 
+-		r = ext4_blocks_set_direct(file->mp->fs.bdev, u8_buf, fblock_start,
+-					   fblock_count);
+-		if (r != EOK)
+-			break;
+-
+-		size -= block_size * fblock_count;
+-		u8_buf += block_size * fblock_count;
+-		file->fpos += block_size * fblock_count;
+-
++		u8_buf += len;
++		size -= len;
++		file->fpos += len;
++		done += len;
+ 		if (wcnt)
+-			*wcnt += block_size * fblock_count;
+-
+-		fblock_start = fblk;
+-		fblock_count = 1;
+-
+-		if (rr != EOK) {
+-			/*ext4_fs_append_inode_block has failed and no
+-			 * more blocks might be written. But node size
+-			 * should be updated.*/
+-			r = rr;
+-			goto out_fsize;
++			*wcnt = done;
++
++		/* The size follows what is written: an error leaves a
++		 * consistent (shorter) file. */
++		if (file->fpos > isize) {
++			isize = file->fpos;
++			ext4_inode_set_size(ref.inode, isize);
++			ref.dirty = true;
+ 		}
+ 	}
+ 
+ 	/*Stop write back cache mode*/
+-	ext4_block_cache_write_back(file->mp->fs.bdev, 0);
+-
+-	if (r != EOK)
+-		goto Finish;
+-
+-	if (size) {
+-		uint64_t off;
+-		if (iblk_idx < ifile_blocks) {
+-			r = ext4_fs_init_inode_dblk_idx(&ref, iblk_idx, &fblk);
+-			if (r != EOK)
+-				goto Finish;
+-		} else {
+-			r = ext4_fs_append_inode_dblk(&ref, &fblk, &iblk_idx);
+-			if (r != EOK)
+-				/*Node size sholud be updated.*/
+-				goto out_fsize;
+-		}
+-
+-		off = fblk * block_size;
+-		r = ext4_block_writebytes(file->mp->fs.bdev, off, u8_buf, size);
+-		if (r != EOK)
+-			goto Finish;
+-
+-		file->fpos += size;
+-
+-		if (wcnt)
+-			*wcnt += size;
+-	}
++	r2 = ext4_block_cache_write_back(fs->bdev, 0);
++	if (r == EOK)
++		r = r2;
+ 
+-out_fsize:
+-	if (file->fpos > file->fsize) {
+-		file->fsize = file->fpos;
+-		ext4_inode_set_size(ref.inode, file->fsize);
+-		ref.dirty = true;
+-	}
++	file->fsize = isize;
++	if (done)
++		ext4_touch(&ref, EXT4_INODE_MTIME | EXT4_INODE_CTIME);
+ 
+ Finish:
+-	r = ext4_fs_put_inode_ref(&ref);
++	ext4_free(tmp);
++	/* The first error is the one returned */
++	r2 = ext4_fs_put_inode_ref(&ref);
++	if (r == EOK)
++		r = r2;
+ 
+-	if (r != EOK)
++	/* Blocks already written and allocated stay: the transaction is
++	 * committed even on error, the size matching what was written. */
++	if (r2 != EOK)
+ 		ext4_trans_abort(file->mp);
+ 	else
+ 		ext4_trans_stop(file->mp);
+@@ -2045,26 +2107,26 @@ Finish:
+ 
+ int ext4_fseek(ext4_file *file, int64_t offset, uint32_t origin)
+ {
++	/* A position past the end is allowed (a later write leaves a hole);
++	 * a negative one is not. */
+ 	switch (origin) {
+ 	case SEEK_SET:
+-		if (offset < 0 || (uint64_t)offset > file->fsize)
++		if (offset < 0)
+ 			return EINVAL;
+ 
+ 		file->fpos = offset;
+ 		return EOK;
+ 	case SEEK_CUR:
+-		if ((offset < 0 && (uint64_t)(-offset) > file->fpos) ||
+-		    (offset > 0 &&
+-		     (uint64_t)offset > (file->fsize - file->fpos)))
++		if (offset < 0 && (uint64_t)(-offset) > file->fpos)
+ 			return EINVAL;
+ 
+ 		file->fpos += offset;
+ 		return EOK;
+ 	case SEEK_END:
+-		if (offset < 0 || (uint64_t)offset > file->fsize)
++		if (offset < 0 && (uint64_t)(-offset) > file->fsize)
+ 			return EINVAL;
+ 
+-		file->fpos = file->fsize - offset;
++		file->fpos = file->fsize + offset;
+ 		return EOK;
+ 	}
+ 	return EINVAL;
+@@ -3030,7 +3092,6 @@ int ext4_dir_rm(const char *path)
+ 				/*Get child inode reference do unlink
+ 				 * directory/file.*/
+ 				uint32_t cinode;
+-				uint32_t inode_type;
+ 				cinode = ext4_dir_en_get_inode(it.curr);
+ 				r = ext4_fs_get_inode_ref(fs, cinode, &child);
+ 				if (r != EOK)
+@@ -3052,14 +3113,13 @@ int ext4_dir_rm(const char *path)
+ 					ext4_fs_put_inode_ref(&child);
+ 					goto End;
+ 				}
+-				inode_type = ext4_inode_type(&mp->fs.sb,
+-						child.inode);
+ 
+-				/* Truncate */
+-				if (inode_type != EXT4_INODE_MODE_DIRECTORY)
+-					r = ext4_trunc_inode(mp, child.index, 0);
+-				else
+-					r = ext4_trunc_dir(mp, &act, &child);
++				/* Truncate. A directory about to be freed is
++				 * simply emptied: upstream first rebuilt an
++				 * index in it (ext4_trunc_dir), which fails
++				 * for a one-block directory without extents
++				 * (ENOTSUP) after the entry was unlinked. */
++				r = ext4_trunc_inode(mp, child.index, 0);
+ 
+ 				if (r != EOK) {
+ 					ext4_fs_put_inode_ref(&child);
+@@ -3076,7 +3136,7 @@ int ext4_dir_rm(const char *path)
+ 					goto End;
+ 				}
+ 
+-				ext4_inode_set_del_time(child.inode, -1L);
++				ext4_inode_set_del_time(child.inode, ext4_del_time());
+ 				ext4_inode_set_links_cnt(child.inode, 0);
+ 				child.dirty = true;
+ 
+@@ -3127,6 +3187,7 @@ End:
+ 	if (r == EOK && !depth) {
+ 		/*Load parent.*/
+ 		struct ext4_inode_ref parent;
++		bool free_dir;
+ 		r = ext4_fs_get_inode_ref(&f.mp->fs, inode_up,
+ 				&parent);
+ 		if (r != EOK)
+@@ -3134,48 +3195,42 @@ End:
+ 		r = ext4_fs_get_inode_ref(&f.mp->fs, inode_current,
+ 				&act);
+ 		if (r != EOK) {
+-			ext4_fs_put_inode_ref(&act);
++			ext4_fs_put_inode_ref(&parent);
+ 			goto Finish;
+ 		}
+ 
+ 		ext4_trans_start(mp);
+ 
++		/* The directory is emptied before its entry is removed, as
++		 * ext4_fremove does for a file: an error leaves it linked, never
++		 * unlinked but allocated. */
++		free_dir = ext4_inode_get_links_cnt(act.inode) == 2;
++		if (free_dir)
++			r = ext4_trunc_inode(mp, act.index, 0);
++
+ 		/* In this place all directories should be
+ 		 * unlinked.
+ 		 * Last unlink from root of current directory*/
+-		r = ext4_unlink(f.mp, &parent, &act,
+-				(char *)path, len);
+-		if (r != EOK) {
+-			ext4_fs_put_inode_ref(&parent);
+-			ext4_fs_put_inode_ref(&act);
+-			goto Finish;
+-		}
++		if (r == EOK)
++			r = ext4_unlink(f.mp, &parent, &act,
++					(char *)path, len);
+ 
+-		if (ext4_inode_get_links_cnt(act.inode) == 2) {
+-			ext4_inode_set_del_time(act.inode, -1L);
++		if (r == EOK && free_dir) {
++			ext4_inode_set_del_time(act.inode, ext4_del_time());
+ 			ext4_inode_set_links_cnt(act.inode, 0);
+ 			act.dirty = true;
+-			/*Truncate*/
+-			r = ext4_trunc_dir(mp, &parent, &act);
+-			if (r != EOK) {
+-				ext4_fs_put_inode_ref(&parent);
+-				ext4_fs_put_inode_ref(&act);
+-				goto Finish;
+-			}
+-
+ 			r = ext4_fs_free_inode(&act);
+-			if (r != EOK) {
+-				ext4_fs_put_inode_ref(&parent);
+-				ext4_fs_put_inode_ref(&act);
+-				goto Finish;
+-			}
+ 		}
+ 
+-		r = ext4_fs_put_inode_ref(&parent);
+-		if (r != EOK)
+-			goto Finish;
++		if (r == EOK)
++			r = ext4_fs_put_inode_ref(&parent);
++		else
++			ext4_fs_put_inode_ref(&parent);
+ 
+-		r = ext4_fs_put_inode_ref(&act);
++		if (r == EOK)
++			r = ext4_fs_put_inode_ref(&act);
++		else
++			ext4_fs_put_inode_ref(&act);
+ 	Finish:
+ 		if (r != EOK)
+ 			ext4_trans_abort(mp);
+diff --git a/src/ext4_dir.c b/src/ext4_dir.c
+index 82ef7c4..994bac8 100644
+--- a/src/ext4_dir.c
++++ b/src/ext4_dir.c
+@@ -367,17 +367,10 @@ int ext4_dir_add_entry(struct ext4_inode_ref *parent, const char *name,
+ 	    (ext4_inode_has_flag(parent->inode, EXT4_INODE_FLAG_INDEX))) {
+ 		r = ext4_dir_dx_add_entry(parent, child, name, name_len);
+ 
+-		/* Check if index is not corrupted */
+-		if (r != EXT4_ERR_BAD_DX_DIR) {
+-			if (r != EOK)
+-				return r;
+-
+-			return EOK;
+-		}
+-
+-		/* Needed to clear dir index flag if corrupted */
+-		ext4_inode_clear_flag(parent->inode, EXT4_INODE_FLAG_INDEX);
+-		parent->dirty = true;
++		/* An index judged invalid is a corruption: the directory is
++		 * left untouched (upstream cleared its index flag and went on
++		 * linearly, modifying a directory it could not read). */
++		return r == EXT4_ERR_BAD_DX_DIR ? EFSCORRUPTED : r;
+ 	}
+ #endif
+ 
+@@ -415,9 +408,11 @@ int ext4_dir_add_entry(struct ext4_inode_ref *parent, const char *name,
+ 		if (r == EOK)
+ 			success = true;
+ 
+-		r = ext4_block_set(fs->bdev, &block);
+-		if (r != EOK)
+-			return r;
++		int r2 = ext4_block_set(fs->bdev, &block);
++		if (r != EOK && r != ENOSPC)
++			return r; /* malformed block */
++		if (r2 != EOK)
++			return r2;
+ 
+ 		if (success)
+ 			return EOK;
+@@ -475,17 +470,9 @@ int ext4_dir_find_entry(struct ext4_dir_search_result *result,
+ 	if ((ext4_sb_feature_com(sb, EXT4_FCOM_DIR_INDEX)) &&
+ 	    (ext4_inode_has_flag(parent->inode, EXT4_INODE_FLAG_INDEX))) {
+ 		r = ext4_dir_dx_find_entry(result, parent, name_len, name);
+-		/* Check if index is not corrupted */
+-		if (r != EXT4_ERR_BAD_DX_DIR) {
+-			if (r != EOK)
+-				return r;
+-
+-			return EOK;
+-		}
+-
+-		/* Needed to clear dir index flag if corrupted */
+-		ext4_inode_clear_flag(parent->inode, EXT4_INODE_FLAG_INDEX);
+-		parent->dirty = true;
++		/* An index judged invalid is a corruption: a lookup never
++		 * modifies the directory (upstream cleared its index flag). */
++		return r == EXT4_ERR_BAD_DX_DIR ? EFSCORRUPTED : r;
+ 	}
+ #endif
+ 
+@@ -606,19 +593,30 @@ int ext4_dir_try_insert_entry(struct ext4_sblock *sb,
+ 	if ((required_len % 4) != 0)
+ 		required_len += 4 - (required_len % 4);
+ 
+-	/* Initialize pointers, stop means to upper bound */
+-	struct ext4_dir_en *start = (void *)dst_blk->data;
+-	struct ext4_dir_en *stop = (void *)(dst_blk->data + block_size);
+-
+ 	/*
+ 	 * Walk through the block and check for invalid entries
+-	 * or entries with free space for new entry
++	 * or entries with free space for new entry. Every entry header and
++	 * name must lie inside the block (hostile disk): a zero length looped
++	 * forever, a name longer than its entry made the free space wrap.
+ 	 */
+-	while (start < stop) {
++	uint32_t off = 0;
++	while (off < block_size) {
++		struct ext4_dir_en *start = (void *)(dst_blk->data + off);
++
++		if ((off % 4) != 0 || off > block_size - 8)
++			return EFSCORRUPTED;
++
+ 		uint32_t inode = ext4_dir_en_get_inode(start);
+ 		uint16_t rec_len = ext4_dir_en_get_entry_len(start);
+ 		uint8_t itype = ext4_dir_en_get_inode_type(sb, start);
+ 
++		if (rec_len < 8 || (rec_len % 4) != 0 ||
++		    rec_len > block_size - off)
++			return EFSCORRUPTED;
++		if (inode != 0 &&
++		    ext4_dir_en_get_name_len(sb, start) > rec_len - 8)
++			return EFSCORRUPTED;
++
+ 		/* If invalid and large enough entry, use it */
+ 		if ((inode == 0) && (itype != EXT4_DIRENTRY_DIR_CSUM) &&
+ 		    (rec_len >= required_len)) {
+@@ -660,7 +658,7 @@ int ext4_dir_try_insert_entry(struct ext4_sblock *sb,
+ 		}
+ 
+ 		/* Jump to the next entry */
+-		start = (void *)((uint8_t *)start + rec_len);
++		off += rec_len;
+ 	}
+ 
+ 	/* No free space found for new entry */
+diff --git a/src/ext4_dir_idx.c b/src/ext4_dir_idx.c
+index 1e9254d..1d022d3 100644
+--- a/src/ext4_dir_idx.c
++++ b/src/ext4_dir_idx.c
+@@ -403,11 +403,12 @@ int ext4_dir_dx_init(struct ext4_inode_ref *dir, struct ext4_inode_ref *parent)
+ 	if (rc != EOK)
+ 		return rc;
+ 
+-	/* Initialize pointers to data structures */
++	/* Initialize pointers to data structures. The block is not read:
++	 * all of it is zeroed, never stale disk content. */
+ 	struct ext4_dir_idx_root *root = (void *)block.data;
+ 	struct ext4_dir_idx_rinfo *info = &(root->info);
+ 
+-	memset(root, 0, sizeof(struct ext4_dir_idx_root));
++	memset(block.data, 0, block_size);
+ 	struct ext4_dir_en *de;
+ 
+ 	/* Initialize dot entries */
+@@ -463,9 +464,15 @@ int ext4_dir_dx_init(struct ext4_inode_ref *dir, struct ext4_inode_ref *parent)
+ 		return rc;
+ 	}
+ 
+-	/* Fill the whole block with empty entry */
++	/* Fill the whole block with empty entry. The block is not read: it
++	 * is zeroed first, and the checksum is set last (upstream set it
++	 * before clearing the inode field, over stale disk content: e2fsck
++	 * "passes checks but fails checksum" for every directory left
++	 * empty). */
+ 	struct ext4_dir_en *be = (void *)new_block.data;
+ 
++	memset(new_block.data, 0, block_size);
++	ext4_dir_en_set_inode(be, 0);
+ 	if (ext4_sb_feature_ro_com(sb, EXT4_FRO_COM_METADATA_CSUM)) {
+ 		uint16_t len = block_size - sizeof(struct ext4_dir_entry_tail);
+ 		ext4_dir_en_set_entry_len(be, len);
+@@ -477,8 +484,6 @@ int ext4_dir_dx_init(struct ext4_inode_ref *dir, struct ext4_inode_ref *parent)
+ 		ext4_dir_en_set_entry_len(be, block_size);
+ 	}
+ 
+-	ext4_dir_en_set_inode(be, 0);
+-
+ 	ext4_trans_set_block_dirty(new_block.buf);
+ 	rc = ext4_block_set(dir->fs->bdev, &new_block);
+ 	if (rc != EOK) {
+@@ -584,7 +589,11 @@ static int ext4_dir_dx_get_leaf(struct ext4_hash_info *hinfo,
+ 	uint8_t ind_level;
+ 	int r;
+ 
++	/* The child node is loaded into a block of its own: upstream loaded
++	 * it into the caller's root_block, so on an error at that level the
++	 * caller released the child a second time and never the root. */
+ 	struct ext4_dir_idx_block *tmp_dx_blk = dx_blocks;
++	struct ext4_block child_blk;
+ 	struct ext4_block *tmp_blk = root_block;
+ 	struct ext4_sblock *sb = &inode_ref->fs->sb;
+ 
+@@ -597,8 +606,11 @@ static int ext4_dir_dx_get_leaf(struct ext4_hash_info *hinfo,
+ 	/* Walk through the index tree */
+ 	while (true) {
+ 		uint16_t cnt = ext4_dir_dx_climit_get_count((void *)entries);
+-		if ((cnt == 0) || (cnt > limit))
++		if ((cnt == 0) || (cnt > limit)) {
++			if (tmp_blk != root_block)
++				ext4_block_set(inode_ref->fs->bdev, tmp_blk);
+ 			return EXT4_ERR_BAD_DX_DIR;
++		}
+ 
+ 		/* Do binary search in every node */
+ 		p = entries + 1;
+@@ -634,6 +646,7 @@ static int ext4_dir_dx_get_leaf(struct ext4_hash_info *hinfo,
+ 		if (r != EOK)
+ 			return r;
+ 
++		tmp_blk = &child_blk;
+ 		r = ext4_trans_block_get(inode_ref->fs->bdev, tmp_blk, fblk);
+ 		if (r != EOK)
+ 			return r;
+@@ -958,10 +971,25 @@ static int ext4_dir_dx_split_data(struct ext4_inode_ref *inode_ref,
+ 	struct ext4_hash_info hinfo_tmp;
+ 	memcpy(&hinfo_tmp, hinfo, sizeof(struct ext4_hash_info));
+ 
+-	/* Load all valid entries to the buffer */
+-	struct ext4_dir_en *de = (void *)old_data_block->data;
++	/* Load all valid entries to the buffer. Every entry header and name
++	 * must lie inside the block (hostile disk: a zero length looped
++	 * forever). */
++	uint32_t de_off = 0;
+ 	uint8_t *entry_buffer_ptr = entry_buffer;
+-	while ((void *)de < (void *)(old_data_block->data + block_size)) {
++	while (de_off < block_size) {
++		struct ext4_dir_en *de = (void *)(old_data_block->data + de_off);
++		uint16_t de_len = ext4_dir_en_get_entry_len(de);
++
++		if ((de_off % 4) != 0 || de_off > block_size - 8 ||
++		    de_len < 8 || (de_len % 4) != 0 ||
++		    de_len > block_size - de_off ||
++		    (ext4_dir_en_get_inode(de) &&
++		     ext4_dir_en_get_name_len(sb, de) > de_len - 8)) {
++			ext4_free(sort);
++			ext4_free(entry_buffer);
++			return EFSCORRUPTED;
++		}
++
+ 		/* Read only valid entries */
+ 		if (ext4_dir_en_get_inode(de) && de->name_len) {
+ 			uint16_t len = ext4_dir_en_get_name_len(sb, de);
+@@ -988,8 +1016,15 @@ static int ext4_dir_dx_split_data(struct ext4_inode_ref *inode_ref,
+ 			idx++;
+ 		}
+ 
+-		size_t elen = ext4_dir_en_get_entry_len(de);
+-		de = (void *)((uint8_t *)de + elen);
++		de_off += de_len;
++	}
++
++	/* A full block has at least two entries (each at most half a block
++	 * for 1 KiB blocks and more): otherwise it is not a leaf to split. */
++	if (idx < 2) {
++		ext4_free(sort);
++		ext4_free(entry_buffer);
++		return EFSCORRUPTED;
+ 	}
+ 
+ 	qsort(sort, idx, sizeof(struct ext4_dx_sort_entry),
+@@ -1033,6 +1068,12 @@ static int ext4_dir_dx_split_data(struct ext4_inode_ref *inode_ref,
+ 		current_size += sort[i].rec_len;
+ 	}
+ 
++	/* Never an empty half */
++	if (mid == 0) {
++		mid = idx / 2;
++		new_hash = sort[mid].hash;
++	}
++
+ 	/* Check hash collision */
+ 	uint32_t continued = 0;
+ 	if (new_hash == sort[mid - 1].hash)
+@@ -1117,10 +1158,17 @@ ext4_dir_dx_split_index(struct ext4_inode_ref *ino_ref,
+ 
+ 	uint32_t block_size = ext4_sb_get_block_size(&ino_ref->fs->sb);
+ 	uint32_t entry_space = block_size - sizeof(struct ext4_fake_dir_entry);
+-	uint32_t node_limit =  entry_space / sizeof(struct ext4_dir_idx_entry);
+ 
+ 	bool meta_csum = ext4_sb_feature_ro_com(sb, EXT4_FRO_COM_METADATA_CSUM);
+ 
++	/* The limit of a new node leaves room for the dx tail with
++	 * metadata_csum, as the kernel does and as ext4_dir_dx_get_leaf
++	 * checks (upstream subtracted the tail after computing the limit: a
++	 * two-level index was then judged invalid by lwext4 itself). */
++	if (meta_csum)
++		entry_space -= sizeof(struct ext4_dir_idx_tail);
++	uint32_t node_limit =  entry_space / sizeof(struct ext4_dir_idx_entry);
++
+ 	if (dxb == dx_blks)
+ 		e = ((struct ext4_dir_idx_root *)dxb->b.data)->en;
+ 	else
+@@ -1187,9 +1235,6 @@ ext4_dir_dx_split_index(struct ext4_inode_ref *ino_ref,
+ 			ext4_dir_dx_climit_set_count(left_climit, count_left);
+ 			ext4_dir_dx_climit_set_count(right_climit, count_right);
+ 
+-			if (meta_csum)
+-				entry_space -= sizeof(struct ext4_dir_idx_tail);
+-
+ 			ext4_dir_dx_climit_set_limit(right_climit, node_limit);
+ 
+ 			/* Which index block is target for new entry */
+@@ -1231,9 +1276,6 @@ ext4_dir_dx_split_index(struct ext4_inode_ref *ino_ref,
+ 			memcpy(new_en, e, sz);
+ 
+ 			struct ext4_dir_idx_climit *new_climit = (void*)new_en;
+-			if (meta_csum)
+-				entry_space -= sizeof(struct ext4_dir_idx_tail);
+-
+ 			ext4_dir_dx_climit_set_limit(new_climit, node_limit);
+ 
+ 			/* Set values in root node */
+@@ -1345,8 +1387,8 @@ int ext4_dir_dx_add_entry(struct ext4_inode_ref *parent,
+ 	/* Check if insert operation passed */
+ 	r = ext4_dir_try_insert_entry(&fs->sb, parent, &target_block, child,
+ 					name, name_len);
+-	if (r == EOK)
+-		goto release_target_index;
++	if (r != ENOSPC)
++		goto release_target_index; /* done, or malformed block */
+ 
+ 	/* Split entries to two blocks (includes sorting by hash value) */
+ 	struct ext4_block new_block;
+@@ -1366,10 +1408,11 @@ int ext4_dir_dx_add_entry(struct ext4_inode_ref *parent,
+ 		r = ext4_dir_try_insert_entry(&fs->sb, parent, &target_block,
+ 						child, name, name_len);
+ 
+-	/* Cleanup */
+-	r = ext4_block_set(fs->bdev, &new_block);
+-	if (r != EOK)
+-		return r;
++	/* Cleanup (upstream overwrote the insert result here: a failed
++	 * insert was reported as a success, the entry missing) */
++	rc2 = ext4_block_set(fs->bdev, &new_block);
++	if (r == EOK)
++		r = rc2;
+ 
+ /* Cleanup operations */
+ 
+diff --git a/src/ext4_extent.c b/src/ext4_extent.c
+index abac59b..130961d 100644
+--- a/src/ext4_extent.c
++++ b/src/ext4_extent.c
+@@ -1718,14 +1718,6 @@ int ext4_extent_remove_space(struct ext4_inode_ref *inode_ref, ext4_lblk_t from,
+ 		goto out;
+ 	}
+ 
+-	bool in_range = IN_RANGE(from, to_le32(path[depth].extent->first_block),
+-				 ext4_ext_get_actual_len(path[depth].extent));
+-
+-	if (!in_range) {
+-		ret = EOK;
+-		goto out;
+-	}
+-
+ 	/* If we do remove_space inside the range of an extent */
+ 	if ((to_le32(path[depth].extent->first_block) < from) &&
+ 	    (to < to_le32(path[depth].extent->first_block) +
+@@ -1753,6 +1745,15 @@ int ext4_extent_remove_space(struct ext4_inode_ref *inode_ref, ext4_lblk_t from,
+ 		goto out;
+ 	}
+ 
++	/* `from` in a hole: the extent found ends before it (or is the first
++	 * one, after it), and removal starts at the next one. Upstream returned
++	 * without removing anything when `from` was not inside an extent: the
++	 * blocks after a hole stayed allocated (a sparse file deleted leaked
++	 * them: e2fsck "Block bitmap differences"). */
++	if (to_le32(path[depth].extent->first_block) +
++		ext4_ext_get_actual_len(path[depth].extent) - 1 < from)
++		path[depth].extent++;
++
+ 	i = depth;
+ 	while (i >= 0) {
+ 		if (i == depth) {
+diff --git a/src/ext4_inode.c b/src/ext4_inode.c
+index ff3c234..2efabe6 100644
+--- a/src/ext4_inode.c
++++ b/src/ext4_inode.c
+@@ -289,6 +289,37 @@ void ext4_inode_set_extra_isize(struct ext4_sblock *sb,
+ 		inode->extra_isize = to_le16(size);
+ }
+ 
++void ext4_inode_set_times(struct ext4_sblock *sb, struct ext4_inode *inode,
++			  uint32_t which, int64_t t)
++{
++	/* Like the kernel (ext4_encode_extra_time): the base field holds the
++	 * low 32 bits, read back as signed; the 2 epoch bits of the "extra"
++	 * field extend it beyond 2038. Nanoseconds are left at 0. */
++	uint32_t lo = (uint32_t)t;
++	uint32_t epoch = (uint32_t)(((t - (int32_t)lo) >> 32) & 3);
++	uint16_t extra = ext4_inode_get_extra_isize(sb, inode);
++
++	if (which & EXT4_INODE_ATIME) {
++		inode->access_time = to_le32(lo);
++		if (extra >= 16)
++			inode->atime_extra = to_le32(epoch);
++	}
++	if (which & EXT4_INODE_CTIME) {
++		inode->change_inode_time = to_le32(lo);
++		if (extra >= 8)
++			inode->ctime_extra = to_le32(epoch);
++	}
++	if (which & EXT4_INODE_MTIME) {
++		inode->modification_time = to_le32(lo);
++		if (extra >= 12)
++			inode->mtime_extra = to_le32(epoch);
++	}
++	if ((which & EXT4_INODE_CRTIME) && extra >= 24) {
++		inode->crtime = to_le32(lo);
++		inode->crtime_extra = to_le32(epoch);
++	}
++}
++
+ uint64_t ext4_inode_get_file_acl(struct ext4_inode *inode,
+ 				 struct ext4_sblock *sb)
+ {
+-- 
+2.43.0
+

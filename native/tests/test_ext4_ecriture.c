@@ -905,7 +905,7 @@ static void test_ecriture_suppression(void) {
 }
 
 static void test_ecriture_noms_unicode(void) {
-  char img[4096], n255[300], u255[300], p[600];
+  char img[4096], n255[300], u255[300], p[700];
   vol v;
   TT_ASSERT(copie_de("ext4-rw-reel.img", img, sizeof img) == 0);
   TT_ASSERT_EQ(vol_monter(&v, img, true, false), FL_OK);
@@ -1343,10 +1343,12 @@ static uint32_t le32_(const uint8_t *p) {
 
 /* Bloc physique du bloc logique `lblk` de `chemin` (debugfs bmap). */
 static uint64_t bmap(const char *img, const char *chemin, uint32_t lblk) {
-  char cmd[4200], out[256];
+  char cmd[4200], out[1024];
   snprintf(cmd, sizeof cmd, "bmap \"%s\" %u\n", chemin, lblk);
   if (debugfs_f(img, false, cmd, out, sizeof out) != 0) return 0;
-  const char *nl = strchr(out, '\n'); /* « debugfs: bmap ... », puis le numéro */
+  /* bannière de version, « debugfs: bmap ... », puis le numéro */
+  const char *cmd_ = strstr(out, "debugfs: bmap");
+  const char *nl = cmd_ ? strchr(cmd_, '\n') : NULL;
   if (!nl) return 0;
   return strtoull(nl + 1, NULL, 10);
 }

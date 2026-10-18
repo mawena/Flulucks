@@ -494,6 +494,8 @@ int tm_check_debugfs(const tm *m, const char *img) {
     unsigned long ino, mode, uid, gid;
     int off = 0;
     if (sscanf(l, "/%lu/%lo/%lu/%lu/%n", &ino, &mode, &uid, &gid, &off) != 4 || off == 0) continue;
+    /* entrée libre (inode 0) : debugfs liste celle qui ouvre un bloc, avec son ancien nom */
+    if (ino == 0) continue;
     char *nom = l + off;
     char *fin_nom = strrchr(nom, '/');
     if (!fin_nom) continue;
