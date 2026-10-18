@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include <pthread.h>
+#include <sched.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -373,13 +374,33 @@ static void test_fermeture_fichier_pendant_lectures(void) { lecteurs(3); }
 
 typedef struct {
   int64_t disk, rc;
-  const char *pass;
-  size_t passlen;
 } tache;
+
+/* Rendez-vous avec le crochet de fj_mount : le fil de montage s'arrête juste avant d'enregistrer son
+ * volume (référence du disque tenue) jusqu'à ce que le test le libère. */
+static pthread_mutex_t rv_mu = PTHREAD_MUTEX_INITIALIZER;
+static pthread_cond_t rv_cv = PTHREAD_COND_INITIALIZER;
+static int rv_atteint, rv_libere;
+
+static void crochet_montage(void *arg) {
+  (void)arg;
+  pthread_mutex_lock(&rv_mu);
+  rv_atteint = 1;
+  pthread_cond_broadcast(&rv_cv);
+  while (!rv_libere) pthread_cond_wait(&rv_cv, &rv_mu);
+  pthread_mutex_unlock(&rv_mu);
+}
+
+static void liberer_montage(void) {
+  pthread_mutex_lock(&rv_mu);
+  rv_libere = 1;
+  pthread_cond_broadcast(&rv_cv);
+  pthread_mutex_unlock(&rv_mu);
+}
 
 static void *tache_monter(void *arg) {
   tache *t = arg;
-  t->rc = fj_mount(t->disk, 0, t->pass, t->passlen);
+  t->rc = fj_mount(t->disk, 0, NULL, 0);
   return NULL;
 }
 
@@ -389,38 +410,56 @@ static void *tache_fermer(void *arg) {
   return NULL;
 }
 
-/* Attend (au plus 60 s) que la poignée ait au moins `refs` références et l'état `closing` voulu. */
-static int attendre_etat(int64_t h, unsigned refs, bool closing) {
-  for (int i = 0; i < 60000; i++) {
-    unsigned r = 0;
-    bool c = false;
-    if (fj_debug_slot(h, &r, &c) == FL_OK && r >= refs && c == closing) return 1;
-    attendre_ms(1);
-  }
-  return 0;
+/* Attend l'atteinte du crochet (au plus 60 s). */
+static int attendre_crochet(void) {
+  struct timespec dl;
+  clock_gettime(CLOCK_REALTIME, &dl);
+  dl.tv_sec += 60;
+  int ok = 1;
+  pthread_mutex_lock(&rv_mu);
+  while (!rv_atteint && ok) ok = pthread_cond_timedwait(&rv_cv, &rv_mu, &dl) == 0;
+  pthread_mutex_unlock(&rv_mu);
+  return rv_atteint;
 }
 
-/* Un fj_mount lent (Argon2 aux paramètres du vrai disque) tient une référence sur le disque ; un
- * fj_close_disk le marque « en fermeture » et attend. Pendant ce temps :
+/* Attend (au plus 60 s, sans dormir) que le disque soit en cours de fermeture. */
+static int attendre_fermeture(int64_t h) {
+  struct timespec t0, t;
+  clock_gettime(CLOCK_MONOTONIC, &t0);
+  for (;;) {
+    unsigned r = 0;
+    bool c = false;
+    if (fj_debug_slot(h, &r, &c) == FL_OK && c) return 1;
+    clock_gettime(CLOCK_MONOTONIC, &t);
+    if (t.tv_sec - t0.tv_sec > 60) return 0;
+    sched_yield();
+  }
+}
+
+/* Un fj_mount arrêté par le crochet tient une référence sur le disque ; un fj_close_disk le marque
+ * « en fermeture » et attend. Pendant cette fenêtre, ouverte exprès :
  *   - fj_unmount(v1, false) rend FL_EBUSY (le disque démontera v1 lui-même) ;
- *   - le fj_mount qui se termine ne peut plus enregistrer son volume : FL_EBUSY, et rien ne fuit. */
+ *   - le fj_mount libéré ne peut plus enregistrer son volume : FL_EBUSY, et rien ne fuit. */
 static void test_handles_ebusy_fermeture(void) {
-  char pass[256];
-  size_t n = lire_pass(pass, sizeof pass, "pass.txt");
-  TT_ASSERT(n > 0);
-  int64_t d = fj_open_image(tt_fixture("whole-luks2-exact.img"));
-  TT_ASSERT(d > 0);
-  int64_t v1 = fj_mount(d, 0, pass, n);
+  int64_t d, v1 = monter_plain(&d);
   TT_ASSERT(v1 > 0);
-  tache monte = {d, 0, pass, n}, ferme = {d, 0, NULL, 0};
+  rv_atteint = rv_libere = 0;
+  tache monte = {d, 0}, ferme = {d, 0};
   pthread_t ta, tb;
-  TT_ASSERT_EQ(pthread_create(&ta, NULL, tache_monter, &monte), 0);
-  int ok_a = attendre_etat(d, 1, false);
-  TT_ASSERT_EQ(pthread_create(&tb, NULL, tache_fermer, &ferme), 0);
-  int ok_b = attendre_etat(d, 1, true);
-  int64_t um = ok_a && ok_b ? fj_unmount(v1, false) : -9999;
-  pthread_join(ta, NULL);
-  pthread_join(tb, NULL);
+  fj_debug_set_mount_hook(crochet_montage, NULL);
+  int a_ok = pthread_create(&ta, NULL, tache_monter, &monte) == 0;
+  int ok_a = a_ok && attendre_crochet();
+  int b_ok = 0, ok_b = 0, um = -9999;
+  if (ok_a) {
+    b_ok = pthread_create(&tb, NULL, tache_fermer, &ferme) == 0;
+    ok_b = b_ok && attendre_fermeture(d);
+    if (ok_b) um = fj_unmount(v1, false);
+  }
+  liberer_montage();
+  if (a_ok) pthread_join(ta, NULL);
+  if (b_ok) pthread_join(tb, NULL);
+  fj_debug_set_mount_hook(NULL, NULL);
+  if (!b_ok) fj_close_disk(d); /* chemins d'échec : ne rien laisser ouvert */
   TT_ASSERT(ok_a && ok_b);
   TT_ASSERT_EQ(um, FL_EBUSY);
   TT_ASSERT_EQ(monte.rc, FL_EBUSY);

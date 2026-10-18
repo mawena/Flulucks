@@ -60,6 +60,9 @@ int fj_close_file(int64_t file);
 
 /* Références et état « en fermeture » d'une entrée (tests) ; FL_EINVAL si la poignée est invalide. */
 int fj_debug_slot(int64_t h, unsigned *refs, bool *closing);
+/* Tests : fn(arg) est appelée par fj_mount, référence du disque tenue, juste avant d'enregistrer le
+ * volume. NULL retire le crochet. À poser avant de lancer des fils, à retirer après leur fin. */
+void fj_debug_set_mount_hook(void (*fn)(void *), void *arg);
 /* Nombre d'entrées occupées (tests). */
 unsigned fj_debug_used(void);
 

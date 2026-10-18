@@ -441,6 +441,13 @@ static int vol_open(fl_bdev *dev, uint32_t part_index, const void *pass, size_t 
   return fl_fs_mount(target, FL_CONTENT_EXT4, false, &v->fs);
 }
 
+static void (*g_mount_hook)(void *);
+static void *g_mount_hook_arg;
+void fj_debug_set_mount_hook(void (*fn)(void *), void *arg) {
+  g_mount_hook = fn;
+  g_mount_hook_arg = arg;
+}
+
 int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t passlen) {
   jdisk *d = tab_acquire(disk, T_DISK);
   if (!d) return FL_EINVAL;
@@ -454,6 +461,7 @@ int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t pas
       vol_free(v);
       h = rc;
     } else {
+      if (g_mount_hook) g_mount_hook(g_mount_hook_arg); /* tests : pause avant l'enregistrement */
       /* enregistré tant que l'on tient la référence du disque : fj_close_disk le verra */
       h = tab_put(T_VOL, disk, v);
       if (h < 0) vol_free(v);
