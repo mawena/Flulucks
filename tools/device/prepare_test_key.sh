@@ -165,7 +165,7 @@ printf 'label: gpt\nstart=2048, type=0FC63DAF-8483-4772-8E79-3D69D8477DE4\n' | s
 udevadm settle
 PART=""
 for _ in $(seq 1 50); do
-  child="$(lsblk -nrlo NAME,TYPE "$DEV" | awk '$2=="part"{print $1; exit}')"
+  child="$(lsblk -nro NAME,TYPE "$DEV" | awk '$2=="part"{print $1; exit}')"
   if [ -n "$child" ] && [ -b "/dev/$child" ]; then PART="/dev/$child"; break; fi
   sleep 0.2
 done
