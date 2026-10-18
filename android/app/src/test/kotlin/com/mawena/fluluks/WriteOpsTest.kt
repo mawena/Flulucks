@@ -22,6 +22,8 @@ class WriteOpsTest {
         val files = HashMap<Long, String>()
         var next = 1L
         var ops = 0
+        /** Disque hostile : liste les enfants d'un chemin (nom, type) sans rapport avec `nodes`. */
+        var hostile: ((String) -> List<Pair<String, String>>)? = null
 
         private fun s(b: ByteArray) = String(b, Charsets.UTF_8)
         private fun parent(p: String) = p.substring(0, p.lastIndexOf('/')).ifEmpty { "/" }
@@ -51,6 +53,11 @@ class WriteOpsTest {
 
         override fun list(vol: Long, path: ByteArray): ByteArray {
             val p = s(path)
+            hostile?.let { h ->
+                val a = JSONArray()
+                h(p).forEach { (n, t) -> a.put(JSONObject().put("name", n).put("type", t).put("size", 0).put("mtime", 0)) }
+                return a.toString().toByteArray()
+            }
             if (!nodes.containsKey(p)) return err(EngineError.FL_ENOENT)
             if (nodes[p] != null) return err(EngineError.FL_ENOTDIR)
             val a = JSONArray()
@@ -206,5 +213,51 @@ class WriteOpsTest {
         refused { w.copy("/s", "/s") }
         refused { w.copy("/s", "/s/d") }
         refused { w.copy("/", "/t") }
+    }
+
+    private fun tooDeep(block: () -> Unit) {
+        try { block(); fail("accepté") } catch (ex: FileNotFoundException) {
+            assertEquals(WriteOps.TOO_DEEP, ex.message)
+        }
+    }
+
+    @Test fun hostileLoopRefusedWithoutWriting() {
+        dir("/b"); dir("/t")
+        e.hostile = { listOf("d" to "d") } // chaque dossier contient un dossier : boucle sans fin
+        val before = e.ops
+        tooDeep { w.delete("/b") }
+        tooDeep { w.copy("/b", "/t") }
+        assertEquals(before, e.ops) // rien de supprimé, rien de créé
+        assertEquals(setOf("/", "/b", "/t"), e.nodes.keys)
+    }
+
+    @Test fun hostileWideTreeRefused() {
+        dir("/b"); dir("/t")
+        val small = WriteOps(e, 1, maxEntries = 100)
+        e.hostile = { p -> if (p == "/b") (0 until 101).map { "n$it" to "f" } else emptyList() }
+        tooDeep { small.delete("/b") }
+        tooDeep { small.copy("/b", "/t") }
+        assertEquals(0, e.ops)
+        e.hostile = { p -> if (p == "/b") (0 until 99).map { "n$it" to "f" } else emptyList() }
+        // 100 éléments, bord inclus : la borne laisse passer (l'échec vient ensuite de l'arbre factice)
+        try { small.delete("/b") } catch (_: EngineError) { }
+    }
+
+    @Test fun depthLimitIsExact() {
+        e.hostile = { p -> if (p.count { it == '/' } < WriteOps.MAX_DEPTH) listOf("d" to "d") else emptyList() }
+        dir("/b")
+        // 256 niveaux sous /b : accepté par le parcours (échoue ensuite sur l'arbre factice, pas sur la borne)
+        try { w.delete("/b") } catch (ex: Exception) {
+            assertFalse(ex.message, ex.message == WriteOps.TOO_DEEP)
+        }
+    }
+
+    @Test fun copyWithSymlinkSaysSo() {
+        dir("/s"); file("/s/a"); dir("/t")
+        e.hostile = { p -> if (p == "/s") listOf("a" to "f", "lien" to "l", "sock" to "o") else emptyList() }
+        try { w.copy("/s", "/t"); fail("copie incomplète silencieuse") } catch (ex: FileNotFoundException) {
+            assertTrue(ex.message, ex.message!!.contains("2 lien(s) symbolique(s) ou fichier(s) spécial(aux)"))
+        }
+        assertFalse(e.nodes.containsKey("/t/s")) // rien d'écrit
     }
 }
