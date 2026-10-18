@@ -154,6 +154,16 @@ dans le même commit que le travail.
 - [x] Fusion `feature/ext4-ecriture` → `develop`
 - [x] Version `v0.2.0` *(2026-10-18, branche `release/0.2.0` → `main` ; écriture non encore essayée sur un vrai
       disque, voir T13)*
+- Correctif `hotfix/0.2.1` — écriture lente :
+  - [x] Écriture différée par fichier (`wbuf.c`) *(chaque `pwrite` devenait une transaction de journal
+        complète, ≈ 3,6 vidages de cache de ~20 ms sur un disque dur ; les écritures contiguës d'un fichier
+        sont regroupées par 4 Mio : 16 Mio écrits par blocs de 4 Kio passent à 0,6 vidage par Mio. Un seul
+        tampon par volume, vidé avant toute autre opération ; erreur d'un vidage collante sur son fichier,
+        rendue par l'écriture, la troncature, la fermeture et `sync` suivantes ; écriture directe près du
+        disque plein, pour que `FL_ENOSPC` revienne à l'écriture fautive. Test `test_ext4_tampon`, jugé par
+        `e2fsck` et `debugfs` : 9 cas, dont l'erreur différée, la panne et le disque plein ; PC 21/21 sous
+        ASan/UBSan, arm64 compilé)*
+  - [x] Version `v0.2.1` *(2026-10-18, branche `hotfix/0.2.1` → `main` et `develop`)*
 
 ### Phase 4 — FAT16 / FAT32 / exFAT (lecture puis écriture)
 - [ ] Plan de la phase 4 écrit
