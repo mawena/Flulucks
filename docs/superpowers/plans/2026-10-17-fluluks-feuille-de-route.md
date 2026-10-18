@@ -57,6 +57,29 @@ dans le même commit que le travail.
   - Liens symboliques : listés mais non ouverts par le provider → T8
   - Noms de 255 octets (lwext4), extents non écrits, `MAX_DIR_STEPS`, tests manquants (GPT hostile,
     surrogates, boucle EBR, sha512, corruptions LUKS1, label LUKS2) → phase 3 (avant toute écriture)
+- Reports de la phase 2 (revues des tâches et revue finale), à reprendre dans les plans suivants :
+  - **Avant l'écriture (phase 3)** : fenêtre de démontage non forcé qui rend `FL_EINVAL` au lieu de
+    `FL_EBUSY` (`tab_put` doit refuser un enfant si le parent est en fermeture) ; tests manquants :
+    `EBUSY` après attente, `closeDisk` pendant `mount`, `close_children` en attente ; `fj_list`
+    accumule tout le dossier en natif avant le plafond JSON de 16 Mio.
+  - **USB** : `EPROTO` toujours traduit en `FL_ENODEV` ; `clear_halt` sauté si le reset BOT échoue ;
+    tests manquants (tag faux, statut > 2, CSW court, timeout transitoire récupéré) ; endpoint 0
+    accepté ; CD virtuel en LUN 0 et `GET MAX LUN` → phase 6 ; 04/03 affiché comme « erreur
+    d'entrée/sortie » (code d'erreur dédié à créer).
+  - **Cache** : allocation ≤ 320 Kio et double copie, balayage linéaire des emplacements, retours
+    `pthread_*_init` ignorés, lecture anticipée réduite sur une requête en partie déjà en cache.
+  - **Android** : l'exécuteur unique fait attendre l'effacement des clés pendant un Argon2 (≈ 4 s) ;
+    marquer le disque détaché immédiatement ; messages français codés en dur dans Kotlin ; repli
+    API 34+ du service au premier plan (Ruling P8) ; fenêtre de quelques ms entre `stopSelf` et
+    `onDestroy` ; erreur de `runSafely` non publiée si le disque est inconnu ; course de redémarrage
+    non testée automatiquement ; « Aucune partition reconnue » sans test JVM ; pas d'unité « To ».
+  - **Sécurité, risque résiduel** : copies de la phrase de passe hors de notre contrôle (`String` du
+    champ de saisie, clavier, tampons d'encodage de Pigeon en Dart et en Kotlin).
+  - **Outils** : `kotlinOptions` déprécié ; `disable-abi-filtering` est une propriété interne de
+    Flutter (à revérifier à chaque mise à jour) ; Pigeon bloqué en 27.3.0 par Flutter 3.41.4
+    (Ruling P10) ; `$OUT` en lien symbolique dans `run_native_tests.sh` ; shellcheck absent du PC.
+  - **Essais** : refaire la grille avec une clé USB-C sacrifiée (dont le débranchement en cours de
+    lecture) et chronométrer le déverrouillage dans l'application.
 
 ### Phase 3 — ext4 en écriture
 - [ ] Plan de la phase 3 écrit
