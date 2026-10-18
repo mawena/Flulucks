@@ -45,8 +45,8 @@ dans le même commit que le travail.
       ≥ 20 Mo/s. Aucun plantage ni erreur dans les journaux. Le disque est alimenté par le téléphone, sans
       hub. Durée de déverrouillage non chronométrée dans l'application ; 4,3 s mesurés en T2 avec les
       paramètres exacts.)*
-- [ ] Fusion `feature/android-lecture` → `develop`
-- [ ] Version `v0.1.0` (branche `release/0.1.0` → `main`)
+- [x] Fusion `feature/android-lecture` → `develop`
+- [x] Version `v0.1.0` (branche `release/0.1.0` → `main`)
 - Reports de la phase 1 (revue finale) et où ils sont traités :
   - `explicit_bzero` → `fl_memzero`, gardes `extern "C"`, garde `make_fixtures.sh`, cmake 3.20 du README → T2
   - Mesure du déverrouillage sur le téléphone → T2 (tests natifs) et T10 (application)
