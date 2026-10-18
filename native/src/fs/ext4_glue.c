@@ -15,8 +15,9 @@
  * les numéros d'inode des entrées de dossier sont vérifiés, et le journal n'est jamais
  * rejoué (needs_recovery le signale).
  *
- * Écriture (§ 4.2 de la spec) : seulement avec journal, extents et des options connues
- * (sinon lecture seule, avec la raison). Le journal est démarré au montage et arrêté au
+ * Écriture (§ 4.2 de la spec) : seulement si ext4_policy.c le permet (sinon lecture seule, avec
+ * la raison), et lecture seule collante en cours de session sur une erreur d'écriture ou une somme
+ * fausse. Le journal est démarré au montage et arrêté au
  * démontage ; écriture immédiate, sans cache différé. Chaque opération est vérifiée ici
  * avant d'appeler lwext4, dont les fonctions de haut niveau ont des effets que l'API
  * n'admet pas : ext4_fopen2 avec O_CREAT crée les dossiers intermédiaires, ext4_dir_rm
@@ -37,6 +38,7 @@
 #include "ext4_misc.h"
 #include "ext4_types.h"
 #include "fluluks/error.h"
+#include "fs/ext4_policy.h"
 #include "fs/fs_internal.h"
 #include "fs/ro_reasons.h"
 
@@ -64,6 +66,7 @@ typedef struct {
   bool needs_recovery;
   bool rw;            /* monté en écriture, journal démarré */
   bool io_err;        /* une écriture ou une barrière a échoué : plus rien n'est écrit (g_lock) */
+  fl_fs *fs;          /* pour la lecture seule collante */
   uint8_t sb[1024];   /* superbloc validé, octets [1024, 2048) du disque (tenu à jour) */
 } ext4_vol;
 
@@ -93,6 +96,7 @@ static int map_err(int e) {
     /* structure corrompue (trou de dossier, entrée mal formée, inode hors bornes) : correctif
      * lwext4 0002 ; EIO reste réservé aux erreurs du périphérique */
     case EFSCORRUPTED: return FL_ECORRUPT;
+    case EBADMSG: return FL_ECORRUPT; /* somme de contrôle fausse (correctif 0005) */
     default: return FL_EIO;
   }
 }
@@ -166,7 +170,29 @@ static int bd_bflush(struct ext4_blockdev *bd) {
  * l'état de lwext4, qui diverge de celui du disque dès qu'une écriture a échoué (lwext4 ignore
  * les erreurs d'écriture de son cache de blocs). Les opérations d'écriture rendent alors FL_EIO ;
  * la lecture continue. */
-static int io_checked(const ext4_vol *v, int rc) { return v->io_err && (rc == FL_OK || rc == FL_EIO) ? FL_EIO : rc; }
+
+/* Lecture seule collante (§ 4.2) : une erreur d'écriture → RO_IOERR ; une somme fausse vue par
+ * lwext4 (EBADMSG) sur un volume en écriture → RO_CSUM. Les écritures suivantes rendent FL_EROFS
+ * (fs.c), la lecture continue. rd_err : code lwext4 d'une lecture ; wr_err : d'une écriture, qui
+ * rend FL_EIO si une écriture a échoué pendant l'opération (lwext4 ignore les erreurs d'écriture de
+ * son cache). Sous g_lock. */
+static void sticky(ext4_vol *v, int e) {
+  if (!v->rw) return;
+  if (v->io_err) fl_fs_go_read_only(v->fs, FL_RO_IOERR);
+  else if (e == EBADMSG) fl_fs_go_read_only(v->fs, FL_RO_CSUM);
+}
+static int rd_err(ext4_vol *v, int e) {
+  sticky(v, e);
+  return map_err(e);
+}
+static int wr_fl(ext4_vol *v, int rc) {
+  sticky(v, EOK);
+  return v->io_err && (rc == FL_OK || rc == FL_EIO) ? FL_EIO : rc;
+}
+static int wr_err(ext4_vol *v, int e) {
+  sticky(v, e);
+  return wr_fl(v, map_err(e));
+}
 
 /* ---------- validation du superbloc (avant lwext4) ---------- */
 
@@ -174,32 +200,6 @@ typedef struct {
   uint32_t block_size, inodes_count;
   bool recover;
 } sb_info;
-
-/* Options connues en écriture (lwext4 corrigé ; § 4.2). Les autres → lecture seule. */
-#define W_INCOMPAT (EXT4_FINCOM_FILETYPE | EXT4_FINCOM_EXTENTS | EXT4_FINCOM_64BIT | EXT4_FINCOM_FLEX_BG | \
-                    EXT4_FINCOM_RECOVER)
-#define W_RO_COMPAT                                                                                    \
-  (EXT4_FRO_COM_SPARSE_SUPER | EXT4_FRO_COM_LARGE_FILE | EXT4_FRO_COM_HUGE_FILE | EXT4_FRO_COM_DIR_NLINK | \
-   EXT4_FRO_COM_EXTRA_ISIZE | EXT4_FRO_COM_METADATA_CSUM | EXT4_FRO_COM_GDT_CSUM)
-
-/* Raison de lecture seule d'après le superbloc validé, NULL si l'écriture est permise. Dans
- * l'ordre du plan (la première règle qui s'applique) ; la politique complète (sommes de
- * contrôle, options du journal) arrive avec ext4_policy.c. Sans extents, écrire un fichier
- * troué viserait le bloc 0 du disque (ext3, anciens ext4). */
-static const char *write_refusal(const uint8_t sb[1024]) {
-  uint32_t incompat = le32(sb + 0x60), ro_compat = le32(sb + 0x64), compat = le32(sb + 0x5C);
-  if ((incompat & ~(uint32_t)W_INCOMPAT) || !(incompat & EXT4_FINCOM_EXTENTS) ||
-      (ro_compat & ~(uint32_t)W_RO_COMPAT))
-    return FL_RO_FEATURES;
-  if (!(compat & EXT4_FCOM_HAS_JOURNAL)) return FL_RO_NOJOURNAL;
-  if (incompat & EXT4_FINCOM_RECOVER) return FL_RO_RECOVERY;
-  uint16_t state = le16(sb + 0x3A);
-  if (!(state & EXT4_SUPERBLOCK_STATE_VALID_FS) || (state & EXT4_SUPERBLOCK_STATE_ERROR_FS) ||
-      le32(sb + 0x194) != 0)
-    return FL_RO_ERRORS;
-  if (le32(sb + 0x18) > 2) return FL_RO_BLOCKSIZE; /* 1, 2 ou 4 Kio */
-  return NULL;
-}
 
 /* Lit et valide le superbloc dans sb[1024] (copie conservée pour bd_bread). */
 static int sb_validate(fl_bdev *dev, uint8_t sb[1024], sb_info *out) {
@@ -277,7 +277,7 @@ static void fill_stat(const struct ext4_inode *in, fl_stat *st) {
 static int inode_of(ext4_vol *v, const char *path, struct ext4_inode *in) {
   char full[FULL_CAP];
   full_path(v, path, full);
-  return map_err(ext4_raw_inode_fill(full, NULL, in));
+  return rd_err(v, ext4_raw_inode_fill(full, NULL, in));
 }
 
 /* ---------- opérations ---------- */
@@ -288,7 +288,7 @@ static int e_statfs(fl_fs *fs, fl_statfs *out) {
   pthread_mutex_lock(&g_lock);
   int r = ext4_mount_point_stats(v->mp, &st);
   pthread_mutex_unlock(&g_lock);
-  if (r != EOK) return map_err(r);
+  if (r != EOK) return rd_err(v, r);
   uint64_t free_blocks = st.free_blocks_count < st.blocks_count ? st.free_blocks_count : st.blocks_count;
   /* blocks_count × block_size ≤ taille du disque (vérifié au montage) */
   out->total_bytes = st.blocks_count * st.block_size;
@@ -316,7 +316,7 @@ static int next_entry(ext4_vol *v, ext4_dir *d, fl_dirent *e, bool *fin) {
   for (uint32_t steps = 0; steps < MAX_DIR_STEPS; steps++) {
     const ext4_direntry *de = NULL;
     int r = ext4_dir_entry_get(d, &de);
-    if (r != EOK) return map_err(r);
+    if (r != EOK) return rd_err(v, r);
     if (!de) {
       *fin = true;
       return FL_OK;
@@ -328,7 +328,7 @@ static int next_entry(ext4_vol *v, ext4_dir *d, fl_dirent *e, bool *fin) {
     if (memchr(de->name, '/', n) || memchr(de->name, 0, n)) continue;
     struct ext4_inode in;
     r = ext4_raw_inode_fill_ino(v->mp, de->inode, &in);
-    if (r != EOK) return map_err(r);
+    if (r != EOK) return rd_err(v, r);
     memcpy(e->name, de->name, n);
     e->name[n] = 0;
     fill_stat(&in, &e->st);
@@ -349,7 +349,7 @@ static int e_readdir(fl_fs *fs, const char *path, fl_readdir_cb cb, void *ctx) {
   int rc = inode_of(v, path, &in);
   if (rc == FL_OK && (to_le16(in.mode) & EXT4_INODE_MODE_TYPE_MASK) != EXT4_INODE_MODE_DIRECTORY)
     rc = FL_ENOTDIR;
-  if (rc == FL_OK) rc = map_err(ext4_dir_open(&d, full));
+  if (rc == FL_OK) rc = rd_err(v, ext4_dir_open(&d, full));
   if (rc == FL_OK) v->open_files++; /* un démontage depuis le rappel est refusé */
   pthread_mutex_unlock(&g_lock);
   if (rc != FL_OK) return rc;
@@ -399,7 +399,7 @@ static int parent_ok(ext4_vol *v, const char *path) {
 static int inode_ino_of(ext4_vol *v, const char *path, struct ext4_inode *in, uint32_t *ino) {
   char full[FULL_CAP];
   full_path(v, path, full);
-  return map_err(ext4_raw_inode_fill(full, ino, in));
+  return rd_err(v, ext4_raw_inode_fill(full, ino, in));
 }
 
 static uint32_t inode_type(const struct ext4_inode *in) {
@@ -447,7 +447,10 @@ static int e_open(fl_fs *fs, const char *path, int flags, fl_file **out) {
     creer = rc == FL_OK;
   }
   if (rc == FL_OK && (creer || (flags & FL_O_TRUNC)) && v->io_err) rc = FL_EIO;
-  if (rc == FL_OK) rc = io_checked(v, map_err(ext4_fopen2(&h->f, full, creer ? O_RDWR | O_CREAT : flags & FL_O_RDWR ? O_RDWR : O_RDONLY)));
+  if (rc == FL_OK) {
+    int r = ext4_fopen2(&h->f, full, creer ? O_RDWR | O_CREAT : flags & FL_O_RDWR ? O_RDWR : O_RDONLY);
+    rc = creer ? wr_err(v, r) : rd_err(v, r);
+  }
   if (rc == FL_OK) {
     h->next = v->files;
     v->files = h;
@@ -456,7 +459,7 @@ static int e_open(fl_fs *fs, const char *path, int flags, fl_file **out) {
     if (flags & FL_O_TRUNC) {
       /* toujours, même vide : mtime et ctime sont mis à jour (POSIX) */
       h->written = true;
-      rc = io_checked(v, map_err(ext4_ftruncate(&h->f, 0)));
+      rc = wr_err(v, (ext4_ftruncate(&h->f, 0)));
     }
   }
   pthread_mutex_unlock(&g_lock);
@@ -488,7 +491,7 @@ static int64_t e_pread(fl_file *f, void *buf, size_t len, uint64_t off) {
   int r = ext4_fseek(&h->f, (int64_t)off, SEEK_SET);
   if (r == EOK) r = ext4_fread(&h->f, buf, len, &got); /* rien au-delà de la fin */
   pthread_mutex_unlock(&g_lock);
-  if (r != EOK) return map_err(r);
+  if (r != EOK) return rd_err(v, r);
   return (int64_t)got;
 }
 
@@ -504,7 +507,7 @@ static int64_t e_pwrite(fl_file *f, const void *buf, size_t len, uint64_t off) {
   h->written = true;
   int r = v->io_err ? EIO : ext4_fseek(&h->f, (int64_t)off, SEEK_SET);
   if (r == EOK) r = ext4_fwrite(&h->f, buf, len, &done);
-  int rc = io_checked(v, map_err(r));
+  int rc = wr_err(v, r);
   pthread_mutex_unlock(&g_lock);
   if (rc != FL_OK) return rc;
   if (done != len) return FL_EIO;
@@ -517,7 +520,7 @@ static int e_truncate(fl_file *f, uint64_t size) {
   if (size > v->max_bytes) return FL_EINVAL;
   pthread_mutex_lock(&g_lock);
   h->written = true;
-  int rc = v->io_err ? FL_EIO : io_checked(v, map_err(ext4_ftruncate(&h->f, size)));
+  int rc = v->io_err ? FL_EIO : wr_err(v, (ext4_ftruncate(&h->f, size)));
   pthread_mutex_unlock(&g_lock);
   return rc;
 }
@@ -535,7 +538,7 @@ static int e_close(fl_file *f) {
       break;
     }
   v->open_files--;
-  if (h->written) rc = io_checked(v, v->io_err ? FL_EIO : sync_locked(v));
+  if (h->written) rc = wr_fl(v, v->io_err ? FL_EIO : sync_locked(v));
   pthread_mutex_unlock(&g_lock);
   free(h);
   free(f);
@@ -553,7 +556,7 @@ static int e_mkdir(fl_fs *fs, const char *path) {
   else if (rc == FL_ENOENT) {
     rc = parent_ok(v, path);
     if (rc == FL_OK && v->io_err) rc = FL_EIO;
-    if (rc == FL_OK) rc = io_checked(v, map_err(ext4_dir_mk(full)));
+    if (rc == FL_OK) rc = wr_err(v, (ext4_dir_mk(full)));
   }
   pthread_mutex_unlock(&g_lock);
   return rc;
@@ -572,22 +575,22 @@ static int e_unlink(fl_fs *fs, const char *path) {
   /* lwext4 libérerait l'inode sous le descripteur ouvert */
   if (rc == FL_OK && ino_open(v, ino)) rc = FL_EBUSY;
   if (rc == FL_OK && v->io_err) rc = FL_EIO;
-  if (rc == FL_OK) rc = io_checked(v, map_err(ext4_fremove(full)));
+  if (rc == FL_OK) rc = wr_err(v, (ext4_fremove(full)));
   pthread_mutex_unlock(&g_lock);
   return rc;
 }
 
 /* Dossier vide : seulement « . », « .. » et des entrées libres (sous g_lock). */
-static int dir_empty(const char *full, bool *empty) {
+static int dir_empty(ext4_vol *v, const char *full, bool *empty) {
   ext4_dir d;
-  int rc = map_err(ext4_dir_open(&d, full));
+  int rc = rd_err(v, ext4_dir_open(&d, full));
   if (rc != FL_OK) return rc;
   *empty = true;
   for (uint32_t steps = 0; steps < MAX_DIR_STEPS; steps++) {
     const ext4_direntry *de = NULL;
     int r = ext4_dir_entry_get(&d, &de);
     if (r != EOK) {
-      rc = map_err(r);
+      rc = rd_err(v, r);
       break;
     }
     if (!de) break;
@@ -611,11 +614,11 @@ static int e_rmdir(fl_fs *fs, const char *path) {
   pthread_mutex_lock(&g_lock);
   int rc = inode_of(v, path, &in);
   if (rc == FL_OK && inode_type(&in) != EXT4_INODE_MODE_DIRECTORY) rc = FL_ENOTDIR;
-  if (rc == FL_OK) rc = dir_empty(full, &empty);
+  if (rc == FL_OK) rc = dir_empty(v, full, &empty);
   if (rc == FL_OK && !empty) rc = FL_ENOTEMPTY;
   /* vide : ext4_dir_rm (récursif) ne supprime que lui */
   if (rc == FL_OK && v->io_err) rc = FL_EIO;
-  if (rc == FL_OK) rc = io_checked(v, map_err(ext4_dir_rm(full)));
+  if (rc == FL_OK) rc = wr_err(v, (ext4_dir_rm(full)));
   pthread_mutex_unlock(&g_lock);
   return rc;
 }
@@ -638,7 +641,7 @@ static int e_rename(fl_fs *fs, const char *from, const char *to) {
     else if (rc == FL_ENOENT) rc = parent_ok(v, to);
   }
   if (rc == FL_OK && v->io_err) rc = FL_EIO;
-  if (rc == FL_OK) rc = io_checked(v, map_err(ext4_frename(ffrom, fto)));
+  if (rc == FL_OK) rc = wr_err(v, (ext4_frename(ffrom, fto)));
   pthread_mutex_unlock(&g_lock);
   return rc;
 }
@@ -646,7 +649,7 @@ static int e_rename(fl_fs *fs, const char *from, const char *to) {
 static int e_sync(fl_fs *fs) {
   ext4_vol *v = fs->priv;
   pthread_mutex_lock(&g_lock);
-  int rc = v->io_err ? FL_EIO : io_checked(v, sync_locked(v));
+  int rc = v->io_err ? FL_EIO : wr_fl(v, sync_locked(v));
   pthread_mutex_unlock(&g_lock);
   return rc;
 }
@@ -698,7 +701,7 @@ static const fl_fs_ops k_ext4_ops = {
 
 /* want_rw : écriture demandée sur un périphérique inscriptible (fs.c a déjà traité la lecture
  * seule demandée ou imposée par le périphérique). L'écriture n'est permise que si
- * write_refusal ne trouve rien ; sinon lecture seule avec la raison. */
+ * fl_ext4_write_policy le permet ; sinon lecture seule avec la raison. */
 int fl_ext4_mount(fl_bdev *dev, bool want_rw, fl_fs **out) {
   *out = NULL;
   fl_fs *fs = calloc(1, sizeof *fs);
@@ -714,13 +717,21 @@ int fl_ext4_mount(fl_bdev *dev, bool want_rw, fl_fs **out) {
     vol_free(fs, v);
     return rc;
   }
-  const char *refus = want_rw && !dev->read_only ? write_refusal(v->sb) : NULL;
+  /* règles du § 4.2 (ext4_policy.c), avant que lwext4 n'écrive quoi que ce soit */
+  bool permis = false;
+  char raison[128] = "";
+  if (want_rw) rc = fl_ext4_write_policy(dev, v->sb, &permis, raison);
+  if (rc != FL_OK) {
+    vol_free(fs, v);
+    return rc;
+  }
   v->dev = dev;
+  v->fs = fs;
   v->block_size = sbi.block_size;
   v->inodes_count = sbi.inodes_count;
   v->max_bytes = (uint64_t)sbi.block_size << 32;
   v->needs_recovery = sbi.recover;
-  v->rw = want_rw && !dev->read_only && !refus;
+  v->rw = want_rw && permis;
   v->bdif.open = bd_open;
   v->bdif.bread = bd_bread;
   v->bdif.bwrite = bd_bwrite;
@@ -757,7 +768,7 @@ int fl_ext4_mount(fl_bdev *dev, bool want_rw, fl_fs **out) {
   fs->ops = &k_ext4_ops;
   fs->dev = dev;
   fs->read_only = !v->rw;
-  if (refus) snprintf(fs->ro_reason, sizeof fs->ro_reason, "%s", refus);
+  if (want_rw && !permis) snprintf(fs->ro_reason, sizeof fs->ro_reason, "%s", raison);
   fs->priv = v;
   *out = fs;
   return FL_OK;

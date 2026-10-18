@@ -1250,7 +1250,9 @@ static void test_ecriture_trou_de_dossier_api(void) {
   unlink(img);
 }
 
-/* (a) Un index htree jugé mauvais : une recherche ne modifie rien (FL_ECORRUPT), une création non plus. */
+/* (a) Un index htree jugé mauvais : une recherche ne modifie rien (FL_ECORRUPT), une création non plus.
+ * Ces tests abîment des blocs de dossier sans recalculer leur somme : ils tournent sur une image sans
+ * metadata_csum, sinon la somme fausse (EBADMSG, correctif 0005) serait vue avant la structure. */
 static int indexer_et_abimer(const char *img, char *stat_avant, size_t cap) {
   char out[1 << 14];
   char *const fyd[] = {(char *)"e2fsck", (char *)"-fyD", (char *)img, NULL};
@@ -1267,7 +1269,7 @@ static void test_ecriture_htree_invalide_sans_modif(void) {
   static char avant[1 << 14], apres[1 << 14];
   char img[4096];
   vol v;
-  TT_ASSERT(copie_de("ext4-rw-reel.img", img, sizeof img) == 0);
+  TT_ASSERT(copie_de("ext4-rw-uninit.img", img, sizeof img) == 0);
   TT_ASSERT_EQ(indexer_et_abimer(img, avant, sizeof avant), 0);
   TT_ASSERT_EQ(vol_monter(&v, img, true, false), FL_OK);
   TT_ASSERT(en_ecriture(v.fs));
@@ -1288,7 +1290,7 @@ static void test_ecriture_htree_invalide_sans_modif(void) {
 static void test_interne_htree_invalide_recherche(void) {
   static char avant[1 << 14], apres[1 << 14];
   char img[4096];
-  TT_ASSERT(copie_de("ext4-rw-reel.img", img, sizeof img) == 0);
+  TT_ASSERT(copie_de("ext4-rw-uninit.img", img, sizeof img) == 0);
   TT_ASSERT_EQ(indexer_et_abimer(img, avant, sizeof avant), 0);
   TT_ASSERT_EQ(lw_monter(img), EOK);
   uint32_t ino;
@@ -1308,7 +1310,7 @@ static void test_interne_htree_invalide_recherche(void) {
  * avant le correctif. L'API publique est protégée par la recherche qui précède tout ajout. */
 static void test_interne_ajout_longueur_nulle(void) {
   char img[4096], out[4096];
-  TT_ASSERT(copie_de("ext4-rw-reel.img", img, sizeof img) == 0);
+  TT_ASSERT(copie_de("ext4-rw-uninit.img", img, sizeof img) == 0);
   /* /sous-dossier : « . » (0), « .. » (12), « données.bin » (24) ; rec_len de la 3e entrée à 0 */
   TT_ASSERT_EQ(debugfs_f(img, true, "zap_block -f /sous-dossier -o 28 -l 2 -p 0 0\n", out, sizeof out), 0);
   vol v;

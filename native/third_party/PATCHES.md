@@ -13,7 +13,9 @@
   - `native/third_party/patches/lwext4/0003-ecriture-api-horodatages-trous.patch` (phase 3, T4,
     détaillé en 7 à 10) ;
   - `native/third_party/patches/lwext4/0004-journal-sommes-v3-sequence-barrieres.patch` (phase 3, T5,
-    détaillé en 11).
+    détaillé en 11) ;
+  - `native/third_party/patches/lwext4/0005-montage-etat-tables-inodes-sommes.patch` (phase 3, T6,
+    détaillé en 12).
 - Application (`native/cmake/third_party.cmake`, à la configuration CMake) : `src/` et `include/` du
   sous-module sont copiés dans `${CMAKE_BINARY_DIR}/third_party/lwext4`, puis chaque correctif y est
   appliqué par `git apply -p1` (avec `GIT_CEILING_DIRECTORIES`, sinon `git apply` lancé à l'intérieur
@@ -30,7 +32,7 @@
 Aucune fonctionnalité du disque réel (`metadata_csum`, `64bit`, `flex_bg`, `extent`, `huge_file`,
 `dir_nlink`, `extra_isize`, journal présent mais non rejoué…) n'est refusée par lwext4 : le montage en
 lecture seule fonctionne sans correctif. Les correctifs 0001 et 0002 portent sur la justesse de la
-lecture et sur la robustesse face à un disque hostile ; 0003 sur l'écriture ; 0004 sur le journal.
+lecture et sur la robustesse face à un disque hostile ; 0003 sur l'écriture ; 0004 sur le journal ; 0005 sur le montage.
 
 ### 1. `ext4_fread` : trous et extents non écrits lus comme des zéros
 
@@ -219,6 +221,31 @@ Tests (`test_ext4_coupure.c`) : `test_ext4_journal_sommes` (vérificateur C des 
 `test_ext4_coupure_3000` : après coupure, `e2fsck -fy` ne fait que rejouer le journal (et corriger les
 compteurs globaux), puis `e2fsck -fn` est propre.
 
+### 12. Montage sobre et sûr
+
+- État du superbloc : avec journal, un montage en écriture laisse `s_state` « propre »
+  (`needs_recovery` dit que le volume est en service), comme le noyau ; avant : « erreurs » (ERROR_FS),
+  et Ubuntu voyait « not clean with errors » après une coupure. `s_mtime`, `s_wtime` et
+  `s_kbytes_written` sont tenus.
+- Tables d'inodes : jamais remises à zéro par `ext4_fs_get_block_group_ref` (avant : environ 15 Go
+  d'écritures pour 1 To au premier montage) ; `bg_itable_unused` dit quels inodes n'ont jamais servi.
+- `metadata_csum_seed` pris en charge (`ext4_sb_csum_seed`) : les images aux options par défaut
+  d'e2fsprogs 1.47 se montent, en lecture comme en écriture.
+- Sommes fausses (inode, bloc d'extents, bloc de dossier ou d'index, bitmap, descripteur de groupe) :
+  `EBADMSG`, sans rien modifier (avant : simple avertissement, puis réécriture avec une somme juste).
+- `ext4_block_get_noread` : `lb_id` posé seulement une fois le bloc obtenu (NULL déréférencé sur une
+  erreur d'E/S avec le cache en écriture différée).
+- `ext4_ialloc_alloc_inode` ne boucle plus sur un groupe au bitmap plein.
+
+Côté colle : `ext4_policy.c` applique les règles du § 4.2 avant que lwext4 n'écrive quoi que ce soit
+(options du système de fichiers et du journal, journal présent et sans rejeu en attente, état propre,
+sommes du superbloc, de chaque descripteur de groupe et du superbloc du journal, taille de bloc).
+`EBADMSG` devient `FL_ECORRUPT` et fait passer le volume en lecture seule (`RO_CSUM`) ; une erreur
+d'écriture, en lecture seule `RO_IOERR`. Lecture seule collante : les écritures suivantes rendent
+`FL_EROFS`, la lecture continue.
+
+Tests : `test_ext4_politique.c` (12 tests).
+
 ## Protections côté FluLuks (sans correctif lwext4)
 
 En écriture, `ext4_glue.c` vérifie chaque opération avant d'appeler lwext4, dont les fonctions de haut
@@ -248,7 +275,6 @@ superbloc avec `s_log_block_size = 30` provoque un comportement indéfini dans l
 - Le journal n'est jamais rejoué sur le téléphone (Ubuntu le rejoue) ; le montage en écriture d'un
   volume à rejouer est refusé (lecture seule).
 - Les liens symboliques ne sont pas suivis ; `fl_fs_open` sur un lien rend `FL_ENOTSUP`.
-- Les sommes de contrôle `metadata_csum` des inodes, des descripteurs et des dossiers ne sont vérifiées
-  qu'à titre d'avertissement (seule celle du superbloc est bloquante).
-- Le journal n'est jamais rejoué (`needs_recovery` le signale) ; `metadata_csum_seed`, `inline_data`,
+- Le parcours d'un dossier (`readdir`) ne vérifie pas la somme de ses blocs ; la recherche par nom, si.
+- Le journal n'est jamais rejoué (`needs_recovery` le signale) ; `inline_data`,
   `encrypt`, `casefold`, `largedir`, `ea_inode` rendent `FL_ENOTSUP`.

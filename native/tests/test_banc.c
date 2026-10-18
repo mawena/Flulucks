@@ -236,9 +236,9 @@ static void test_banc_modele(void) {
     TT_ASSERT(m != NULL);
     fl_bdev *dev = NULL;
     fl_fs *fs = monter(copie, &dev);
-    /* metadata_csum_seed + orphan_file (options par défaut d'e2fsprogs ≥ 1.47) : le moteur refuse de
-     * monter en phase 3 ; on ne juge alors que par debugfs. */
-    int sans_moteur = !strcmp(IMAGES[i], "ext4-rw-seed.img");
+    /* metadata_csum_seed + orphan_file (options par défaut d'e2fsprogs ≥ 1.47) : monté depuis le
+     * correctif lwext4 0005 ; toutes les images passent donc aussi par le moteur. */
+    int sans_moteur = 0;
     if (!fs && !sans_moteur) fprintf(stderr, "%s : montage par le moteur impossible\n", IMAGES[i]);
     TT_ASSERT(fs != NULL || sans_moteur);
     int ecarts = fs ? tm_check_fl(m, fs) : 0;

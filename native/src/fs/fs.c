@@ -29,6 +29,12 @@ int64_t fl_fs_now(void) {
   return now ? now() : (int64_t)time(NULL);
 }
 
+void fl_fs_go_read_only(fl_fs *fs, const char *reason) {
+  if (atomic_load(&fs->read_only)) return;
+  snprintf(fs->ro_reason, sizeof fs->ro_reason, "%s", reason);
+  atomic_store(&fs->read_only, true);
+}
+
 /* Chemin absolu, "/" ou "/a/b" : ni composant vide, ni ".", ni "..", ni "/" final. */
 static bool path_ok(const char *p) {
   if (!p || p[0] != '/') return false;
@@ -76,9 +82,12 @@ int fl_fs_statfs(fl_fs *fs, fl_statfs *out) {
   memset(out, 0, sizeof *out);
   int rc = fs->ops->statfs(fs, out);
   if (rc != FL_OK) return rc;
-  out->read_only = fs->read_only;
-  memcpy(out->ro_reason, fs->ro_reason, sizeof out->ro_reason);
-  out->ro_reason[sizeof out->ro_reason - 1] = 0;
+  /* la raison n'est lue qu'une fois read_only vu vrai : elle n'est plus modifiée ensuite */
+  out->read_only = atomic_load(&fs->read_only);
+  if (out->read_only) {
+    memcpy(out->ro_reason, fs->ro_reason, sizeof out->ro_reason);
+    out->ro_reason[sizeof out->ro_reason - 1] = 0;
+  }
   return FL_OK;
 }
 

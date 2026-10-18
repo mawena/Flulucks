@@ -41,6 +41,7 @@ set(FL_SOURCES
   src/luks/crypt_bdev.c
   src/fs/fs.c
   src/fs/ext4_glue.c
+  src/fs/ext4_policy.c
   src/usb/bot.c
   src/usb/scsi.c
   src/usb/usb_bdev.c
@@ -117,6 +118,8 @@ if(FL_TESTS)
   target_link_libraries(test_ext4_ecriture PRIVATE fl_testsupport)
   fl_add_test(test_ext4_coupure LABELS ecriture)
   target_link_libraries(test_ext4_coupure PRIVATE fl_testsupport)
+  fl_add_test(test_ext4_politique LABELS ecriture)
+  target_link_libraries(test_ext4_politique PRIVATE fl_testsupport)
   fl_add_test(test_usb)
   target_sources(test_usb PRIVATE tests/support/fake_msc.c)
 
