@@ -92,7 +92,7 @@ dans le même commit que le travail.
 - [x] T5 — Journal sûr (sommes v3, séquence, barrières) et tests de coupure
 - [x] T6 — Règles de lecture seule du § 4.2 et montage sûr
 - [x] T7 — crc32c rapide *(chemin arm64 à passer sur le Pixel : `run_native_tests.sh`)*
-- [x] T8 — Batterie de non-corruption complète *(vérifiée par le noyau le 2026-10-18 : `sudo tools/fixtures/verify_rw_with_kernel.sh build/native/batterie`, 11 images « NOYAU OK » — `1k`, `luks2`, `reel`, `secteurs-4k`, `seed`, `uninit` produites avec le correctif 0010, les 5 `longue-*` avec le code d'avant ; variante longue relancée avec le code actuel, à revérifier)*
+- [x] T8 — Batterie de non-corruption complète *(vérifiée par le noyau le 2026-10-18 : `sudo tools/fixtures/verify_rw_with_kernel.sh build/native/batterie`, 11 images « NOYAU OK » — `1k`, `luks2`, `reel`, `secteurs-4k`, `seed`, `uninit` produites avec le correctif 0010, les 5 `longue-*` avec le code d'avant ; variante longue repassée avec le code publié en 0.2.0 : verte en 107 min, images `longue-*` à refaire juger par le noyau)*
 - [x] T9 — Écriture USB (WRITE, SYNCHRONIZE CACHE, protection en écriture) *(compilation `build/android-arm64` faite ; tests sur le Pixel à passer)*
 - [x] T10 — JNI et VolumeManager en écriture (synchronisation, éjection, débranchement) *(tests JVM et natifs PC verts, `test_batterie_lent` : 35 min en Debug + ASan ; à passer sur le Pixel, injoignable depuis le conteneur : `connectedDebugAndroidTest` puis `tools/android/check_image.sh <serial>`)*
 - [x] T11 — DocumentsProvider en écriture *(tests JVM verts, dont `WriteOpsTest` sur un système de fichiers en mémoire ; `ProviderWriteTest` compilé, à passer sur le Pixel puis `tools/android/check_image.sh <serial> provider-plein.img`)*
@@ -146,7 +146,11 @@ dans le même commit que le travail.
         sur disque plein laissée en limite connue ; PC 20/20, JVM 48/48)*
 - [ ] *(utilisateur)* Clé sacrifiée branchable en USB-C (clé USB-C ou adaptateur OTG USB-A → USB-C)
 - [ ] *(utilisateur)* Sauvegarde complète du vrai disque avant toute écriture dessus
-- [ ] T13 — Essais sur le Pixel : clé sacrifiée, puis vrai disque
+- [ ] T13 — Essais sur le Pixel : clé sacrifiée, puis vrai disque *(non faits pour la 0.2.0 : pas de clé
+      sacrifiée ni de sauvegarde du vrai disque pour l'instant ; version publiée à la demande de
+      l'utilisateur, écriture par défaut, avec la mention « écriture non essayée sur un vrai disque » dans le
+      README. Le vrai disque s'ouvre bien en écriture sur le Pixel depuis le correctif du journal de 1 Gio,
+      aucune écriture n'y a été faite.)*
 - [ ] Fusion `feature/ext4-ecriture` → `develop`
 - [ ] Version `v0.2.0`
 
