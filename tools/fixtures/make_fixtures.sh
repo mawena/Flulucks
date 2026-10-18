@@ -145,18 +145,23 @@ if grep -qi checksum <<<"$h_fsck"; then echo "somme de contrôle fausse dans /ho
 #   debugfs -w : jo -c (ouvre le journal, somme v3), jw -r 100 (transaction de révocation du bloc 100 :
 #   ne réécrit aucun bloc), jc (ferme) ; e2fsck -fy rejoue cette transaction (l'image redevient propre,
 #   les options du journal restent posées).
-#   Sans metadata_csum (ext4-rw-uninit.img, anciens disques) debugfs pose la somme v1 « journal_checksum »
-#   à la place de « journal_checksum_v3 » : la bibliothèque e2fsprogs n'écrit le v3 qu'avec metadata_csum.
+#   Sans metadata_csum (ext4-rw-uninit.img, anciens disques), « jo -c » poserait la somme v1
+#   « journal_checksum » (e2fsprogs n'écrit le v3 qu'avec metadata_csum), que FluLuks refuse en écriture
+#   (correctif du journal, phase 3) : cette image a un journal sans somme (« jo » sans -c), que lwext4
+#   écrit comme jbd2.
 journal_step() {
-  local img="$1" f csum=journal_checksum_v3
-  [ "$img" = ext4-rw-uninit.img ] && csum=journal_checksum
-  printf 'jo -c\njw -r 100\njc\n' > work/jcmd
+  local img="$1" f csum=journal_checksum_v3 jo='jo -c'
+  if [ "$img" = ext4-rw-uninit.img ]; then csum=''; jo='jo'; fi
+  printf '%s\njw -r 100\njc\n' "$jo" > work/jcmd
   DBG -w -f work/jcmd "$img" >/dev/null
   e2fsck -fy "$img" >/dev/null 2>&1 || { echo "$img : e2fsck -fy a échoué après l'étape journal" >&2; exit 1; }
   f="$(LC_ALL=C dumpe2fs -h "$img" 2>/dev/null)"
   for opt in journal_incompat_revoke journal_64bit $csum; do
     grep -E '^Journal features:' <<<"$f" | grep -qw "$opt" || { echo "$img : $opt absent du journal" >&2; exit 1; }
   done
+  if [ -z "$csum" ] && grep -E '^Journal features:' <<<"$f" | grep -qw journal_checksum; then
+    echo "$img : somme v1 posée sur le journal" >&2; exit 1
+  fi
   if grep -E '^Filesystem features:' <<<"$f" | grep -q needs_recovery; then
     echo "$img : needs_recovery encore posé" >&2; exit 1
   fi

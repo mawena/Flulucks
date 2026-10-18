@@ -183,7 +183,10 @@ int fl_ext4_write_policy(fl_bdev *dev, const uint8_t sb[1024], bool *rw, char re
     if (rc == FL_ECORRUPT) jsb_ok = false;
     else if (rc != FL_OK) return rc;
     if (jsb_ok && (be32(jsb) != JBD_MAGIC_NUMBER || (be32(jsb + 4) != 3 && be32(jsb + 4) != 4))) jsb_ok = false;
-    if (jsb_ok && be32(jsb + 4) == 4 && (be32(jsb + 0x28) & ~(uint32_t)W_JOURNAL_INCOMPAT)) {
+    /* Journal v2 : options incompat hors de celles écrites correctement, ou toute option compat
+     * (JBD_FEATURE_COMPAT_CHECKSUM, sommes v1 : lwext4 ne les écrit pas comme jbd2) ou ro_compat. */
+    if (jsb_ok && be32(jsb + 4) == 4 &&
+        ((be32(jsb + 0x28) & ~(uint32_t)W_JOURNAL_INCOMPAT) || be32(jsb + 0x24) || be32(jsb + 0x2C))) {
       set(rw, reason, FL_RO_FEATURES);
       return FL_OK;
     }

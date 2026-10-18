@@ -229,6 +229,59 @@ static void test_politique_erreurs(void) {
   refusee("ext4-rw-reel.img", "ssv error_count 3", FL_RO_ERRORS);
 }
 
+/* Pose un bit d'option dans le superbloc du journal (premier bloc de l'inode 8, champs big-endian) :
+ * `champ` = 0x24 (compat), 0x28 (incompat) ou 0x2C (ro_compat). La somme du superbloc du journal
+ * devient fausse, mais la règle 2 (options) passe avant la règle 6 (sommes). */
+static int journal_option(const char *img, unsigned champ, uint32_t bit) {
+  char out[4096];
+  char *const argv[] = {(char *)"debugfs", (char *)"-R", (char *)"bmap <8> 0", (char *)img, NULL};
+  if (fu_run(argv, out, sizeof out) != 0) return -1;
+  char *nl = strrchr(out, '\n');
+  if (nl && nl[1] == 0) *nl = 0;
+  char *last = strrchr(out, '\n');
+  unsigned long long blk = strtoull(last ? last + 1 : out, NULL, 10);
+  if (blk == 0) return -1;
+  int fd = open(img, O_RDWR);
+  if (fd < 0) return -1;
+  uint8_t sb[1024];
+  int rc = -1;
+  if (pread(fd, sb, sizeof sb, 1024) == (ssize_t)sizeof sb) {
+    uint32_t bs = 1024u << (sb[0x18] | sb[0x19] << 8);
+    off_t off = (off_t)blk * bs + champ;
+    uint8_t v[4];
+    if (pread(fd, v, 4, off) == 4) {
+      v[0] |= (uint8_t)(bit >> 24), v[1] |= (uint8_t)(bit >> 16), v[2] |= (uint8_t)(bit >> 8), v[3] |= (uint8_t)bit;
+      if (pwrite(fd, v, 4, off) == 4) rc = 0;
+    }
+  }
+  close(fd);
+  return rc;
+}
+
+/* Journal à sommes v1 (JBD_FEATURE_COMPAT_CHECKSUM), ou option ro_compat inconnue : lwext4 ne les écrit
+ * pas comme jbd2, refus en écriture ; l'image reste intacte. */
+static void test_politique_journal_options(void) {
+  static const unsigned champs[] = {0x24, 0x2C};
+  for (size_t i = 0; i < 2; i++) {
+    char img[4096], ref[4096];
+    vol v;
+    TT_ASSERT(copie_de("ext4-rw-reel.img", img, sizeof img) == 0);
+    TT_ASSERT_EQ(journal_option(img, champs[i], 1), 0);
+    TT_ASSERT_EQ(fu_copy_image(img, ref, sizeof ref), 0);
+    noter(ref);
+    TT_ASSERT_EQ(vol_monter(&v, img, 0, 0), FL_OK);
+    TT_ASSERT(lecture_seule(v.fs, FL_RO_FEATURES));
+    TT_ASSERT(lire_hello(v.fs));
+    TT_ASSERT_EQ(fl_fs_mkdir(v.fs, "/nouveau"), FL_EROFS);
+    TT_ASSERT_EQ(vol_demonter(&v), FL_OK);
+    char out[4096];
+    char *const argv[] = {(char *)"cmp", ref, img, NULL};
+    TT_ASSERT_EQ(fu_run(argv, out, sizeof out), 0);
+    unlink(img);
+    unlink(ref);
+  }
+}
+
 static uint16_t le16(const uint8_t *p) { return (uint16_t)(p[0] | p[1] << 8); }
 static uint32_t le32(const uint8_t *p) {
   return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
@@ -419,6 +472,7 @@ int main(void) {
   TT_RUN(test_politique_orphan_present);
   TT_RUN(test_politique_recover);
   TT_RUN(test_politique_erreurs);
+  TT_RUN(test_politique_journal_options);
   TT_RUN(test_politique_somme_descripteur);
   TT_RUN(test_politique_somme_en_cours);
   TT_RUN(test_politique_etat_pendant_montage);

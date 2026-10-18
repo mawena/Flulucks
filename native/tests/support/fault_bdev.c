@@ -10,7 +10,32 @@ typedef struct {
   uint64_t writes_ok, writes, flushes;
   int err;
   pthread_mutex_t mu;
+  char *trace; /* fl_fault_bdev_trace */
+  size_t trace_cap, trace_len;
+  uint32_t trace_bs;
 } fault;
+
+static uint32_t be32(const uint8_t *p) {
+  return (uint32_t)p[0] << 24 | (uint32_t)p[1] << 16 | (uint32_t)p[2] << 8 | p[3];
+}
+
+/* Vrai si l'écriture contient, au début d'un bloc de trace_bs octets, un en-tête de commit jbd2. */
+static int has_commit(const fault *f, uint64_t lba, uint32_t count, uint32_t ss, const uint8_t *buf) {
+  uint64_t start = lba * ss, end = start + (uint64_t)count * ss;
+  for (uint64_t o = (start + f->trace_bs - 1) / f->trace_bs * f->trace_bs; o + 12 <= end; o += f->trace_bs) {
+    const uint8_t *b = buf + (o - start);
+    if (be32(b) == 0xC03B3998u && be32(b + 4) == 2) return 1;
+  }
+  return 0;
+}
+
+/* Sous f->mu. */
+static void trace_add(fault *f, char c) {
+  if (f->trace && f->trace_len + 1 < f->trace_cap) {
+    f->trace[f->trace_len++] = c;
+    f->trace[f->trace_len] = 0;
+  }
+}
 
 static int f_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
   fault *f = d->priv;
@@ -25,11 +50,10 @@ static int f_write(fl_bdev *d, uint64_t lba, uint32_t count, const void *buf) {
   pthread_mutex_unlock(&f->mu);
   if (cut) return f->err;
   int rc = fl_bdev_write(f->parent, lba, count, buf);
-  if (rc != FL_OK) {
-    pthread_mutex_lock(&f->mu);
-    f->writes--;
-    pthread_mutex_unlock(&f->mu);
-  }
+  pthread_mutex_lock(&f->mu);
+  if (rc != FL_OK) f->writes--;
+  else if (f->trace) trace_add(f, has_commit(f, lba, count, d->sector_size, buf) ? 'C' : 'W');
+  pthread_mutex_unlock(&f->mu);
   return rc;
 }
 
@@ -37,6 +61,7 @@ static int f_flush(fl_bdev *d) {
   fault *f = d->priv;
   pthread_mutex_lock(&f->mu);
   f->flushes++;
+  trace_add(f, 'F');
   pthread_mutex_unlock(&f->mu);
   return fl_bdev_flush(f->parent);
 }
@@ -86,4 +111,15 @@ uint64_t fl_fault_bdev_flushes(const fl_bdev *d) {
   uint64_t v = f->flushes;
   pthread_mutex_unlock(&f->mu);
   return v;
+}
+
+void fl_fault_bdev_trace(fl_bdev *d, uint32_t block_size, char *buf, size_t cap) {
+  fault *f = d->priv;
+  pthread_mutex_lock(&f->mu);
+  f->trace = cap ? buf : NULL;
+  f->trace_cap = cap;
+  f->trace_len = 0;
+  f->trace_bs = block_size ? block_size : 4096;
+  if (f->trace) f->trace[0] = 0;
+  pthread_mutex_unlock(&f->mu);
 }

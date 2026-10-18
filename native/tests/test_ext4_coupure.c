@@ -8,9 +8,10 @@
  * -fy » rejoue le journal sans autre réparation que bénigne, puis « e2fsck -fn » est propre
  * (fu_e2fsck_recover = 0), comme le demande le § 4.2 (« récupérable par Ubuntu »).
  *
- * Le vérificateur de journal reprend jcheck.py de l'essai du 2026-10-18 : sommes crc32c v3 des
- * blocs de descripteur, des blocs de données (étiquettes) et des blocs de commit, calculées ici sans
- * lwext4.
+ * Le vérificateur de journal reprend jcheck.py de l'essai du 2026-10-18, aligné sur jbd2 (recovery.c) :
+ * sommes crc32c v3 des blocs de descripteur, de révocation, des blocs de données (étiquettes, sur le
+ * bloc tel qu'il est dans le journal, donc échappé) et des blocs de commit, calculées ici sans lwext4 ;
+ * octets inutilisés de ces blocs à zéro (correctif 0007).
  *
  * Réservé au PC : sauté (code 77) si e2fsck/debugfs/dumpe2fs sont absents, et sur Android. */
 #include <fcntl.h>
@@ -188,16 +189,28 @@ static int journal_lire(const char *img, journal *jr) {
   return 0;
 }
 
-/* Parcourt le journal depuis le bloc `bloc`, transactions attendues à partir de `seq` ; compte les
- * commits dont toutes les sommes sont justes, et les sommes fausses. Arrêt au premier bloc qui n'est
- * pas de la transaction attendue (comme le rejeu). */
-static void journal_verifier(const journal *jr, uint32_t bloc, uint32_t seq, int *commits, int *fausses) {
+typedef struct {
+  int commits;  /* commits dont toutes les sommes sont justes */
+  int fausses;  /* sommes fausses */
+  int sales;    /* blocs dont des octets inutilisés ne sont pas nuls */
+  int echappes; /* étiquettes ESCAPE */
+} bilan;
+
+static bool nuls(const uint8_t *p, size_t n) {
+  while (n--)
+    if (*p++) return false;
+  return true;
+}
+
+/* Parcourt le journal depuis le bloc `bloc`, transactions attendues à partir de `seq`. Arrêt au premier
+ * bloc qui n'est pas de la transaction attendue (comme le rejeu). */
+static void journal_verifier(const journal *jr, uint32_t bloc, uint32_t seq, bilan *r) {
   const uint8_t *sb = jr->j;
   uint32_t graine = crc32c(0xFFFFFFFFu, sb + 48, 16);
   uint8_t *tmp = malloc(jr->bs);
-  *commits = *fausses = 0;
+  memset(r, 0, sizeof *r);
   if (!tmp) {
-    (*fausses)++;
+    r->fausses++;
     return;
   }
 #define BLOC(n) (jr->j + (size_t)(jr->first + ((n) - jr->first) % (jr->maxlen - jr->first)) * jr->bs)
@@ -208,30 +221,44 @@ static void journal_verifier(const journal *jr, uint32_t bloc, uint32_t seq, int
     if (type == 1) { /* descripteur */
       memcpy(tmp, b, jr->bs);
       memset(tmp + jr->bs - 4, 0, 4);
-      if (crc32c(graine, tmp, jr->bs) != be32(b + jr->bs - 4)) (*fausses)++;
+      if (crc32c(graine, tmp, jr->bs) != be32(b + jr->bs - 4)) r->fausses++;
       uint32_t off = 12, jb = bloc;
       while (off + 16 <= jr->bs - 4) {
         uint32_t flags = be32(b + off + 4), somme = be32(b + off + 12);
         off += (flags & 2) ? 16 : 32; /* SAME_UUID, sinon l'uuid suit */
         jb++;
-        memcpy(tmp, BLOC(jb), jr->bs);
-        if (flags & 1) { /* ESCAPE : le magique d'origine a été effacé dans le journal */
-          tmp[0] = 0xC0, tmp[1] = 0x3B, tmp[2] = 0x39, tmp[3] = 0x98;
+        /* jbd2 vérifie la somme sur le bloc du journal, avant de remettre le magique (ESCAPE) */
+        const uint8_t *d = BLOC(jb);
+        if (flags & 1) {
+          r->echappes++;
+          if (be32(d) != 0) r->fausses++; /* le magique doit être effacé dans le journal */
         }
         uint8_t s[4] = {(uint8_t)(seq >> 24), (uint8_t)(seq >> 16), (uint8_t)(seq >> 8), (uint8_t)seq};
-        if (crc32c(crc32c(graine, s, 4), tmp, jr->bs) != somme) (*fausses)++;
+        if (crc32c(crc32c(graine, s, 4), d, jr->bs) != somme) r->fausses++;
         if (flags & 8) break; /* LAST_TAG */
       }
+      if (off < jr->bs - 4 && !nuls(b + off, jr->bs - 4 - off)) r->sales++;
       bloc = jb + 1;
     } else if (type == 2) { /* commit */
       memcpy(tmp, b, jr->bs);
       memset(tmp + 16, 0, 4);
-      if (crc32c(graine, tmp, jr->bs) != be32(b + 16)) (*fausses)++;
-      else (*commits)++;
+      bool juste = crc32c(graine, tmp, jr->bs) == be32(b + 16);
+      if (!juste) r->fausses++;
+      else r->commits++;
+      /* type et taille de somme (v1) nuls, h_chksum[1..7] et le reste du bloc nuls */
+      if (!nuls(b + 12, 4) || !nuls(b + 20, jr->bs - 20)) r->sales++;
       bloc++;
       seq++;
+    } else if (type == 5) { /* révocation : somme de queue, octets après r_count nuls */
+      memcpy(tmp, b, jr->bs);
+      memset(tmp + jr->bs - 4, 0, 4);
+      if (crc32c(graine, tmp, jr->bs) != be32(b + jr->bs - 4)) r->fausses++;
+      uint32_t n = be32(b + 12);
+      if (n < 16 || n > jr->bs - 4) r->fausses++;
+      else if (!nuls(b + n, jr->bs - 4 - n)) r->sales++;
+      bloc++;
     } else {
-      bloc++; /* révocation */
+      bloc++;
     }
   }
 #undef BLOC
@@ -411,8 +438,9 @@ static void test_ext4_coupure_sessions(void) {
   }
 }
 
-/* Les sommes v3 écrites par lwext4 sont celles de jbd2 (avant le correctif : séquence hachée dans
- * l'ordre de l'hôte, somme de commit stockée sans to_be32). */
+/* Les sommes v3 écrites par lwext4 sont celles de jbd2 (avant le correctif 0004 : séquence hachée dans
+ * l'ordre de l'hôte, somme de commit stockée sans to_be32), et les octets inutilisés des blocs du
+ * journal sont nuls (avant 0007 : restes du cache). */
 static void test_ext4_journal_sommes(void) {
   char img[4096];
   vol v;
@@ -421,49 +449,159 @@ static void test_ext4_journal_sommes(void) {
   TT_ASSERT_EQ(journal_lire(img, &avant), 0);
   TT_ASSERT_EQ(vol_monter(&v, img, UINT64_MAX), FL_OK);
   TT_ASSERT_EQ(charge_fichiers(v.fs, "/j", 50, 7), FL_OK);
+  /* suppressions : blocs de révocation */
+  for (int i = 0; i < 50; i += 2) {
+    char p[256];
+    snprintf(p, sizeof p, "/j/entree_avec_un_nom_assez_long_%05d.txt", i);
+    TT_ASSERT_EQ(fl_fs_unlink(v.fs, p), FL_OK);
+  }
   TT_ASSERT_EQ(vol_demonter(&v), FL_OK);
   TT_ASSERT_EQ(journal_lire(img, &apres), 0);
   /* la session écrit à partir du premier bloc du journal, transactions sequence + 1, + 2… */
-  int commits = 0, fausses = 0;
-  journal_verifier(&apres, apres.first, avant.sequence + 1, &commits, &fausses);
-  fprintf(stderr, "journal : %d commits, %d sommes fausses, séquence %u → %u\n", commits, fausses,
-          avant.sequence, apres.sequence);
-  TT_ASSERT_EQ(fausses, 0);
-  TT_ASSERT(commits >= 50);
+  bilan r;
+  journal_verifier(&apres, apres.first, avant.sequence + 1, &r);
+  fprintf(stderr, "journal : %d commits, %d sommes fausses, %d blocs sales, séquence %u → %u\n", r.commits,
+          r.fausses, r.sales, avant.sequence, apres.sequence);
+  TT_ASSERT_EQ(r.fausses, 0);
+  TT_ASSERT_EQ(r.sales, 0);
+  TT_ASSERT(r.commits >= 75);
   /* s_sequence garde la prochaine transaction (jbd2), au lieu de repartir de 0 */
-  TT_ASSERT(apres.sequence >= avant.sequence + 1 + (uint32_t)commits);
+  TT_ASSERT(apres.sequence >= avant.sequence + 1 + (uint32_t)r.commits);
   free(avant.j);
   free(apres.j);
   unlink(img);
 }
 
-/* Barrières : au moins deux vidages par transaction validée (avant et après le bloc de commit). */
+/* Barrières, dans l'ordre : chaque bloc de commit est écrit seul entre deux vidages (le premier rend
+ * stables le descripteur, les données et les révocations de la transaction ; le second précède toute
+ * écriture en place), et il y a autant de commits dans la trace que dans le journal. */
 static void test_ext4_barrieres(void) {
   char img[4096];
   vol v;
   journal avant, apres;
+  static char trace[1 << 16];
   TT_ASSERT(copie_de("ext4-rw-reel.img", img, sizeof img) == 0);
   TT_ASSERT_EQ(journal_lire(img, &avant), 0);
   TT_ASSERT_EQ(vol_monter(&v, img, UINT64_MAX), FL_OK);
-  uint64_t f0 = fl_fault_bdev_flushes(v.dev);
+  fl_fault_bdev_trace(v.dev, avant.bs, trace, sizeof trace);
   uint8_t b[10000];
   remplir(b, sizeof b, 3);
   fl_file *f = NULL;
   TT_ASSERT_EQ(fl_fs_open(v.fs, "/barriere.bin", FL_O_RDWR | FL_O_CREAT, &f), FL_OK);
   TT_ASSERT_EQ(fl_file_pwrite(f, b, sizeof b, 0), (int64_t)sizeof b);
   TT_ASSERT_EQ(fl_fs_mkdir(v.fs, "/barriere-d"), FL_OK);
-  uint64_t f1 = fl_fault_bdev_flushes(v.dev);
   TT_ASSERT_EQ(fl_file_close(f), FL_OK);
-  TT_ASSERT_EQ(vol_demonter(&v), FL_OK);
+  TT_ASSERT_EQ(charge_fichiers(v.fs, "/barriere-n", 20, 9), FL_OK);
+  TT_ASSERT_EQ(fl_fs_unlink(v.fs, "/barriere.bin"), FL_OK);
+  TT_ASSERT_EQ(vol_demonter(&v), FL_OK); /* la trace reste dans le tampon */
   TT_ASSERT_EQ(journal_lire(img, &apres), 0);
-  int commits = 0, fausses = 0;
-  journal_verifier(&apres, apres.first, avant.sequence + 1, &commits, &fausses);
-  fprintf(stderr, "barrières : %d transactions, %llu vidages\n", commits, (unsigned long long)(f1 - f0));
-  TT_ASSERT_EQ(fausses, 0);
-  TT_ASSERT(commits >= 3); /* création, écriture, mkdir */
-  TT_ASSERT(f1 - f0 >= 2 * (uint64_t)commits);
+  bilan r;
+  journal_verifier(&apres, apres.first, avant.sequence + 1, &r);
+  size_t n = strlen(trace), c = 0, mal = 0;
+  for (size_t i = 0; i < n; i++) {
+    if (trace[i] != 'C') continue;
+    c++;
+    if (i == 0 || trace[i - 1] != 'F' || i + 1 >= n || trace[i + 1] != 'F') mal++;
+  }
+  fprintf(stderr, "barrières : %d transactions, %zu commits tracés, %zu mal encadrés\n", r.commits, c, mal);
+  TT_ASSERT(n + 1 < sizeof trace); /* trace complète */
+  TT_ASSERT_EQ(r.fausses, 0);
+  TT_ASSERT(r.commits >= 23); /* création, écriture, mkdir, 20 fichiers, suppression */
+  TT_ASSERT_EQ(c, (size_t)r.commits);
+  TT_ASSERT_EQ(mal, 0);
   free(avant.j);
   free(apres.j);
+  unlink(img);
+}
+
+/* Copie de ext4-rw-reel.img dont le premier bloc de la table d'inodes commence par le magique jbd2
+ * (i_mode et i_uid de l'inode 1, réservé) : tout bloc journalisé qui contient l'inode racine (2) est
+ * alors échappé. e2fsck n'aime pas cet inode 1 : l'image ne sert qu'aux tests du journal. */
+static int copie_magique(char *img, size_t cap) {
+  if (copie_de("ext4-rw-reel.img", img, cap) != 0) return -1;
+  char out[4096];
+  char *const a1[] = {(char *)"debugfs", (char *)"-w", (char *)"-R", (char *)"sif <1> mode 0x3bc0", img, NULL};
+  char *const a2[] = {(char *)"debugfs", (char *)"-w", (char *)"-R", (char *)"sif <1> uid 0x9839", img, NULL};
+  if (fu_run(a1, out, sizeof out) != 0 || fu_run(a2, out, sizeof out) != 0) return -1;
+  return 0;
+}
+
+static int charge_racine(fl_fs *fs) {
+  int rc = FL_OK;
+  for (int i = 0; rc == FL_OK && i < 5; i++) {
+    char p[64];
+    snprintf(p, sizeof p, "/echappe-%d.txt", i);
+    rc = ecrire_fichier(fs, p, p, strlen(p));
+  }
+  return rc;
+}
+
+/* Blocs échappés : la somme d'étiquette porte sur le bloc tel qu'il est dans le journal (magique
+ * effacé), comme jbd2 la vérifie ; avant 0007, lwext4 sommait le bloc d'origine. */
+static void test_ext4_journal_echappement(void) {
+  char img[4096];
+  vol v;
+  journal avant, apres;
+  TT_ASSERT_EQ(copie_magique(img, sizeof img), 0);
+  TT_ASSERT_EQ(journal_lire(img, &avant), 0);
+  TT_ASSERT_EQ(vol_monter(&v, img, UINT64_MAX), FL_OK);
+  TT_ASSERT_EQ(charge_racine(v.fs), FL_OK);
+  TT_ASSERT_EQ(vol_demonter(&v), FL_OK);
+  TT_ASSERT_EQ(journal_lire(img, &apres), 0);
+  bilan r;
+  journal_verifier(&apres, apres.first, avant.sequence + 1, &r);
+  fprintf(stderr, "échappement : %d commits, %d étiquettes échappées, %d sommes fausses\n", r.commits,
+          r.echappes, r.fausses);
+  TT_ASSERT(r.echappes >= 5);
+  TT_ASSERT_EQ(r.fausses, 0);
+  TT_ASSERT_EQ(r.sales, 0);
+  free(avant.j);
+  free(apres.j);
+  unlink(img);
+}
+
+/* Coupure juste après le premier commit (bloc échappé compris), avant toute écriture en place : e2fsck
+ * rejoue le journal sans rejeter de bloc, et le fichier créé (vide) est là. */
+static void test_ext4_coupure_echappement(void) {
+  char img[4096];
+  vol v;
+  static char trace[1 << 16];
+  /* 1. session complète tracée : nombre d'écritures jusqu'au premier commit inclus */
+  TT_ASSERT_EQ(copie_magique(img, sizeof img), 0);
+  journal j;
+  TT_ASSERT_EQ(journal_lire(img, &j), 0);
+  free(j.j);
+  TT_ASSERT_EQ(vol_monter(&v, img, UINT64_MAX), FL_OK);
+  fl_fault_bdev_trace(v.dev, j.bs, trace, sizeof trace);
+  uint64_t w0 = fl_fault_bdev_writes(v.dev);
+  TT_ASSERT_EQ(ecrire_fichier(v.fs, "/echappe-0.txt", "coupure\n", 8), FL_OK);
+  TT_ASSERT_EQ(vol_demonter(&v), FL_OK);
+  unlink(img);
+  uint64_t n = w0;
+  const char *c = strchr(trace, 'C');
+  TT_ASSERT(c != NULL);
+  for (const char *t = trace; t <= c; t++)
+    if (*t != 'F') n++;
+  /* 2. même session, coupée après ce commit */
+  TT_ASSERT_EQ(copie_magique(img, sizeof img), 0);
+  TT_ASSERT_EQ(vol_monter(&v, img, n), FL_OK);
+  int rc = ecrire_fichier(v.fs, "/echappe-0.txt", "coupure\n", 8);
+  int ru = vol_demonter(&v);
+  TT_ASSERT(rc != FL_OK || ru != FL_OK);
+  /* 3. rejeu seul (l'inode 1 retouché ferait réparer un e2fsck complet) */
+  static char out[1 << 16];
+  char *const argv[] = {(char *)"e2fsck", (char *)"-fy", (char *)"-E", (char *)"journal_only", img, NULL};
+  int e = fu_run(argv, out, sizeof out);
+  if (strstr(out, "checksum") || strstr(out, "Checksum")) fprintf(stderr, "e2fsck = %d\n%s\n", e, out);
+  TT_ASSERT(strstr(out, "checksum") == NULL && strstr(out, "Checksum") == NULL);
+  TT_ASSERT(e < 4);
+  /* le premier commit est la création (le contenu vient dans une transaction suivante) : le nouvel
+   * inode est dans le bloc échappé (inodes 1 à 16), il doit avoir été rejoué */
+  char lu[16];
+  TT_ASSERT_EQ(fu_debugfs_cat(img, "/echappe-0.txt", lu, sizeof lu), 0);
+  uint64_t mode = 0;
+  TT_ASSERT_EQ(fu_debugfs_inode_field(img, "/echappe-0.txt", "mode", &mode), 0);
+  TT_ASSERT(mode != 0);
   unlink(img);
 }
 
@@ -476,6 +614,8 @@ int main(void) {
   fl_fs_set_clock(horloge);
   TT_RUN(test_ext4_journal_sommes);
   TT_RUN(test_ext4_barrieres);
+  TT_RUN(test_ext4_journal_echappement);
+  TT_RUN(test_ext4_coupure_echappement);
   TT_RUN(test_ext4_coupure_sessions);
   TT_RUN(test_ext4_coupure_fichiers_fermes_intacts);
   TT_RUN(test_ext4_coupure_gros_fichier);

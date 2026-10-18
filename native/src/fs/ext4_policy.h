@@ -13,8 +13,8 @@
  * rw) ; une erreur de lecture du périphérique est rendue telle quelle. Règles, dans cet ordre (la
  * première qui s'applique donne la raison) :
  *   1. périphérique en lecture seule → FL_RO_WP ;
- *   2. option incompat, ro_compat ou du journal inconnue en écriture, pas d'extents, journal externe
- *      → FL_RO_FEATURES ;
+ *   2. option incompat, ro_compat ou du journal inconnue en écriture (pour le journal : toute option
+ *      compat, dont les sommes v1, ou ro_compat), pas d'extents, journal externe → FL_RO_FEATURES ;
  *   3. pas de journal → FL_RO_NOJOURNAL ;
  *   4. journal à rejouer → FL_RO_RECOVERY ;
  *   5. état non propre, erreurs signalées → FL_RO_ERRORS ;

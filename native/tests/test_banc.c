@@ -319,10 +319,9 @@ static void test_banc_journal_v3(void) {
       TT_ASSERT(strstr(out, "has_journal") == NULL);
       TT_ASSERT(strstr(out, "Journal features") == NULL);
     } else if (!strcmp(IMAGES[i], "ext4-rw-uninit.img")) {
-      /* Sans metadata_csum, e2fsprogs pose la somme v1 (ancien disque) et jamais la v3. */
+      /* Sans metadata_csum : journal sans somme (la v1 est refusée en écriture, voir make_fixtures.sh). */
       TT_ASSERT(strstr(out, "journal_incompat_revoke journal_64bit") != NULL);
-      TT_ASSERT(strstr(out, "journal_checksum ") != NULL || strstr(out, "journal_checksum\n") != NULL);
-      TT_ASSERT(strstr(out, "journal_checksum_v3") == NULL);
+      TT_ASSERT(strstr(out, "journal_checksum") == NULL);
     } else {
       TT_ASSERT(strstr(out, "journal_incompat_revoke journal_64bit journal_checksum_v3") != NULL);
     }

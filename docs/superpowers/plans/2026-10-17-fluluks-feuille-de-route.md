@@ -104,8 +104,10 @@ dans le même commit que le travail.
         5 défauts critiques, tous sans effet sur le vrai disque tant qu'aucune écriture n'y est faite)*
   - [x] Correctif T9 : avertissement USB « support changé » ou « reset » pendant l'écriture *(critique)* + T7 : crc32c dans les tests du téléphone *(UNIT ATTENTION après l'ouverture : 0x28 → disque mort, autre → `FL_EIO` sans réessai et flush en échec ; `test_crc32c` et son débit ajoutés à `run_native_tests.sh` ; PC 20/20, arm64 compilé)*
   - [ ] Correctif T10-T11 : éjection en échec, provider *(en parallèle, branche `fix/p3-ejection`)*
-  - [ ] Correctif journal (T5, T6) : journaux à somme v1 refusés en écriture, blocs échappés, octets non
-        initialisés, juge et barrières *(critique)*
+  - [x] Correctif journal (T5, T6) : journaux à somme v1 refusés en écriture, blocs échappés, octets non
+        initialisés, juge et barrières *(critique)* *(correctif lwext4 0007 : somme d'étiquette sur le
+        bloc échappé — sans lui, `e2fsck` rejetait le bloc au rejeu —, blocs du journal à zéro ; v1 et
+        ro_compat refusés ; juge aligné sur jbd2 ; ordre des barrières vérifié ; PC 20/20)*
   - [ ] Correctif écriture et politique (T4, T6) : erreur d'E/S pendant une écriture, `rmdir` sur disque
         hostile, sommes fausses avalées, lecture seule collante jusqu'au démontage *(critique)*
   - [ ] Correctif T8 : batterie (cadence 200 pas, profondeur 40, copies supprimées en échec)

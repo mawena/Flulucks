@@ -16,7 +16,9 @@
     détaillé en 11) ;
   - `native/third_party/patches/lwext4/0005-montage-etat-tables-inodes-sommes.patch` (phase 3, T6,
     détaillé en 12) ;
-  - `native/third_party/patches/lwext4/0006-crc32c-rapide.patch` (phase 3, T7, détaillé en 13).
+  - `native/third_party/patches/lwext4/0006-crc32c-rapide.patch` (phase 3, T7, détaillé en 13) ;
+  - `native/third_party/patches/lwext4/0007-journal-commit-echappement-zero.patch` (phase 3, correctif
+    du journal après relecture, détaillé en 14).
 - Application (`native/cmake/third_party.cmake`, à la configuration CMake) : `src/` et `include/` du
   sous-module sont copiés dans `${CMAKE_BINARY_DIR}/third_party/lwext4`, puis chaque correctif y est
   appliqué par `git apply -p1` (avec `GIT_CEILING_DIRECTORIES`, sinon `git apply` lancé à l'intérieur
@@ -33,7 +35,7 @@
 Aucune fonctionnalité du disque réel (`metadata_csum`, `64bit`, `flex_bg`, `extent`, `huge_file`,
 `dir_nlink`, `extra_isize`, journal présent mais non rejoué…) n'est refusée par lwext4 : le montage en
 lecture seule fonctionne sans correctif. Les correctifs 0001 et 0002 portent sur la justesse de la
-lecture et sur la robustesse face à un disque hostile ; 0003 sur l'écriture ; 0004 sur le journal ; 0005 sur le montage ; 0006 sur la vitesse.
+lecture et sur la robustesse face à un disque hostile ; 0003 sur l'écriture ; 0004 sur le journal ; 0005 sur le montage ; 0006 sur la vitesse ; 0007 corrige encore le journal.
 
 ### 1. `ext4_fread` : trous et extents non écrits lus comme des zéros
 
@@ -262,6 +264,31 @@ SSE4.2. Le chemin arm64 est vérifié à la compilation (clang, cible aarch64 : 
 
 Tests : `test_crc32c.c` (`test_crc32c_vecteurs`, `test_crc32c_equivalence`, `test_crc32c_debit` en
 label `lent`).
+
+### 14. Journal : blocs échappés, blocs à zéro, sommes v1
+
+- Blocs échappés : un bloc journalisé qui commence par le magique jbd2 est écrit dans le journal avec le
+  magique effacé (drapeau `ESCAPE`). La somme d'étiquette v3 porte désormais sur ce bloc échappé, comme
+  jbd2 la vérifie au rejeu (avant de remettre le magique) ; avant, elle portait sur le bloc d'origine et
+  le noyau comme `e2fsck` sautaient le bloc (« JBD2: Invalid checksum recovering data block »), la mise
+  à jour était perdue. Constaté sans le correctif par `test_ext4_coupure_echappement`.
+- Blocs de descripteur, de révocation et de commit mis à zéro avant d'être remplis : plus d'octets
+  restés du cache (contenu d'autres blocs) après la dernière étiquette, dans `h_chksum[1..7]` ou
+  `h_commit_sec`.
+- `JBD_FEATURE_COMPAT_CHECKSUM` testé comme option compat (l'amont testait le bit incompat de même
+  valeur, REVOKE ; sans effet sur un journal v3) ; somme du commit calculée avec seul `h_chksum[0]` à
+  zéro, comme jbd2.
+
+Côté colle : `ext4_policy.c` refuse l'écriture sur un journal portant une option compat (sommes v1 :
+lwext4 ne les calcule pas comme jbd2, le noyau arrêterait le rejeu au premier commit) ou ro_compat.
+`ext4-rw-uninit.img` (sans `metadata_csum`) a donc désormais un journal sans somme.
+
+Tests (`test_ext4_coupure.c`) : vérificateur aligné sur jbd2 (somme d'étiquette sur le bloc du journal,
+blocs de révocation, octets inutilisés nuls) ; `test_ext4_journal_echappement` (inode 1 retouché pour que
+le bloc de l'inode racine commence par le magique), `test_ext4_coupure_echappement` (coupure juste après
+le commit, rejeu par `e2fsck -E journal_only`), `test_ext4_barrieres` vérifie l'ordre (chaque commit
+écrit seul entre deux vidages, d'après une trace de `fault_bdev`) et plus seulement le nombre de vidages ;
+`test_politique_journal_options`.
 
 ## Protections côté FluLuks (sans correctif lwext4)
 
