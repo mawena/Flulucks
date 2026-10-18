@@ -147,6 +147,8 @@ static int first_block(const ctx *c, uint32_t flags, const uint8_t *iblock, uint
 /* Superbloc du journal (inode 8, bloc logique 0) dans jsb[1024]. */
 static int read_journal_sb(const ctx *c, const uint8_t *d0, uint8_t jsb[1024]) {
   uint16_t isz = le16(c->sb + 0x58);
+  /* déjà garanti par sb_validate au montage ; pas par le diagnostic sur un disque hostile */
+  if (isz < 128 || isz > c->bs || (isz & (isz - 1))) return FL_ECORRUPT;
   uint64_t itable = le32(d0 + 0x08);
   if (c->desc_size >= 64) itable |= (uint64_t)le32(d0 + 0x28) << 32;
   uint64_t off = (uint64_t)(8 - 1) * isz;
@@ -270,15 +272,19 @@ int fl_ext4_write_policy(fl_bdev *dev, const uint8_t sb[1024], bool *rw, char re
   return policy(dev, sb, false, NULL, rw, reason);
 }
 
-int fl_ext4_policy_explain(fl_bdev *dev, FILE *out) {
+int fl_ext4_policy_explain(fl_bdev *dev, const uint8_t *validated_sb, FILE *out) {
   uint8_t sb[1024];
-  int rc = fl_bdev_read_bytes(dev, 1024, sizeof sb, sb);
-  if (rc != FL_OK) return rc;
+  int rc;
+  if (validated_sb) memcpy(sb, validated_sb, sizeof sb);
+  else if ((rc = fl_bdev_read_bytes(dev, 1024, sizeof sb, sb)) != FL_OK) return rc;
+  /* Superbloc relu (diagnostic hors montage) : les bornes de sb_validate dont dépend la politique. */
+  uint32_t log_bs = le32(sb + 0x18), bpg = le32(sb + 0x20), dsz = le16(sb + 0xFE), isz = le16(sb + 0x58);
   uint64_t nblocks = le32(sb + 0x04);
   if (le32(sb + 0x60) & EXT4_FINCOM_64BIT) nblocks |= (uint64_t)le32(sb + 0x150) << 32;
-  if (le16(sb + 0x38) != 0xEF53 || le32(sb + 0x18) > 6 || le32(sb + 0x20) == 0 || le32(sb + 0x14) >= nblocks ||
-      ((le32(sb + 0x60) & EXT4_FINCOM_64BIT) && (le16(sb + 0xFE) < 32 || le16(sb + 0xFE) > 1024 ||
-                                                 (le16(sb + 0xFE) & (le16(sb + 0xFE) - 1)))))
+  uint32_t bs = log_bs <= 6 ? 1024u << log_bs : 0;
+  if (le16(sb + 0x38) != 0xEF53 || !bs || bpg == 0 || bpg > 8u * bs || le32(sb + 0x14) >= nblocks ||
+      nblocks > (dev->sector_count * dev->sector_size) / bs || isz < 128 || isz > bs || (isz & (isz - 1)) ||
+      ((le32(sb + 0x60) & EXT4_FINCOM_64BIT) && (dsz < 32 || dsz > bs || (dsz & (dsz - 1)))))
     return FL_ECORRUPT;
   bool rw = false;
   char reason[128];
@@ -289,13 +295,13 @@ int fl_ext4_policy_explain(fl_bdev *dev, FILE *out) {
   return FL_OK;
 }
 
-void fl_ext4_policy_log(fl_bdev *dev) {
+void fl_ext4_policy_log(fl_bdev *dev, const uint8_t sb[1024]) {
 #ifdef __ANDROID__
   char *buf = NULL;
   size_t len = 0;
   FILE *m = open_memstream(&buf, &len);
   if (!m) return;
-  int rc = fl_ext4_policy_explain(dev, m);
+  int rc = fl_ext4_policy_explain(dev, sb, m);
   fclose(m);
   if (rc != FL_OK) __android_log_print(ANDROID_LOG_WARN, "FluLuksPolicy", "diagnostic : %s", fl_strerror(rc));
   for (char *line = buf, *nl; line && *line; line = nl ? nl + 1 : NULL) {
@@ -306,5 +312,6 @@ void fl_ext4_policy_log(fl_bdev *dev) {
   free(buf);
 #else
   (void)dev;
+  (void)sb;
 #endif
 }
