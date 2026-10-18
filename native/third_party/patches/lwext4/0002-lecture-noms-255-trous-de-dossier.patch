@@ -1,0 +1,456 @@
+From dfd50090adb6f7fd2e64f0cc6e6022889943ddb1 Mon Sep 17 00:00:00 2001
+From: mawena <gamligocharles@gmail.com>
+Date: Sun, 18 Oct 2026 06:10:10 +0000
+Subject: [PATCH] =?UTF-8?q?fix:=20noms=20de=20255=20octets,=20trous=20de?=
+ =?UTF-8?q?=20dossier,=20entr=C3=A9es=20hostiles=20(FluLuks)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Défauts de lecture qui deviennent dangereux dès que l'on écrit. Voir
+docs/superpowers/research/2026-10-18-essai-lwext4-ecriture/RAPPORT.md
+(nom de 255 octets) et third_party/PATCHES.md (limites connues).
+
+Code d'erreur : EFSCORRUPTED (= EUCLEAN, 117, comme le noyau), défini
+dans ext4_errno.h, signale une structure corrompue sur le disque. EIO
+reste réservé aux erreurs du périphérique bloc ; FluLuks traduit
+EFSCORRUPTED en FL_ECORRUPT et EIO en FL_EIO.
+
+- ext4_path_check : un composant de exactement 255 octets était refusé
+  (borne < au lieu de <=), donc ENOENT sur des noms créés par le noyau.
+- ext4_dir_get_dblk (nouvelle) : bloc physique d'un bloc de dossier ; un
+  bloc logique sans bloc physique (trou, extent non écrit) rend
+  EFSCORRUPTED au lieu de l'adresse 0, que lwext4 lisait (et aurait
+  écrite) comme un bloc de dossier. Le noyau y voit « directory contains
+  a hole ». Utilisée partout où un bloc de dossier est adressé :
+  ext4_dir_iterator_seek (parcours), ext4_dir_find_entry et
+  ext4_dir_add_entry (linéaires), ext4_dir_dx_get_leaf,
+  ext4_dir_dx_next_block, ext4_dir_dx_find_entry, ext4_dir_dx_add_entry,
+  ext4_dir_dx_reset_parent_inode (htree).
+- ext4_dir_dx_find_entry / ext4_dir_dx_add_entry : une erreur de
+  ext4_dir_dx_get_leaf autre que EXT4_ERR_BAD_DX_DIR (E/S, trou) est
+  rendue telle quelle, au lieu d'être changée en EXT4_ERR_BAD_DX_DIR (qui
+  effaçait le drapeau d'index du dossier et repassait en recherche
+  linéaire). Une erreur de ext4_dir_dx_next_block n'est plus changée en
+  ENOENT. ext4_dir_dx_add_entry : plus de libération de dx_blk (non
+  initialisé) quand get_leaf échoue, ni de target_block (pas encore lu)
+  quand split_index échoue.
+- ext4_dir_find_in_block : chaque en-tête d'entrée et chaque nom doivent
+  tenir dans le bloc (alignement, rec_len >= 8, name_len <= rec_len - 8),
+  sinon EFSCORRUPTED (avant : lecture possible jusqu'à 8 octets après le
+  bloc, et une entrée de longueur nulle donnait EINVAL, ignoré en
+  silence). Une entrée dont l'inode est hors de [1, s_inodes_count] est
+  ignorée. ext4_dir_find_entry propage EFSCORRUPTED au lieu de passer au
+  bloc suivant.
+- ext4_dir_iterator_set : une entrée mal formée rend EFSCORRUPTED et non
+  plus EIO.
+- ext4_dir_entry_get : une entrée dont le nom dépasse 255 octets (révision
+  0, name_length_high) est rendue comme une entrée libre (inode 0), et le
+  parcours continue, au lieu de s'arrêter sur EIO.
+- __ext4_fs_get_inode_ref : numéro d'inode hors de [1, s_inodes_count] →
+  EFSCORRUPTED (avant : lecture d'un descripteur de groupe au-delà de la
+  table, puis d'une « table d'inodes » au bloc 0).
+- ext4_fs_get_block_group_ref : groupe hors du nombre de groupes →
+  EFSCORRUPTED.
+---
+ include/ext4_dir.h   | 15 +++++++-
+ include/ext4_errno.h | 10 +++++
+ src/ext4.c           | 20 +++++-----
+ src/ext4_dir.c       | 87 ++++++++++++++++++++++++++------------------
+ src/ext4_dir_idx.c   | 30 ++++++++-------
+ src/ext4_fs.c        |  8 ++++
+ 6 files changed, 110 insertions(+), 60 deletions(-)
+
+diff --git a/include/ext4_dir.h b/include/ext4_dir.h
+index d0d13a2..1433276 100644
+--- a/include/ext4_dir.h
++++ b/include/ext4_dir.h
+@@ -263,13 +263,26 @@ int ext4_dir_try_insert_entry(struct ext4_sblock *sb,
+ 			      struct ext4_inode_ref *child, const char *name,
+ 			      uint32_t name_len);
+ 
++/**@brief Physical address of a directory block.
++ *        A directory block without physical block (hole, unwritten extent)
++ *        is a corruption, never block 0 of the device.
++ * @param dir    Directory i-node
++ * @param iblock Logical block index
++ * @param fblock Output physical block address (never 0 on success)
++ * @return Error code (EFSCORRUPTED for a hole)
++ */
++int ext4_dir_get_dblk(struct ext4_inode_ref *dir, ext4_lblk_t iblock,
++		      ext4_fsblk_t *fblock);
++
+ /**@brief Try to find entry in block by name.
++ *        Entries with an inode number out of range are skipped.
+  * @param block     Block containing entries
+  * @param sb        Superblock
+  * @param name_len  Length of entry name
+  * @param name      Name of entry to be found
+  * @param res_entry Output pointer to found entry, NULL if not found
+- * @return Error code
++ * @return Error code (ENOENT if not found, EFSCORRUPTED for a malformed
++ *         block)
+  */
+ int ext4_dir_find_in_block(struct ext4_block *block, struct ext4_sblock *sb,
+ 			   size_t name_len, const char *name,
+diff --git a/include/ext4_errno.h b/include/ext4_errno.h
+index 2d92280..0fe58d0 100644
+--- a/include/ext4_errno.h
++++ b/include/ext4_errno.h
+@@ -84,6 +84,16 @@ extern "C" {
+ #define EOK 0
+ #endif
+ 
++/* Corrupted on-disk structure (FluLuks), like the kernel's EFSCORRUPTED:
++ * a hole in a directory, a malformed directory entry. Distinct from EIO,
++ * which stays reserved for errors of the block device. */
++#ifndef EUCLEAN
++#define EUCLEAN 117
++#endif
++#ifndef EFSCORRUPTED
++#define EFSCORRUPTED EUCLEAN
++#endif
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/src/ext4.c b/src/ext4.c
+index 32d199a..df41e8e 100644
+--- a/src/ext4.c
++++ b/src/ext4.c
+@@ -759,7 +759,9 @@ static int ext4_path_check(const char *path, bool *is_goal)
+ {
+ 	int i;
+ 
+-	for (i = 0; i < EXT4_DIRECTORY_FILENAME_LEN; ++i) {
++	/* A component may be exactly EXT4_DIRECTORY_FILENAME_LEN bytes long:
++	 * path[EXT4_DIRECTORY_FILENAME_LEN] is then its terminator. */
++	for (i = 0; i <= EXT4_DIRECTORY_FILENAME_LEN; ++i) {
+ 
+ 		if (path[i] == '/') {
+ 			*is_goal = false;
+@@ -3268,18 +3270,18 @@ int ext4_dir_entry_get(ext4_dir *dir, const ext4_direntry **out)
+ 	}
+ 
+ 	name_length = ext4_dir_en_get_name_len(&dir->f.mp->fs.sb, it.curr);
++	memset(&dir->de.name, 0, sizeof(dir->de.name));
++	/* Directly copying the content isn't safe for Big-endian targets*/
++	dir->de.inode = ext4_dir_en_get_inode(it.curr);
+ 	if (name_length > sizeof(dir->de.name)) {
+-		/* rev 0 name_length_high: longer than any valid name. */
+-		dir->next_off = EXT4_DIR_ENTRY_OFFSET_TERM;
+-		r = EIO;
+-		goto Fini;
++		/* rev 0 name_length_high: longer than any valid name. The
++		 * entry is unusable: returned as a free entry (inode 0) so
++		 * that the walk goes on. */
++		dir->de.inode = 0;
++		name_length = 0;
+ 	}
+-
+-	memset(&dir->de.name, 0, sizeof(dir->de.name));
+ 	memcpy(&dir->de.name, it.curr->name, name_length);
+ 
+-	/* Directly copying the content isn't safe for Big-endian targets*/
+-	dir->de.inode = ext4_dir_en_get_inode(it.curr);
+ 	dir->de.entry_length = ext4_dir_en_get_entry_len(it.curr);
+ 	dir->de.name_length = (uint8_t)name_length;
+ 	dir->de.inode_type = ext4_dir_en_get_inode_type(&dir->f.mp->fs.sb,
+diff --git a/src/ext4_dir.c b/src/ext4_dir.c
+index 29a51c5..4558005 100644
+--- a/src/ext4_dir.c
++++ b/src/ext4_dir.c
+@@ -166,11 +166,11 @@ static int ext4_dir_iterator_set(struct ext4_dir_iter *it,
+ 
+ 	/* Ensure proper alignment */
+ 	if ((off_in_block % 4) != 0)
+-		return EIO;
++		return EFSCORRUPTED;
+ 
+ 	/* Ensure that the core of the entry does not overflow the block */
+ 	if (off_in_block > block_size - 8)
+-		return EIO;
++		return EFSCORRUPTED;
+ 
+ 	struct ext4_dir_en *en;
+ 	en = (void *)(it->curr_blk.data + off_in_block);
+@@ -178,17 +178,31 @@ static int ext4_dir_iterator_set(struct ext4_dir_iter *it,
+ 	/* Ensure that the whole entry does not overflow the block */
+ 	uint16_t length = ext4_dir_en_get_entry_len(en);
+ 	if (off_in_block + length > block_size)
+-		return EIO;
++		return EFSCORRUPTED;
+ 
+ 	/* Ensure the name length is not too large */
+ 	if (ext4_dir_en_get_name_len(sb, en) > length - 8)
+-		return EIO;
++		return EFSCORRUPTED;
+ 
+ 	/* Everything OK - "publish" the entry */
+ 	it->curr = en;
+ 	return EOK;
+ }
+ 
++int ext4_dir_get_dblk(struct ext4_inode_ref *dir, ext4_lblk_t iblock,
++		      ext4_fsblk_t *fblock)
++{
++	int r = ext4_fs_get_inode_dblk_idx(dir, iblock, fblock, false);
++	if (r != EOK)
++		return r;
++
++	/* "directory contains a hole": never read or write block 0 */
++	if (*fblock == 0)
++		return EFSCORRUPTED;
++
++	return EOK;
++}
++
+ /**@brief Seek to next valid directory entry.
+  *        Here can be jumped to the next data block.
+  * @param it  Initialized iterator
+@@ -240,8 +254,7 @@ static int ext4_dir_iterator_seek(struct ext4_dir_iter *it, uint64_t pos)
+ 		}
+ 
+ 		ext4_fsblk_t next_blk;
+-		r = ext4_fs_get_inode_dblk_idx(it->inode_ref, next_blk_idx,
+-					       &next_blk, false);
++		r = ext4_dir_get_dblk(it->inode_ref, next_blk_idx, &next_blk);
+ 		if (r != EOK)
+ 			return r;
+ 
+@@ -377,7 +390,7 @@ int ext4_dir_add_entry(struct ext4_inode_ref *parent, const char *name,
+ 	/* Find block, where is space for new entry and try to add */
+ 	bool success = false;
+ 	for (iblock = 0; iblock < total_blocks; ++iblock) {
+-		r = ext4_fs_get_inode_dblk_idx(parent, iblock, &fblock, false);
++		r = ext4_dir_get_dblk(parent, iblock, &fblock);
+ 		if (r != EOK)
+ 			return r;
+ 
+@@ -486,7 +499,7 @@ int ext4_dir_find_entry(struct ext4_dir_search_result *result,
+ 	/* Walk through all data blocks */
+ 	for (iblock = 0; iblock < total_blocks; ++iblock) {
+ 		/* Load block address */
+-		r = ext4_fs_get_inode_dblk_idx(parent, iblock, &fblock, false);
++		r = ext4_dir_get_dblk(parent, iblock, &fblock);
+ 		if (r != EOK)
+ 			return r;
+ 
+@@ -516,9 +529,11 @@ int ext4_dir_find_entry(struct ext4_dir_search_result *result,
+ 
+ 		/* Entry not found - put block and continue to the next block */
+ 
+-		r = ext4_block_set(parent->fs->bdev, &b);
+-		if (r != EOK)
+-			return r;
++		int r2 = ext4_block_set(parent->fs->bdev, &b);
++		if (r != ENOENT)
++			return r; /* malformed block */
++		if (r2 != EOK)
++			return r2;
+ 	}
+ 
+ 	return ENOENT;
+@@ -655,39 +670,39 @@ int ext4_dir_find_in_block(struct ext4_block *block, struct ext4_sblock *sb,
+ 			   size_t name_len, const char *name,
+ 			   struct ext4_dir_en **res_entry)
+ {
+-	/* Start from the first entry in block */
+-	struct ext4_dir_en *de = (struct ext4_dir_en *)block->data;
++	uint32_t block_size = ext4_sb_get_block_size(sb);
++	uint32_t inodes_count = ext4_get32(sb, inodes_count);
++	uint32_t off = 0;
+ 
+-	/* Set upper bound for cycling */
+-	uint8_t *addr_limit = block->data + ext4_sb_get_block_size(sb);
++	/* Walk through the block and check entries: every entry header and
++	 * name must lie inside the block (hostile disk). */
++	while (off < block_size) {
++		struct ext4_dir_en *de = (void *)(block->data + off);
+ 
+-	/* Walk through the block and check entries */
+-	while ((uint8_t *)de < addr_limit) {
+-		/* Termination condition */
+-		if ((uint8_t *)de + name_len > addr_limit)
+-			break;
++		if ((off % 4) != 0 || off > block_size - 8)
++			return EFSCORRUPTED;
+ 
+-		/* Valid entry - check it */
+-		if (ext4_dir_en_get_inode(de) != 0) {
+-			/* For more efficient compare only lengths firstly*/
++		uint16_t de_len = ext4_dir_en_get_entry_len(de);
++		if (de_len < 8 || (de_len % 4) != 0 ||
++		    de_len > block_size - off)
++			return EFSCORRUPTED;
++
++		uint32_t ino = ext4_dir_en_get_inode(de);
++		/* Unused entry, or inode out of range: skipped */
++		if (ino != 0 && ino <= inodes_count) {
+ 			uint16_t el = ext4_dir_en_get_name_len(sb, de);
+-			if (el == name_len) {
+-				/* Compare names */
+-				if (memcmp(name, de->name, name_len) == 0) {
+-					*res_entry = de;
+-					return EOK;
+-				}
++			if (el > de_len - 8)
++				return EFSCORRUPTED;
++			/* For more efficient compare only lengths firstly*/
++			if (el == name_len &&
++			    memcmp(name, de->name, name_len) == 0) {
++				*res_entry = de;
++				return EOK;
+ 			}
+ 		}
+ 
+-		uint16_t de_len = ext4_dir_en_get_entry_len(de);
+-
+-		/* Corrupted entry */
+-		if (de_len == 0)
+-			return EINVAL;
+-
+ 		/* Jump to next entry */
+-		de = (struct ext4_dir_en *)((uint8_t *)de + de_len);
++		off += de_len;
+ 	}
+ 
+ 	/* Entry not found */
+diff --git a/src/ext4_dir_idx.c b/src/ext4_dir_idx.c
+index f916cc6..a3cfa8f 100644
+--- a/src/ext4_dir_idx.c
++++ b/src/ext4_dir_idx.c
+@@ -597,7 +597,7 @@ static int ext4_dir_dx_get_leaf(struct ext4_hash_info *hinfo,
+ 
+ 		ind_level--;
+ 
+-		r = ext4_fs_get_inode_dblk_idx(inode_ref, n_blk, &fblk, false);
++		r = ext4_dir_get_dblk(inode_ref, n_blk, &fblk);
+ 		if (r != EOK)
+ 			return r;
+ 
+@@ -678,7 +678,7 @@ static int ext4_dir_dx_next_block(struct ext4_inode_ref *inode_ref,
+ 	/* Fill new path */
+ 	while (num_handles--) {
+ 		uint32_t blk = ext4_dir_dx_entry_get_block(p->position);
+-		r = ext4_fs_get_inode_dblk_idx(inode_ref, blk, &blk_adr, false);
++		r = ext4_dir_get_dblk(inode_ref, blk, &blk_adr);
+ 		if (r != EOK)
+ 			return r;
+ 
+@@ -719,7 +719,7 @@ int ext4_dir_dx_find_entry(struct ext4_dir_search_result *result,
+ 	ext4_fsblk_t root_block_addr;
+ 	int rc2;
+ 	int rc;
+-	rc = ext4_fs_get_inode_dblk_idx(inode_ref,  0, &root_block_addr, false);
++	rc = ext4_dir_get_dblk(inode_ref, 0, &root_block_addr);
+ 	if (rc != EOK)
+ 		return rc;
+ 
+@@ -759,7 +759,8 @@ int ext4_dir_dx_find_entry(struct ext4_dir_search_result *result,
+ 				  dx_blocks);
+ 	if (rc != EOK) {
+ 		ext4_block_set(fs->bdev, &root_block);
+-		return EXT4_ERR_BAD_DX_DIR;
++		/* I/O error or hole: not a reason to drop the index */
++		return rc;
+ 	}
+ 
+ 	do {
+@@ -769,8 +770,8 @@ int ext4_dir_dx_find_entry(struct ext4_dir_search_result *result,
+ 		struct ext4_block b;
+ 
+ 		leaf_blk_idx = ext4_dir_dx_entry_get_block(dx_block->position);
+-		rc = ext4_fs_get_inode_dblk_idx(inode_ref, leaf_blk_idx,
+-						&leaf_block_addr, false);
++		rc = ext4_dir_get_dblk(inode_ref, leaf_blk_idx,
++				       &leaf_block_addr);
+ 		if (rc != EOK)
+ 			goto cleanup;
+ 
+@@ -809,7 +810,7 @@ int ext4_dir_dx_find_entry(struct ext4_dir_search_result *result,
+ 		/* check if the next block could be checked */
+ 		rc = ext4_dir_dx_next_block(inode_ref, hinfo.hash, dx_block,
+ 					    &dx_blocks[0]);
+-		if (rc < 0)
++		if (rc != EOK && rc != ENOENT)
+ 			goto cleanup;
+ 	} while (rc == ENOENT);
+ 
+@@ -1235,7 +1236,7 @@ int ext4_dir_dx_add_entry(struct ext4_inode_ref *parent,
+ 	int r;
+ 	/* Get direct block 0 (index root) */
+ 	ext4_fsblk_t rblock_addr;
+-	r =  ext4_fs_get_inode_dblk_idx(parent, 0, &rblock_addr, false);
++	r = ext4_dir_get_dblk(parent, 0, &rblock_addr);
+ 	if (r != EOK)
+ 		return r;
+ 
+@@ -1273,15 +1274,16 @@ int ext4_dir_dx_add_entry(struct ext4_inode_ref *parent,
+ 
+ 	r = ext4_dir_dx_get_leaf(&hinfo, parent, &root_blk, &dx_blk, dx_blks);
+ 	if (r != EOK) {
+-		r = EXT4_ERR_BAD_DX_DIR;
+-		goto release_index;
++		/* dx_blk is not set: release the root only. I/O error or hole:
++		 * not a reason to drop the index. */
++		ext4_block_set(fs->bdev, &root_blk);
++		return r;
+ 	}
+ 
+ 	/* Try to insert to existing data block */
+ 	uint32_t leaf_block_idx = ext4_dir_dx_entry_get_block(dx_blk->position);
+ 	ext4_fsblk_t leaf_block_addr;
+-	r = ext4_fs_get_inode_dblk_idx(parent, leaf_block_idx,
+-						&leaf_block_addr, false);
++	r = ext4_dir_get_dblk(parent, leaf_block_idx, &leaf_block_addr);
+ 	if (r != EOK)
+ 		goto release_index;
+ 
+@@ -1291,7 +1293,7 @@ int ext4_dir_dx_add_entry(struct ext4_inode_ref *parent,
+ 	 */
+ 	r = ext4_dir_dx_split_index(parent, dx_blks, dx_blk, &dx_blk);
+ 	if (r != EOK)
+-		goto release_target_index;
++		goto release_index; /* target_block is not loaded yet */
+ 
+ 	struct ext4_block target_block;
+ 	r = ext4_trans_block_get(fs->bdev, &target_block, leaf_block_addr);
+@@ -1367,7 +1369,7 @@ int ext4_dir_dx_reset_parent_inode(struct ext4_inode_ref *dir,
+ {
+ 	/* Load block 0, where will be index root located */
+ 	ext4_fsblk_t fblock;
+-	int rc = ext4_fs_get_inode_dblk_idx(dir, 0, &fblock, false);
++	int rc = ext4_dir_get_dblk(dir, 0, &fblock);
+ 	if (rc != EOK)
+ 		return rc;
+ 
+diff --git a/src/ext4_fs.c b/src/ext4_fs.c
+index c7a99e7..cd9cf98 100644
+--- a/src/ext4_fs.c
++++ b/src/ext4_fs.c
+@@ -570,6 +570,10 @@ static bool ext4_fs_verify_bg_csum(struct ext4_sblock *sb,
+ int ext4_fs_get_block_group_ref(struct ext4_fs *fs, uint32_t bgid,
+ 				struct ext4_block_group_ref *ref)
+ {
++	/* Descriptor out of the table (hostile inode or block number) */
++	if (bgid >= ext4_block_group_cnt(&fs->sb))
++		return EFSCORRUPTED;
++
+ 	/* Compute number of descriptors, that fits in one data block */
+ 	uint32_t block_size = ext4_sb_get_block_size(&fs->sb);
+ 	uint32_t dsc_cnt = block_size / ext4_sb_get_desc_size(&fs->sb);
+@@ -724,6 +728,10 @@ __ext4_fs_get_inode_ref(struct ext4_fs *fs, uint32_t index,
+ 	/* Compute number of i-nodes, that fits in one data block */
+ 	uint32_t inodes_per_group = ext4_get32(&fs->sb, inodes_per_group);
+ 
++	/* Inode numbers are 1..s_inodes_count (hostile directory entry) */
++	if (index == 0 || index > ext4_get32(&fs->sb, inodes_count))
++		return EFSCORRUPTED;
++
+ 	/*
+ 	 * Inode numbers are 1-based, but it is simpler to work with 0-based
+ 	 * when computing indices
+-- 
+2.43.0
+

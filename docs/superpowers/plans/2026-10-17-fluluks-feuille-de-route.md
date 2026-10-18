@@ -85,7 +85,7 @@ dans le même commit que le travail.
 - [x] Essai préalable de l'écriture lwext4 face à `e2fsck`
       ([rapport](../research/2026-10-18-essai-lwext4-ecriture/RAPPORT.md))
 - [x] Plan de la phase 3 écrit
-- [ ] T1 — Dettes de lecture dans lwext4 (noms de 255 octets, trous de dossier, entrées hostiles)
+- [x] T1 — Dettes de lecture dans lwext4 (noms de 255 octets, trous de dossier, entrées hostiles)
 - [ ] T2 — Tests manquants des phases 1 et 2, `FL_EBUSY` en fermeture, écriture LUKS2
 - [ ] T3 — Banc de non-corruption (images d'écriture, `e2fsck`, `debugfs`, pannes)
 - [ ] T4 — Écriture ext4 (API complète, propriétaire hérité, horodatages)

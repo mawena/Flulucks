@@ -63,6 +63,9 @@ static int map_err(int e) {
     case ENOENT: return FL_ENOENT;
     case ENOTDIR: return FL_ENOTDIR;
     case ENOMEM: return FL_ENOMEM;
+    /* structure corrompue (trou de dossier, entrée mal formée, inode hors bornes) : correctif
+     * lwext4 0002 ; EIO reste réservé aux erreurs du périphérique */
+    case EFSCORRUPTED: return FL_ECORRUPT;
     default: return FL_EIO;
   }
 }

@@ -41,6 +41,68 @@ if ! debugfs -R "stat /clairsemé.bin" ext4-plain.img 2>/dev/null | grep -q 5368
 fi
 e2fsck -fn ext4-plain.img >/dev/null
 
+# --- ext4 : dettes de lecture de lwext4 (phase 3, T1) ---------------------
+# Mêmes options que le vrai disque. Arborescences de travail dans work/, supprimées à la fin.
+MKFS_DISQUE=(mkfs.ext4 -q -F -T default -b 4096 -I 256 -O ^orphan_file,^metadata_csum_seed)
+DBG() { debugfs "$@" 2>/dev/null; }
+
+# ext4-nom255.img : composants de exactement 255 octets, posés par mkfs -d (comme le noyau).
+#   /<N255>          N255 = « é » × 100 + « n » × 51 + « .txt » (255 octets UTF-8), contenu « nom de 255 octets\n »
+#   /<D255>/f.txt    D255 = « d » × 255, contenu « profond\n »
+N255="$(printf 'é%.0s' $(seq 100))$(printf 'n%.0s' $(seq 51)).txt"
+D255="$(printf 'd%.0s' $(seq 255))"
+[ "$(printf %s "$N255" | wc -c)" = 255 ] && [ "${#D255}" = 255 ] || { echo "noms de 255 octets faux" >&2; exit 1; }
+mkdir -p "work/t255/$D255"
+printf 'nom de 255 octets\n' > "work/t255/$N255"
+printf 'profond\n' > "work/t255/$D255/f.txt"
+truncate -s 8M ext4-nom255.img
+"${MKFS_DISQUE[@]}" -L FLU255 -d work/t255 ext4-nom255.img
+e2fsck -fn ext4-nom255.img >/dev/null
+
+# ext4-trou-dossier.img : dossiers dont un bloc logique n'a pas de bloc physique.
+#   /h : 300 fichiers, transformé en htree par « e2fsck -fyD » (racine d'index au bloc 0, feuilles 1..5).
+#   /d : dossier linéaire de 300 fichiers (4 blocs), créé ensuite par debugfs (mkdir + write), qui
+#        ne l'indexe pas.
+#   Puis « debugfs -w -R 'punch /d 1 1' » et « punch /h 3 3 » libèrent un bloc au milieu de chaque
+#   dossier sans changer sa taille : un trou, que le noyau signale comme une corruption
+#   (« directory contains a hole »). lwext4 y lisait le bloc physique 0.
+mkdir -p work/trou/h
+NOMS=()
+for i in $(seq -w 1 300); do NOMS+=("fichier-$i-abcdefghijklmnopqrstuvwxyz"); done
+for n in "${NOMS[@]}"; do printf '%s\n' "$n" > "work/trou/h/$n"; done
+truncate -s 8M ext4-trou-dossier.img
+"${MKFS_DISQUE[@]}" -N 1024 -L FLUTROU -d work/trou ext4-trou-dossier.img
+e2fsck -fyD ext4-trou-dossier.img >/dev/null 2>&1 || [ $? -eq 1 ]  # 1 = optimisé, rien d'autre
+DBG -R "htree /h" ext4-trou-dossier.img | grep -q "Indirect levels: 0" || { echo "/h n'est pas un htree" >&2; exit 1; }
+printf 'contenu\n' > work/trou/src.txt
+{ echo "mkdir /d"; echo "cd /d"; for n in "${NOMS[@]}"; do echo "write work/trou/src.txt $n"; done; } > work/trou/cmds
+DBG -w -f work/trou/cmds ext4-trou-dossier.img >/dev/null
+e2fsck -fn ext4-trou-dossier.img >/dev/null
+DBG -w -R "punch /d 1 1" ext4-trou-dossier.img
+DBG -w -R "punch /h 3 3" ext4-trou-dossier.img
+for t in "/d 1" "/h 3"; do
+  [ "$(DBG -R "bmap $t" ext4-trou-dossier.img)" = 0 ] || { echo "pas de trou en $t" >&2; exit 1; }
+done
+DBG -R "stat /d" ext4-trou-dossier.img | grep -q "Size: 16384" || { echo "taille de /d changée" >&2; exit 1; }
+
+# ext4-entrees-hostiles.img : /hostile, un bloc de dossier dont craft.py abîme les entrées (inode
+# hors bornes, « / » dans le nom, NUL dans le nom, nom vide), puis e-valide.txt intacte ; la somme
+# metadata_csum du bloc est recalculée. mkfs -d range les entrées dans l'ordre alphabétique.
+mkdir -p work/hostile/hostile
+for n in a-hors-bornes b-barre c-nul d-vide e-valide.txt; do printf '%s\n' "$n" > "work/hostile/hostile/$n"; done
+truncate -s 8M ext4-entrees-hostiles.img
+"${MKFS_DISQUE[@]}" -L FLUHOST -d work/hostile ext4-entrees-hostiles.img
+h_ino=$(DBG -R "stat /hostile" ext4-entrees-hostiles.img | awk '/^Inode:/ {print $2}')
+h_gen=$(DBG -R "stat /hostile" ext4-entrees-hostiles.img | awk '/^Generation:/ {print $2}')
+h_blk=$(DBG -R "bmap /hostile 0" ext4-entrees-hostiles.img)
+$PY "$HERE/craft.py" ext4-entrees-hostiles ext4-entrees-hostiles.img "$h_blk" "$h_ino" "$h_gen"
+h_ls="$(DBG -R "ls /hostile" ext4-entrees-hostiles.img)"
+h_hors=$(( $(dumpe2fs -h ext4-entrees-hostiles.img 2>/dev/null | awk -F: '/^Inode count:/ {print $2}') + 1 ))
+if ! grep -Eq "(^| )$h_hors  \([0-9]+\) a-hors-bornes " <<<"$h_ls" || grep -Eq 'b-barre|c-nul|d-vide' <<<"$h_ls" \
+   || ! grep -q 'e-valide.txt' <<<"$h_ls"; then
+  echo "entrées hostiles non posées" >&2; exit 1
+fi
+
 # --- LUKS ----------------------------------------------------------------
 # luks_offset <fichier> : décalage des données en octets
 luks_offset() {

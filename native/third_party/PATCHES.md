@@ -7,7 +7,9 @@
   il n'est jamais modifié.
 - Correctifs, dans le dépôt, appliqués dans l'ordre alphabétique :
   - `native/third_party/patches/lwext4/0001-fix-lecture-des-trous-parcours-de-dossier-et-inodes-.patch`
-    (généré par `git format-patch`, détaillé ci-dessous en 1 à 3).
+    (généré par `git format-patch`, détaillé ci-dessous en 1 à 3) ;
+  - `native/third_party/patches/lwext4/0002-lecture-noms-255-trous-de-dossier.patch` (phase 3, T1,
+    détaillé en 4 à 6).
 - Application (`native/cmake/third_party.cmake`, à la configuration CMake) : `src/` et `include/` du
   sous-module sont copiés dans `${CMAKE_BINARY_DIR}/third_party/lwext4`, puis chaque correctif y est
   appliqué par `git apply -p1` (avec `GIT_CEILING_DIRECTORIES`, sinon `git apply` lancé à l'intérieur
@@ -52,6 +54,54 @@ et `de = NULL` en fin de dossier ; `ext4_dir_entry_next` en devient une simple e
   des inodes de 128 octets, le dernier inode d'un bloc déborde du tampon. La copie est désormais bornée à
   la taille d'inode du superbloc, le reste étant mis à zéro.
 
+### 4. Noms de 255 octets
+
+`ext4_path_check` bornait un composant de chemin à 254 octets (`<` au lieu de `<=`) : un fichier au nom de
+255 octets, créé par le noyau, apparaissait dans `readdir`, mais `stat`/`open` rendaient `FL_ENOENT`.
+Corrigé. Un composant de 256 octets reste refusé par `fs.c` (`FL_EINVAL`).
+
+Test : `test_ext4_nom_255` (`ext4-nom255.img`).
+
+### 5. Trous de dossier : `ext4_dir_get_dblk` et le code `EFSCORRUPTED`
+
+Un bloc logique de dossier sans bloc physique (trou, extent non écrit) était rendu par
+`ext4_fs_get_inode_dblk_idx` comme l'adresse 0 : lwext4 lisait alors le **bloc 0 du disque** comme un bloc
+de dossier (et l'aurait écrit en ajoutant une entrée ; l'ajout bouclait sans fin). La nouvelle fonction
+`ext4_dir_get_dblk` rend `EFSCORRUPTED` dans ce cas ; elle remplace l'appel direct dans le parcours, la
+recherche et l'ajout, linéaires comme htree (`ext4_dir.c`, `ext4_dir_idx.c`). Le noyau traite ce cas comme
+une corruption (« directory contains a hole »).
+
+`EFSCORRUPTED` (= `EUCLEAN`, 117, comme le noyau) est défini dans `ext4_errno.h` et sert à toute structure
+corrompue : trou de dossier, entrée mal formée, inode ou groupe hors bornes. `EIO` reste réservé aux erreurs
+du périphérique. La colle traduit `EFSCORRUPTED` en `FL_ECORRUPT` et `EIO` en `FL_EIO`.
+
+Au passage, dans les dossiers htree : une erreur d'E/S ou un trou rencontré dans l'index n'est plus changé en
+`EXT4_ERR_BAD_DX_DIR` (qui effaçait le drapeau d'index du dossier et repassait en recherche linéaire), une
+erreur de `ext4_dir_dx_next_block` n'est plus changée en `ENOENT`, et `ext4_dir_dx_add_entry` ne libère
+plus de bloc non chargé sur ses chemins d'erreur.
+
+Tests : `test_ext4_trou_de_dossier` (parcours et recherche, aucune lecture des octets [0, 4096) après le
+montage), `test_ext4_trou_de_dossier_ajout` (`ext4_dir_add_entry` sur une copie en mémoire montée en
+écriture), `test_ext4_erreur_es_dossier` (une panne de lecture reste `FL_EIO`), sur
+`ext4-trou-dossier.img`.
+
+### 6. Entrées de dossier hostiles
+
+- `ext4_dir_find_in_block` (recherche par nom) vérifie que chaque en-tête d'entrée et chaque nom tiennent dans
+  le bloc (avant : lecture possible jusqu'à 8 octets après le bloc, et une longueur d'entrée nulle était
+  ignorée en silence) et **ignore** une entrée dont l'inode est hors de [1, `s_inodes_count`]. Avant, un tel
+  nom se résolvait vers un inode lu au hasard (descripteur de groupe hors table, « table d'inodes » au
+  bloc 0) et `stat` rendait `FL_OK` avec un contenu quelconque.
+- `ext4_dir_iterator_set` rend `EFSCORRUPTED` pour une entrée mal formée.
+- `ext4_dir_entry_get` rend une entrée au nom de plus de 255 octets (révision 0) comme une entrée libre, et le
+  parcours continue au lieu de s'arrêter sur `EIO`.
+- `__ext4_fs_get_inode_ref` et `ext4_fs_get_block_group_ref` refusent un numéro d'inode ou de groupe hors
+  bornes (`EFSCORRUPTED`).
+- Côté colle, `next_entry` ignorait déjà les entrées d'inode nul ou hors bornes, de nom vide ou contenant
+  `/` ou NUL.
+
+Test : `test_ext4_entree_hostile_ignoree` (`ext4-entrees-hostiles.img`, fabriquée par `craft.py`).
+
 ## Protections côté FluLuks (sans correctif lwext4)
 
 `native/src/fs/ext4_glue.c` valide le superbloc avant de laisser lwext4 s'en servir (taille de bloc,
@@ -62,15 +112,14 @@ superbloc avec `s_log_block_size = 30` provoque un comportement indéfini dans l
 
 ## Limites connues de lwext4 (non corrigées)
 
-- `ext4_path_check` refuse un composant de chemin d'exactement 255 octets (borne `<` au lieu de `<=`) :
-  un tel fichier apparaît dans `readdir` mais `stat`/`open` rendent `FL_ENOENT`. Pas de fixture pour le
-  tester ; à corriger avec un test dédié.
-- Trou dans un dossier : `ext4_dir_iterator_seek` ne distingue pas un bloc logique non alloué (adresse 0)
-  et lit le **bloc 0 du disque** comme un bloc de dossier. Le noyau signale ce cas comme une corruption.
-  Ici, les entrées lues restent bornées au bloc (validation de l'itérateur), donc pas d'accès mémoire hors
-  tampon ; en pratique `readdir` rend `FL_EIO` (longueur d'entrée nulle), ou au pire des entrées
-  parasites, filtrées par la vérification des numéros d'inode et des noms dans `ext4_glue.c`. Pas encore
-  corrigé : il faudrait un correctif lwext4 et une image de test dédiée.
+- `ext4_dir_find_entry` et `ext4_dir_add_entry` effacent encore le drapeau d'index d'un dossier (et
+  marquent l'inode modifié) quand l'index htree est jugé invalide (`EXT4_ERR_BAD_DX_DIR` : version de
+  hachage inconnue, limite fausse…), puis repassent en linéaire. À revoir avant d'écrire.
+- `ext4_dir_try_insert_entry` et `ext4_dir_dx_split_data` (ajout d'entrée) parcourent un bloc de dossier sans
+  valider les longueurs d'entrée. À revoir avant d'écrire.
+- `ext4_dir_dx_get_leaf` lit le nœud fils d'un index à deux niveaux dans la structure `ext4_block` de la
+  racine fournie par l'appelant : sur une erreur à ce niveau, la racine n'est pas libérée et le fils l'est
+  deux fois (compteur de références du cache). À revoir avant d'écrire.
 - Les liens symboliques ne sont pas suivis ; `fl_fs_open` sur un lien rend `FL_ENOTSUP`.
 - Les sommes de contrôle `metadata_csum` des inodes, des descripteurs et des dossiers ne sont vérifiées
   qu'à titre d'avertissement (seule celle du superbloc est bloquante).
