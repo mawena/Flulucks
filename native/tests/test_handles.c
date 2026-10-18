@@ -482,34 +482,52 @@ static cJSON *statfs_de(int64_t v) {
   return r;
 }
 
+/* Ressources d'un test d'écriture : libérées par nettoyer_ctx même quand une assertion échoue. */
+typedef struct {
+  char img[4096];
+  int64_t d, v, f;
+  cJSON *r;
+} ctx_ecr;
+
+static void nettoyer_ctx(ctx_ecr *c) {
+  if (c->r) cJSON_Delete(c->r);
+  c->r = NULL;
+  if (c->f > 0) fj_close_file(c->f);
+  if (c->v > 0) fj_unmount(c->v, true);
+  if (c->d > 0) fj_close_disk(c->d);
+  c->f = c->v = c->d = 0;
+  if (c->img[0]) unlink(c->img);
+  c->img[0] = 0;
+}
+
 /* Création, écriture, fermeture (synchronisée), renommage, dossiers, démontage, puis e2fsck -fn
  * propre sur l'image (PC seulement). */
-static void test_handles_ecriture(void) {
-  if (!fu_tools_available()) {
-    fprintf(stderr, "test_handles_ecriture sauté : e2fsck/debugfs absents\n");
-    return;
-  }
-  char src[4096], img[4096], out[1 << 14];
+static void corps_ecriture(ctx_ecr *c) {
+  char src[4096], out[1 << 14];
   snprintf(src, sizeof src, "%s", tt_fixture("ext4-rw-reel.img"));
-  TT_ASSERT_EQ(fu_copy_image(src, img, sizeof img), 0);
-  int64_t d = fj_open_image(img, false);
-  TT_ASSERT(d > 0);
-  int64_t v = fj_mount(d, 0, NULL, 0, true);
-  TT_ASSERT(v > 0);
-  cJSON *r = statfs_de(v);
-  TT_ASSERT(r != NULL);
-  TT_ASSERT(cJSON_IsFalse(cJSON_GetObjectItem(r, "read_only")));
-  TT_ASSERT_STR_EQ(cJSON_GetObjectItem(r, "ro_reason")->valuestring, "");
-  cJSON_Delete(r);
+  TT_ASSERT_EQ(fu_copy_image(src, c->img, sizeof c->img), 0);
+  c->d = fj_open_image(c->img, false);
+  TT_ASSERT(c->d > 0);
+  c->v = fj_mount(c->d, 0, NULL, 0, true);
+  TT_ASSERT(c->v > 0);
+  int64_t d = c->d, v = c->v;
+  c->r = statfs_de(v);
+  TT_ASSERT(c->r != NULL);
+  TT_ASSERT(cJSON_IsFalse(cJSON_GetObjectItem(c->r, "read_only")));
+  TT_ASSERT_STR_EQ(cJSON_GetObjectItem(c->r, "ro_reason")->valuestring, "");
+  cJSON_Delete(c->r);
+  c->r = NULL;
   uint8_t b[5000];
   for (size_t i = 0; i < sizeof b; i++) b[i] = (uint8_t)(i * 7);
-  int64_t f = fj_open_file(v, "/jni.bin", FL_O_RDWR | FL_O_CREAT);
-  TT_ASSERT(f > 0);
+  c->f = fj_open_file(v, "/jni.bin", FL_O_RDWR | FL_O_CREAT);
+  TT_ASSERT(c->f > 0);
+  int64_t f = c->f;
   TT_ASSERT_EQ(fj_pwrite(f, b, sizeof b, 0), (int64_t)sizeof b);
   TT_ASSERT_EQ(fj_pwrite(f, b, FJ_PREAD_MAX + 1, 0), FL_EINVAL);
   TT_ASSERT_EQ(fj_truncate(f, 4000), FL_OK);
   int64_t avant = fj_debug_flushes(d);
   TT_ASSERT_EQ(fj_close_file(f), FL_OK);
+  c->f = 0;
   TT_ASSERT(fj_debug_flushes(d) > avant); /* fermeture d'un fichier écrit : synchronisation */
   TT_ASSERT_EQ(fj_mkdir(v, "/jd"), FL_OK);
   TT_ASSERT_EQ(fj_mkdir(v, "/jd"), FL_EEXIST);
@@ -522,39 +540,64 @@ static void test_handles_ecriture(void) {
   TT_ASSERT_EQ(fj_rename(v, NULL, "/x"), FL_EINVAL);
   avant = fj_debug_flushes(d);
   TT_ASSERT_EQ(fj_unmount(v, false), FL_OK);
+  c->v = 0;
   TT_ASSERT(fj_debug_flushes(d) > avant);
   TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
-  int rc = fu_e2fsck_n(img, out, sizeof out);
+  c->d = 0;
+  int rc = fu_e2fsck_n(c->img, out, sizeof out);
   if (rc != 0) fprintf(stderr, "%s\n", out);
   TT_ASSERT_EQ(rc, 0);
   uint8_t lu[5001];
-  TT_ASSERT_EQ(fu_debugfs_cat(img, "/jd/jni2.bin", lu, sizeof lu), 4000);
+  TT_ASSERT_EQ(fu_debugfs_cat(c->img, "/jd/jni2.bin", lu, sizeof lu), 4000);
   TT_ASSERT_MEM_EQ(lu, b, 4000);
-  unlink(img);
+}
+
+/* Vrai (1) si le test a été sauté faute de e2fsck/debugfs. */
+static int g_saute;
+
+static void test_handles_ecriture(void) {
+  if (!fu_tools_available()) {
+    fprintf(stderr, "test_handles_ecriture sauté : e2fsck/debugfs absents\n");
+    g_saute = 1;
+    return;
+  }
+  ctx_ecr c;
+  memset(&c, 0, sizeof c);
+  corps_ecriture(&c);
+  nettoyer_ctx(&c);
+}
+
+static void corps_lecture_seule(ctx_ecr *c) {
+  c->d = fj_open_image(tt_fixture("ext4-rw-reel.img"), true);
+  TT_ASSERT(c->d > 0);
+  c->v = fj_mount(c->d, 0, NULL, 0, false);
+  TT_ASSERT(c->v > 0);
+  int64_t v = c->v;
+  c->r = statfs_de(v);
+  TT_ASSERT(c->r != NULL);
+  TT_ASSERT(cJSON_IsTrue(cJSON_GetObjectItem(c->r, "read_only")));
+  TT_ASSERT_STR_EQ(cJSON_GetObjectItem(c->r, "ro_reason")->valuestring, FL_RO_USER);
+  cJSON_Delete(c->r);
+  c->r = NULL;
+  TT_ASSERT_EQ(fj_open_file(v, "/x", FL_O_RDWR | FL_O_CREAT), FL_EROFS);
+  TT_ASSERT_EQ(fj_mkdir(v, "/x"), FL_EROFS);
+  TT_ASSERT_EQ(fj_close_disk(c->d), FL_OK);
+  c->d = c->v = 0;
+  /* écriture demandée sur une image ouverte en lecture seule : disque protégé */
+  c->d = fj_open_image(tt_fixture("ext4-rw-reel.img"), true);
+  TT_ASSERT(c->d > 0);
+  c->v = fj_mount(c->d, 0, NULL, 0, true);
+  TT_ASSERT(c->v > 0);
+  c->r = statfs_de(c->v);
+  TT_ASSERT(c->r != NULL);
+  TT_ASSERT_STR_EQ(cJSON_GetObjectItem(c->r, "ro_reason")->valuestring, FL_RO_WP);
 }
 
 static void test_handles_lecture_seule_demandee(void) {
-  int64_t d = fj_open_image(tt_fixture("ext4-rw-reel.img"), true);
-  TT_ASSERT(d > 0);
-  int64_t v = fj_mount(d, 0, NULL, 0, false);
-  TT_ASSERT(v > 0);
-  cJSON *r = statfs_de(v);
-  TT_ASSERT(r != NULL);
-  TT_ASSERT(cJSON_IsTrue(cJSON_GetObjectItem(r, "read_only")));
-  TT_ASSERT_STR_EQ(cJSON_GetObjectItem(r, "ro_reason")->valuestring, FL_RO_USER);
-  cJSON_Delete(r);
-  TT_ASSERT_EQ(fj_open_file(v, "/x", FL_O_RDWR | FL_O_CREAT), FL_EROFS);
-  TT_ASSERT_EQ(fj_mkdir(v, "/x"), FL_EROFS);
-  TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
-  /* écriture demandée sur une image ouverte en lecture seule : disque protégé */
-  d = fj_open_image(tt_fixture("ext4-rw-reel.img"), true);
-  v = fj_mount(d, 0, NULL, 0, true);
-  TT_ASSERT(v > 0);
-  r = statfs_de(v);
-  TT_ASSERT(r != NULL);
-  TT_ASSERT_STR_EQ(cJSON_GetObjectItem(r, "ro_reason")->valuestring, FL_RO_WP);
-  cJSON_Delete(r);
-  TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
+  ctx_ecr c;
+  memset(&c, 0, sizeof c);
+  corps_lecture_seule(&c);
+  nettoyer_ctx(&c);
 }
 
 int main(void) {
@@ -573,5 +616,6 @@ int main(void) {
   TT_RUN(test_handles_ebusy_fermeture);
   TT_RUN(test_handles_ecriture);
   TT_RUN(test_handles_lecture_seule_demandee);
+  if (!tt_failures && g_saute) return 77; /* SKIP_RETURN_CODE de CTest */
   TT_MAIN_END();
 }

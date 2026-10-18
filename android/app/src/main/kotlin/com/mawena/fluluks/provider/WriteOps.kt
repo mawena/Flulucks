@@ -14,7 +14,11 @@ import java.io.FileNotFoundException
  * [FileNotFoundException] avec un message français. L'appelant sérialise les appels (vérification puis
  * création d'un nom unique).
  */
-class WriteOps(private val engine: Engine, private val vol: Long) {
+class WriteOps(
+    private val engine: Engine,
+    private val vol: Long,
+    private val maxEntries: Int = MAX_ENTRIES,
+) {
     private fun b(path: String) = path.toByteArray(Charsets.UTF_8)
 
     /** null si le chemin n'existe pas. */
@@ -58,24 +62,39 @@ class WriteOps(private val engine: Engine, private val vol: Long) {
         return path
     }
 
-    /** Supprime un fichier, ou un dossier et tout son contenu (parcours itératif, enfants d'abord). */
+    /**
+     * Parcours d'une arborescence avant toute écriture, bornes comprises (disque hostile : boucle de
+     * répertoires, profondeur ou largeur démesurées). Rend les éléments parents avant leurs enfants.
+     */
+    private fun scan(root: String, rootType: FileType): List<Node> {
+        val out = ArrayList<Node>()
+        val stack = ArrayDeque<Node>()
+        stack.addLast(Node(root, rootType, 0))
+        while (stack.isNotEmpty()) {
+            val n = stack.removeLast()
+            if (n.depth > MAX_DEPTH || out.size >= maxEntries) throw FileNotFoundException(TOO_DEEP)
+            out.add(n)
+            if (n.type != FileType.DIR) continue
+            for (e in list(n.path)) {
+                if (e.name == "." || e.name == "..") continue
+                if (!DocNames.isValid(e.name)) throw FileNotFoundException("Nom de fichier invalide sur le disque : ${e.name}")
+                stack.addLast(Node(DocumentIds.child(n.path, e.name), e.type, n.depth + 1))
+                if (stack.size + out.size > maxEntries) throw FileNotFoundException(TOO_DEEP)
+            }
+        }
+        return out
+    }
+
+    private class Node(val path: String, val type: FileType, val depth: Int)
+
+    /** Supprime un fichier, ou un dossier et tout son contenu (enfants d'abord, après un parcours borné). */
     fun delete(path: String) {
         if (path == "/") throw FileNotFoundException("La racine du volume ne peut pas être supprimée")
         val root = statOrNull(path) ?: throw FileNotFoundException("Document introuvable")
-        // pile de (chemin, est un dossier, déjà développé)
-        val stack = ArrayDeque<Triple<String, Boolean, Boolean>>()
-        stack.addLast(Triple(path, root.type == FileType.DIR, false))
-        while (stack.isNotEmpty()) {
-            val (p, isDir, expanded) = stack.removeLast()
-            if (isDir && !expanded) {
-                stack.addLast(Triple(p, true, true))
-                for (e in list(p)) {
-                    if (e.name == "." || e.name == "..") continue
-                    stack.addLast(Triple(DocumentIds.child(p, e.name), e.type == FileType.DIR, false))
-                }
-            } else {
-                check(if (isDir) engine.rmdir(vol, b(p)) else engine.unlink(vol, b(p)))
-            }
+        val order = scan(path, root.type) // rien n'est écrit tant que le parcours n'est pas sain
+        for (i in order.indices.reversed()) {
+            val n = order[i]
+            check(if (n.type == FileType.DIR) engine.rmdir(vol, b(n.path)) else engine.unlink(vol, b(n.path)))
         }
     }
 
@@ -112,21 +131,19 @@ class WriteOps(private val engine: Engine, private val vol: Long) {
             throw FileNotFoundException("Un dossier ne peut pas être copié dans lui-même")
         }
         val top = uniqueChild(targetParent, nameOf(path))
-        // file de (source, destination, type)
-        val queue = ArrayDeque<Triple<String, String, FileType>>()
-        queue.addLast(Triple(path, top, st.type))
-        while (queue.isNotEmpty()) {
-            val (src, dst, type) = queue.removeFirst()
-            when (type) {
-                FileType.DIR -> {
-                    check(engine.mkdir(vol, b(dst)))
-                    for (e in list(src)) {
-                        if (e.name == "." || e.name == "..") continue
-                        queue.addLast(Triple(DocumentIds.child(src, e.name), DocumentIds.child(dst, e.name), e.type))
-                    }
-                }
-                FileType.FILE -> copyFile(src, dst)
-                else -> {} // lien ou fichier spécial : le moteur ne sait pas les créer, ignorés
+        // parcours borné avant toute écriture ; liens et fichiers spéciaux ne sont pas copiables
+        val plan = scan(path, st.type)
+        val skipped = plan.count { it.type != FileType.FILE && it.type != FileType.DIR }
+        if (skipped > 0) {
+            throw FileNotFoundException(
+                "Copie impossible : $skipped lien(s) symbolique(s) ou fichier(s) spécial(aux) ne peuvent pas être copiés",
+            )
+        }
+        for (n in plan) { // parents avant enfants
+            val dst = if (n.path == path) top else top + n.path.substring(path.length)
+            when (n.type) {
+                FileType.DIR -> check(engine.mkdir(vol, b(dst)))
+                else -> copyFile(n.path, dst)
             }
         }
         return top
@@ -160,6 +177,9 @@ class WriteOps(private val engine: Engine, private val vol: Long) {
 
     companion object {
         const val INVALID_NAME = "Nom invalide"
+        const val TOO_DEEP = "Arborescence trop profonde ou en boucle"
+        const val MAX_DEPTH = 256
+        const val MAX_ENTRIES = 1_000_000
         const val COPY_CHUNK = 1 shl 20
 
         fun parentOf(path: String): String {

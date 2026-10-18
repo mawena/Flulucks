@@ -49,7 +49,11 @@ int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t pas
  * (c'est lui qui démontera le volume). Un enregistrement d'enfant (fj_mount, fj_open_file) sous un
  * parent en cours de fermeture rend aussi FL_EBUSY. Avec force : ferme les fichiers (en attendant les
  * lectures en cours) puis démonte. Un volume en écriture est synchronisé puis démonté (journal arrêté,
- * SYNCHRONIZE CACHE) ; disque mort : tout est libéré quand même et l'erreur est rendue. */
+ * SYNCHRONIZE CACHE) ; disque mort : tout est libéré quand même et l'erreur est rendue.
+ * Contrat d'erreur (sans force) : seul FL_EBUSY laisse le volume intact et utilisable (on peut réessayer).
+ * Toute autre erreur (EIO…) est rendue APRÈS destruction du volume : système de fichiers libéré, clé
+ * effacée, poignée invalide (un second appel rend FL_EINVAL). L'appelant doit alors oublier le volume ;
+ * des données ont pu ne pas être écrites. */
 int fj_unmount(int64_t vol, bool force);
 
 int fj_statfs(int64_t vol, fl_json *out);

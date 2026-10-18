@@ -63,6 +63,14 @@ object VolumeManager {
     const val MSG_DETACH_DURING_WRITE =
         "Disque débranché pendant une écriture : vérifiez-le sous Ubuntu avant de le réutiliser"
     fun msgEjectFailed(detail: String) = "Éjection impossible : $detail"
+    fun msgEjectIncomplete(detail: String) =
+        "Éjection incomplète : des données ont pu ne pas être écrites ($detail). Vérifiez le disque sous Ubuntu."
+
+    const val MSG_FILES_OPEN = "des fichiers sont encore ouverts"
+    private const val RO_USER_REASON = "ouvert en lecture seule à votre demande" // FL_RO_USER
+    fun msgModeChange(writable: Boolean, detail: String?) =
+        "Impossible de rouvrir le volume en " + (if (writable) "écriture" else "lecture seule") + " : " +
+            (detail ?: "erreur") + ". Éjectez-le d'abord."
 
     /** Délai entre la dernière écriture et la synchronisation du volume. */
     const val SYNC_DELAY_MS = 3000L
@@ -375,8 +383,16 @@ object VolumeManager {
 
     private fun mountLocked(diskId: String, partIndex: Int, pass: ByteArray?, writable: Boolean): VolumeState {
         try {
-            mounts.values.firstOrNull { it.state.diskId == diskId && it.state.partIndex == partIndex }
-                ?.let { return it.state }
+            val existing = mounts.values.firstOrNull { it.state.diskId == diskId && it.state.partIndex == partIndex }
+            if (existing != null) {
+                // Écriture demandée sur un volume ouvert en lecture seule par choix, ou lecture seule demandée
+                // sur un volume en écriture : remontage. Une lecture seule imposée (disque protégé…) ne
+                // changerait pas en remontant : le volume ouvert convient.
+                val st = existing.state
+                val wrongMode = if (writable) st.readOnly && st.roReason == RO_USER_REASON else !st.readOnly
+                if (!wrongMode) return existing.state
+                remountForMode(existing, writable)
+            }
             val entry = diskEntries[diskId]
             if (entry != null && entry.handle <= 0 && entry.state.error == null) reopen(entry) // éjecté
             if (entry == null || entry.handle <= 0) throw EngineError(EngineError.FL_ENODEV)
@@ -409,6 +425,20 @@ object VolumeManager {
         }
     }
 
+    /**
+     * Volume ouvert dans l'autre mode que celui demandé : s'il n'a aucun fichier ouvert il est démonté
+     * (synchronisé) puis remonté par l'appelant dans le mode demandé ; sinon erreur claire.
+     */
+    private fun remountForMode(m: MountEntry, writable: Boolean) {
+        val rcSync = engine.sync(m.handle)
+        if (rcSync < 0) throw EngineError(rcSync, msgModeChange(writable, EngineError(rcSync).message))
+        val rc = engine.unmount(m.handle, false)
+        if (rc == EngineError.FL_EBUSY) throw EngineError(rc, msgModeChange(writable, MSG_FILES_OPEN))
+        forget(m.state.id) // démonté, ou détruit par le moteur sur erreur
+        publishVolumes()
+        if (rc < 0) throw EngineError(rc, msgModeChange(writable, EngineError(rc).message))
+    }
+
     fun eject(volumeId: String) {
         val disk = mounts[volumeId]?.state?.diskId
         exec.execute { runSafely(disk) { ejectVolumes(listOf(volumeId)) } }
@@ -421,7 +451,9 @@ object VolumeManager {
     /**
      * Éjection (exécuteur) : synchronisation, démontage normal (journal arrêté, SYNCHRONIZE CACHE, clé
      * effacée), puis libération du disque s'il n'a plus de volume. Un échec (fichier encore ouvert,
-     * disque qui refuse l'écriture) garde le volume ouvert et publie « Éjection impossible : … ».
+     * disque qui refuse la synchronisation) garde le volume ouvert et publie « Éjection impossible : … ». Si le
+     * démontage échoue autrement (EIO…), le moteur a déjà détruit le volume : il est oublié, le disque libéré,
+     * et l'erreur s'accompagne d'un avertissement de perte possible de données.
      */
     private fun ejectVolumes(ids: List<String>) {
         _ejectError.value = null
@@ -430,13 +462,23 @@ object VolumeManager {
             for (id in ids) {
                 val m = mounts[id] ?: continue
                 pendingSync.remove(id)?.invoke()
-                var rc = engine.sync(m.handle)
-                if (rc >= 0) rc = engine.unmount(m.handle, false)
-                if (rc < 0) {
+                val rcSync = engine.sync(m.handle)
+                if (rcSync < 0) { // volume intact côté natif : gardé
+                    _ejectError.value = msgEjectFailed(EngineError(rcSync).message ?: "erreur $rcSync")
+                    continue
+                }
+                val rc = engine.unmount(m.handle, false)
+                if (rc == EngineError.FL_EBUSY) { // fichier ouvert : volume intact, gardé
                     _ejectError.value = msgEjectFailed(EngineError(rc).message ?: "erreur $rc")
                     continue
                 }
+                // Toute autre erreur : le moteur a déjà détruit le volume (clé effacée, poignée invalide).
+                // On l'oublie et on libère le disque comme après une éjection réussie.
                 forget(id)
+                if (rc < 0) {
+                    val detail = EngineError(rc).message ?: "erreur $rc"
+                    _ejectError.value = msgEjectFailed(detail) + " " + msgEjectIncomplete(detail)
+                }
                 val entry = diskEntries[m.state.diskId]
                 if (entry != null && mounts.values.none { it.state.diskId == m.state.diskId }) release(entry)
             }
@@ -483,6 +525,18 @@ object VolumeManager {
 
     /** Vrai si une écriture du volume n'a pas encore été synchronisée. */
     fun hasUnsyncedWrites(volumeId: String): Boolean = (writeGen[volumeId] ?: 0L) != (syncedGen[volumeId] ?: 0L)
+
+    /** Génération d'écriture du volume, à lire AVANT une synchronisation faite hors du gestionnaire. */
+    fun writeGeneration(volumeId: String): Long = writeGen[volumeId] ?: 0L
+
+    /**
+     * Une synchronisation réussie, commencée alors que la génération était [gen], met le volume à jour :
+     * une écriture arrivée entre-temps (génération plus grande) reste signalée comme non synchronisée.
+     */
+    fun markSynced(volumeId: String, gen: Long) {
+        if (!mounts.containsKey(volumeId)) return
+        syncedGen.merge(volumeId, gen) { a, b -> maxOf(a, b) }
+    }
 
     private fun syncLocked(volumeId: String) {
         val m = mounts[volumeId] ?: return
