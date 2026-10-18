@@ -66,14 +66,28 @@ static int command(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, v
   return rc != FL_OK ? rc : CHECK;
 }
 
-enum { A_FAIL, A_RETRY, A_WAIT, A_START };
+enum { A_FAIL, A_RETRY, A_WAIT, A_START, A_DEAD };
 
-static int classify(const sense_t *s, int *err) {
+/* WRITE(10)/(16) et SYNCHRONIZE CACHE(10) : après l'ouverture, une UNIT ATTENTION y est une erreur dure. */
+static bool ecrit_support(uint8_t op) { return op == 0x2A || op == 0x8A || op == 0x35; }
+
+/* Politique selon le sens. UNIT ATTENTION : réessayée pendant l'ouverture (u->opened faux : disque
+ * qui vient d'être branché ou remis à zéro). Après l'ouverture : ASC 0x28 (« medium may have
+ * changed ») → A_DEAD, le support n'est plus celui qu'on a ouvert ; toute autre (0x29 remise à zéro,
+ * 0x2A paramètres changés…) → FL_EIO sans réessai sur WRITE et SYNCHRONIZE CACHE (le cache volatil
+ * a pu être perdu), réessai sur une lecture (idempotente). */
+static int classify(const fl_usb_dev *u, uint8_t op, const sense_t *s, int *err) {
   *err = FL_EIO;
   switch (s->key) {
+    case 0x06: /* UNIT ATTENTION */
+      if (!u->opened) return A_RETRY;
+      if (s->asc == 0x28) {
+        *err = FL_ENODEV;
+        return A_DEAD;
+      }
+      return ecrit_support(op) ? A_FAIL : A_RETRY;
     case 0x00: /* NO SENSE */
     case 0x01: /* RECOVERED ERROR */
-    case 0x06: /* UNIT ATTENTION (support changé, remise à zéro…) */
     case 0x0B: /* ABORTED COMMAND */
       return A_RETRY;
     case 0x02: /* NOT READY */
@@ -100,12 +114,16 @@ static int start_unit(fl_usb_dev *u) {
   return rc == FL_ENODEV ? FL_ENODEV : FL_OK;
 }
 
-/* Exécute une commande avec réessais : immédiats (UNIT ATTENTION, transfert court…) au plus
- * FL_USB_QUICK_RETRIES fois, après attente tant que NOT READY, dans FL_USB_READY_BUDGET_MS.
+/* Exécute une commande avec réessais : immédiats (UNIT ATTENTION selon classify, transfert court…)
+ * au plus FL_USB_QUICK_RETRIES fois, après attente tant que NOT READY, dans FL_USB_READY_BUDGET_MS.
+ * Après l'ouverture, une UNIT ATTENTION « support changé » rend le périphérique mort (FL_ENODEV,
+ * plus rien n'est envoyé) ; toute autre marque u->ua_reset (cache volatil peut-être perdu).
  * NOT READY 04/02 : un seul START STOP UNIT par appel, puis l'attente reprend.
- * Succès seulement si au moins `need` octets de données sont arrivés. */
-static int run(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, void *buf, uint32_t len, uint32_t need,
-               uint32_t *got_out) {
+ * Succès seulement si au moins `need` octets de données sont arrivés. Sur un échec de commande,
+ * *last (si non NULL) reçoit le dernier sens. Une écriture réessayée est rejouée entière (même
+ * données, même adresse). */
+static int run_s(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, void *buf, uint32_t len, uint32_t need,
+                 uint32_t *got_out, sense_t *last) {
   uint64_t deadline = u->clk.now_ms(u->clk.ctx) + FL_USB_READY_BUDGET_MS;
   int quick = 0;
   bool started = false;
@@ -122,8 +140,13 @@ static int run(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, void 
       continue;
     }
     if (rc < 0) return rc == FL_ESTALL ? FL_EIO : rc; /* FL_ESTALL ne sort pas d'ici */
+    if (last) *last = s;
+    if (s.key == 0x06 && u->opened && s.asc != 0x28) u->ua_reset = true;
     int err;
-    switch (classify(&s, &err)) {
+    switch (classify(u, cdb[0], &s, &err)) {
+      case A_DEAD:
+        u->dead = true;
+        return err;
       case A_FAIL:
         return err;
       case A_RETRY:
@@ -146,6 +169,11 @@ static int run(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, void 
       }
     }
   }
+}
+
+static int run(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, void *buf, uint32_t len, uint32_t need,
+               uint32_t *got_out) {
+  return run_s(u, cdb, cdblen, dir, buf, len, need, got_out, NULL);
 }
 
 uint8_t fl_scsi_build_read(uint64_t lba, uint32_t n, uint8_t cdb[16]) {
@@ -215,7 +243,42 @@ int fl_scsi_read(fl_usb_dev *u, uint64_t lba, uint32_t n, uint32_t block_size, v
   return run(u, cdb, len, FL_BOT_IN, buf, bytes, bytes, NULL);
 }
 
+uint8_t fl_scsi_build_write(uint64_t lba, uint32_t n, uint8_t cdb[16]) {
+  uint8_t len = fl_scsi_build_read(lba, n, cdb);
+  cdb[0] = len == 10 ? 0x2A : 0x8A; /* WRITE(10) / WRITE(16) : même disposition que READ */
+  return len;
+}
+
+int fl_scsi_write(fl_usb_dev *u, uint64_t lba, uint32_t n, uint32_t block_size, const void *buf) {
+  if (n == 0 || block_size == 0 || n > FL_USB_MAX_XFER / block_size) return FL_EINVAL;
+  uint8_t cdb[16];
+  uint8_t len = fl_scsi_build_write(lba, n, cdb);
+  uint32_t bytes = n * block_size;
+  /* BOT n'écrit pas dans buf pour une phase OUT */
+  return run(u, cdb, len, FL_BOT_OUT, (void *)buf, bytes, bytes, NULL);
+}
+
+int fl_scsi_mode_sense_wp(fl_usb_dev *u, bool *wp) {
+  /* MODE SENSE(6), DBD=0, page 0x3F (toutes), 192 octets alloués : la réponse compte au moins
+   * l'en-tête de 4 octets, dont l'octet 2 porte le bit WP (bit 7). */
+  uint8_t cdb[6] = {0x1A, 0, 0x3F, 0, 192, 0};
+  uint8_t r[192];
+  memset(r, 0, sizeof r);
+  int rc = run(u, cdb, sizeof cdb, FL_BOT_IN, r, sizeof r, 4, NULL);
+  if (rc != FL_OK) return rc;
+  *wp = (r[2] & 0x80) != 0;
+  return FL_OK;
+}
+
 int fl_scsi_sync_cache(fl_usb_dev *u) {
   uint8_t cdb[10] = {0x35};
-  return run(u, cdb, sizeof cdb, FL_BOT_NONE, NULL, 0, 0, NULL);
+  sense_t s = {0, 0, 0};
+  int rc = run_s(u, cdb, sizeof cdb, FL_BOT_NONE, NULL, 0, 0, NULL, &s);
+  /* ILLEGAL REQUEST : commande non prise en charge, le disque n'a pas de cache à vider (ou ne sait
+   * pas le vider : on le note, pour pouvoir prévenir) */
+  if (rc == FL_EIO && s.key == 0x05) {
+    u->sync_unsupported = true;
+    return FL_OK;
+  }
+  return rc;
 }

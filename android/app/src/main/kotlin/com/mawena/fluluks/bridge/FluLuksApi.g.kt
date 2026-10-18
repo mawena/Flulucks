@@ -326,7 +326,8 @@ data class VolumeMsg (
   val totalBytes: Long,
   val freeBytes: Long,
   val needsRecovery: Boolean,
-  val roReason: String
+  val roReason: String,
+  val readOnly: Boolean
 )
  {
   companion object {
@@ -339,7 +340,8 @@ data class VolumeMsg (
       val freeBytes = pigeonVar_list[5] as Long
       val needsRecovery = pigeonVar_list[6] as Boolean
       val roReason = pigeonVar_list[7] as String
-      return VolumeMsg(id, diskId, partIndex, title, totalBytes, freeBytes, needsRecovery, roReason)
+      val readOnly = pigeonVar_list[8] as Boolean
+      return VolumeMsg(id, diskId, partIndex, title, totalBytes, freeBytes, needsRecovery, roReason, readOnly)
     }
   }
   fun toList(): List<Any?> {
@@ -352,6 +354,7 @@ data class VolumeMsg (
       freeBytes,
       needsRecovery,
       roReason,
+      readOnly,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -362,7 +365,7 @@ data class VolumeMsg (
       return true
     }
     val other = other as VolumeMsg
-    return FluLuksApiPigeonUtils.deepEquals(this.id, other.id) && FluLuksApiPigeonUtils.deepEquals(this.diskId, other.diskId) && FluLuksApiPigeonUtils.deepEquals(this.partIndex, other.partIndex) && FluLuksApiPigeonUtils.deepEquals(this.title, other.title) && FluLuksApiPigeonUtils.deepEquals(this.totalBytes, other.totalBytes) && FluLuksApiPigeonUtils.deepEquals(this.freeBytes, other.freeBytes) && FluLuksApiPigeonUtils.deepEquals(this.needsRecovery, other.needsRecovery) && FluLuksApiPigeonUtils.deepEquals(this.roReason, other.roReason)
+    return FluLuksApiPigeonUtils.deepEquals(this.id, other.id) && FluLuksApiPigeonUtils.deepEquals(this.diskId, other.diskId) && FluLuksApiPigeonUtils.deepEquals(this.partIndex, other.partIndex) && FluLuksApiPigeonUtils.deepEquals(this.title, other.title) && FluLuksApiPigeonUtils.deepEquals(this.totalBytes, other.totalBytes) && FluLuksApiPigeonUtils.deepEquals(this.freeBytes, other.freeBytes) && FluLuksApiPigeonUtils.deepEquals(this.needsRecovery, other.needsRecovery) && FluLuksApiPigeonUtils.deepEquals(this.roReason, other.roReason) && FluLuksApiPigeonUtils.deepEquals(this.readOnly, other.readOnly)
   }
 
   override fun hashCode(): Int {
@@ -375,10 +378,11 @@ data class VolumeMsg (
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.freeBytes)
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.needsRecovery)
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.roReason)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.readOnly)
     return result
   }
   override fun toString(): String {
-    return "VolumeMsg(id=$id, diskId=$diskId, partIndex=$partIndex, title=$title, totalBytes=$totalBytes, freeBytes=$freeBytes, needsRecovery=$needsRecovery, roReason=$roReason)"
+    return "VolumeMsg(id=$id, diskId=$diskId, partIndex=$partIndex, title=$title, totalBytes=$totalBytes, freeBytes=$freeBytes, needsRecovery=$needsRecovery, roReason=$roReason, readOnly=$readOnly)"
   }
 }
 private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
@@ -427,10 +431,12 @@ interface FluLuksHostApi {
   fun listDisks(): List<DiskMsg>
   fun listVolumes(): List<VolumeMsg>
   fun requestPermission(diskId: String)
-  fun unlock(diskId: String, partIndex: Long, passphrase: ByteArray, callback: (Result<VolumeMsg>) -> Unit)
-  fun mountPlain(diskId: String, partIndex: Long, callback: (Result<VolumeMsg>) -> Unit)
+  fun unlock(diskId: String, partIndex: Long, passphrase: ByteArray, writable: Boolean, callback: (Result<VolumeMsg>) -> Unit)
+  fun mountPlain(diskId: String, partIndex: Long, writable: Boolean, callback: (Result<VolumeMsg>) -> Unit)
   fun eject(volumeId: String)
   fun openInFiles(volumeId: String)
+  fun getReadOnlyPreference(): Boolean
+  fun setReadOnlyPreference(value: Boolean)
 
   companion object {
     /** The codec used by FluLuksHostApi. */
@@ -497,7 +503,8 @@ interface FluLuksHostApi {
             val diskIdArg = args[0] as String
             val partIndexArg = args[1] as Long
             val passphraseArg = args[2] as ByteArray
-            api.unlock(diskIdArg, partIndexArg, passphraseArg) { result: Result<VolumeMsg> ->
+            val writableArg = args[3] as Boolean
+            api.unlock(diskIdArg, partIndexArg, passphraseArg, writableArg) { result: Result<VolumeMsg> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(FluLuksApiPigeonUtils.wrapError(error))
@@ -518,7 +525,8 @@ interface FluLuksHostApi {
             val args = message as List<Any?>
             val diskIdArg = args[0] as String
             val partIndexArg = args[1] as Long
-            api.mountPlain(diskIdArg, partIndexArg) { result: Result<VolumeMsg> ->
+            val writableArg = args[2] as Boolean
+            api.mountPlain(diskIdArg, partIndexArg, writableArg) { result: Result<VolumeMsg> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(FluLuksApiPigeonUtils.wrapError(error))
@@ -568,6 +576,39 @@ interface FluLuksHostApi {
           channel.setMessageHandler(null)
         }
       }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.getReadOnlyPreference$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getReadOnlyPreference())
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.setReadOnlyPreference$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val valueArg = args[0] as Boolean
+            val wrapped: List<Any?> = try {
+              api.setReadOnlyPreference(valueArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
     }
   }
 }
@@ -585,6 +626,24 @@ class FluLuksEventsApi(private val binaryMessenger: BinaryMessenger, private val
     val channelName = "dev.flutter.pigeon.fluluks.FluLuksEventsApi.onStateChanged$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
     channel.send(listOf(disksArg, volumesArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(FluLuksApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  /** Éjection en cours (synchronisation, démontage) et dernier échec (« Éjection impossible : … »). */
+  fun onEjectStateChanged(ejectingArg: Boolean, errorArg: String?, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.fluluks.FluLuksEventsApi.onEjectStateChanged$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(ejectingArg, errorArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))

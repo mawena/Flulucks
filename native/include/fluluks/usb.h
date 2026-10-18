@@ -6,8 +6,10 @@
  * Le transport est abstrait : sur Linux et Android, fl_usbdevfs_transport_new l'implémente
  * sur un descripteur usbdevfs ; les tests utilisent un faux périphérique.
  *
- * Phase 2 : lecture seule. fl_bdev_write renvoie toujours FL_EROFS et aucune commande
- * WRITE n'est jamais envoyée. */
+ * Écriture : WRITE(10), ou WRITE(16) au-delà de 32 bits, 64 Kio au plus par commande ; flush envoie
+ * SYNCHRONIZE CACHE(10) (refusé par le disque comme non pris en charge : FL_OK). Délai de 30 s pour
+ * les données et le CSW. Ouvert en lecture seule, rien d'autre que des commandes de lecture n'est
+ * envoyé. */
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -38,8 +40,28 @@ typedef struct {
  * La structure *t est copiée ; t->ctx doit rester valide jusqu'à la fermeture du bdev,
  * qui ne libère pas le transport. Taille de bloc hors {512, 1024, 2048, 4096} → FL_ENOTSUP.
  * Après un FL_ENODEV, toute lecture renvoie FL_ENODEV sans rien envoyer.
- * Sûr entre fils : les commandes sont sérialisées par un verrou propre au périphérique. */
+ * Sûr entre fils : les commandes sont sérialisées par un verrou propre au périphérique.
+ *
+ * Avec read_only faux, l'ouverture envoie aussi MODE SENSE(6) : le bit WP, ou un refus DATA PROTECT,
+ * force read_only à vrai (tout autre échec de MODE SENSE ne force rien). En écriture, le sens DATA
+ * PROTECT (WRITE ou SYNCHRONIZE CACHE) rend FL_EROFS et la protection devient collante (plus aucun
+ * WRITE). Après un FL_ENODEV, toute écriture rend FL_ENODEV sans rien envoyer.
+ *
+ * UNIT ATTENTION : réessayée pendant l'ouverture. Après l'ouverture, « medium may have changed »
+ * (ASC 0x28), sur n'importe quelle commande, rend FL_ENODEV et le périphérique mort (plus rien n'est
+ * envoyé : le support n'est plus celui qu'on a ouvert). Toute autre (remise à zéro 0x29, paramètres
+ * changés 0x2A…) rend FL_EIO sans réessai sur WRITE et SYNCHRONIZE CACHE, est réessayée sur une
+ * lecture, et rend tout flush suivant FL_EIO (le cache volatil du disque a pu être perdu). */
 int fl_usb_bdev_open(const fl_usb_transport *t, uint8_t lun, bool read_only, fl_bdev **out);
+
+/* Vrai si le disque a signalé une protection en écriture (MODE SENSE ou sens DATA PROTECT). Faux
+ * pour un fl_bdev qui n'est pas un disque USB. */
+bool fl_usb_bdev_write_protected(const fl_bdev *d);
+
+/* Vrai si le disque a refusé SYNCHRONIZE CACHE comme non pris en charge (ILLEGAL REQUEST) : le flush
+ * rend alors FL_OK sans garantie que son cache est vidé. Faux pour un fl_bdev qui n'est pas un disque
+ * USB. */
+bool fl_usb_bdev_sync_unsupported(const fl_bdev *d);
 
 /* Transport usbdevfs (Linux, Android). `fd` vient de UsbDeviceConnection.getFileDescriptor() ;
  * l'interface doit déjà être réclamée. Le transport ne possède pas `fd` et ne le ferme pas.

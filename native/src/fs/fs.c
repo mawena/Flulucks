@@ -1,13 +1,15 @@
+#include <stdatomic.h>
+#include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #include "fluluks/error.h"
 #include "fluluks/fs.h"
 #include "fs/fs_internal.h"
+#include "fs/ro_reasons.h"
 
 #define FL_PATH_MAX 4095
 #define FL_NAME_MAX 255
-
-static const char k_ro_phase1[] = "écriture pas encore disponible";
 
 static const struct {
   fl_content kind;
@@ -15,6 +17,25 @@ static const struct {
 } k_backends[] = {
     {FL_CONTENT_EXT4, fl_ext4_mount},
 };
+
+/* Horloge des horodatages : lue par les systèmes de fichiers sous leur propre verrou, posée par les
+ * tests depuis n'importe quel fil. */
+static _Atomic(int64_t (*)(void)) g_clock;
+
+void fl_fs_set_clock(int64_t (*now)(void)) { atomic_store(&g_clock, now); }
+
+int64_t fl_fs_now(void) {
+  int64_t (*now)(void) = atomic_load(&g_clock);
+  return now ? now() : (int64_t)time(NULL);
+}
+
+void fl_fs_go_read_only(fl_fs *fs, const char *reason) {
+  bool attendu = false;
+  /* un seul gagnant : ro_reason n'est écrit qu'une fois, avant read_only, puis plus jamais */
+  if (atomic_load(&fs->read_only) || !atomic_compare_exchange_strong(&fs->went_ro, &attendu, true)) return;
+  snprintf(fs->ro_reason, sizeof fs->ro_reason, "%s", reason);
+  atomic_store(&fs->read_only, true);
+}
 
 /* Chemin absolu, "/" ou "/a/b" : ni composant vide, ni ".", ni "..", ni "/" final. */
 static bool path_ok(const char *p) {
@@ -42,12 +63,16 @@ int fl_fs_mount(fl_bdev *dev, fl_content kind, bool want_rw, fl_fs **out) {
   for (size_t i = 0; i < sizeof k_backends / sizeof k_backends[0]; i++) {
     if (k_backends[i].kind != kind) continue;
     fl_fs *fs = NULL;
-    /* Phase 1 : lecture seule quoi que demande l'appelant. */
-    (void)want_rw;
-    int rc = k_backends[i].mount(dev, false, &fs);
+    /* Lecture seule demandée, ou imposée par le périphérique (disque protégé en écriture, ou
+     * image ouverte ainsi) : raison posée ici. Sinon le système de fichiers décide, et pose
+     * sa raison s'il refuse l'écriture. */
+    bool rw = want_rw && !dev->read_only;
+    int rc = k_backends[i].mount(dev, rw, &fs);
     if (rc != FL_OK) return rc;
-    fs->read_only = true;
-    memcpy(fs->ro_reason, k_ro_phase1, sizeof k_ro_phase1);
+    if (!rw) {
+      fs->read_only = true;
+      snprintf(fs->ro_reason, sizeof fs->ro_reason, "%s", want_rw ? FL_RO_WP : FL_RO_USER);
+    }
     *out = fs;
     return FL_OK;
   }
@@ -59,9 +84,12 @@ int fl_fs_statfs(fl_fs *fs, fl_statfs *out) {
   memset(out, 0, sizeof *out);
   int rc = fs->ops->statfs(fs, out);
   if (rc != FL_OK) return rc;
-  out->read_only = fs->read_only;
-  memcpy(out->ro_reason, fs->ro_reason, sizeof out->ro_reason);
-  out->ro_reason[sizeof out->ro_reason - 1] = 0;
+  /* la raison n'est lue qu'une fois read_only vu vrai : elle n'est plus modifiée ensuite */
+  out->read_only = atomic_load(&fs->read_only);
+  if (out->read_only) {
+    memcpy(out->ro_reason, fs->ro_reason, sizeof out->ro_reason);
+    out->ro_reason[sizeof out->ro_reason - 1] = 0;
+  }
   return FL_OK;
 }
 
@@ -128,7 +156,10 @@ int fl_fs_rename(fl_fs *fs, const char *from, const char *to) {
 
 int fl_fs_sync(fl_fs *fs) {
   if (!fs) return FL_EINVAL;
-  if (fs->read_only || !fs->ops->sync) return FL_OK;
+  /* monté en lecture seule : rien à écrire ; passé en lecture seule en cours de session : des données
+   * ont pu ne pas être écrites, le dire (un client ne doit pas croire son fsync réussi) */
+  if (atomic_load(&fs->read_only)) return atomic_load(&fs->went_ro) ? FL_EIO : FL_OK;
+  if (!fs->ops->sync) return FL_OK;
   return fs->ops->sync(fs);
 }
 

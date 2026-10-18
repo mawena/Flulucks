@@ -1,0 +1,110 @@
+diff --git a/src/ext4.c b/src/ext4.c
+index 5eb6633..dc20b18 100644
+--- a/src/ext4.c
++++ b/src/ext4.c
+@@ -912,31 +912,52 @@ static int ext4_trunc_inode(struct ext4_mountpoint *mp,
+ 		return r;
+ 
+ 	inode_size = ext4_inode_get_size(&fs->sb, inode_ref.inode);
++	uint64_t sectors =
++	    ext4_inode_get_blocks_count(&fs->sb, inode_ref.inode);
+ 	ext4_fs_put_inode_ref(&inode_ref);
+ 	if (has_trans)
+ 		ext4_trans_stop(mp);
+ 
+-	while (inode_size > new_size + CONFIG_MAX_TRUNCATE_SIZE) {
++	/* FluLuks: the CONFIG_MAX_TRUNCATE_SIZE steps bound the blocks freed
++	 * by one transaction, but upstream committed one transaction per step
++	 * even over holes: deleting a sparse file of 16 TiB holding one block
++	 * cost a million journal commits (and their cache flushes, i.e. hours
++	 * on a USB disk). When the blocks really allocated fit in one step
++	 * (i_blocks, 512-byte units, extent tree blocks included), truncate in
++	 * one go; otherwise a step that freed nothing keeps the transaction
++	 * open, so only steps that free blocks are committed. */
++	if (sectors > CONFIG_MAX_TRUNCATE_SIZE / 512 &&
++	    inode_size > new_size + CONFIG_MAX_TRUNCATE_SIZE) {
++		ext4_trans_start(mp);
++		while (inode_size > new_size + CONFIG_MAX_TRUNCATE_SIZE) {
+ 
+-		inode_size -= CONFIG_MAX_TRUNCATE_SIZE;
++			inode_size -= CONFIG_MAX_TRUNCATE_SIZE;
+ 
+-		ext4_trans_start(mp);
+-		r = ext4_fs_get_inode_ref(fs, index, &inode_ref);
+-		if (r != EOK) {
+-			ext4_trans_abort(mp);
+-			break;
+-		}
+-		r = ext4_fs_truncate_inode(&inode_ref, inode_size);
+-		if (r != EOK)
+-			ext4_fs_put_inode_ref(&inode_ref);
+-		else
+-			r = ext4_fs_put_inode_ref(&inode_ref);
++			r = ext4_fs_get_inode_ref(fs, index, &inode_ref);
++			if (r != EOK) {
++				ext4_trans_abort(mp);
++				goto Finish;
++			}
++			uint64_t before = ext4_inode_get_blocks_count(
++			    &fs->sb, inode_ref.inode);
++			r = ext4_fs_truncate_inode(&inode_ref, inode_size);
++			uint64_t after = ext4_inode_get_blocks_count(
++			    &fs->sb, inode_ref.inode);
++			if (r != EOK)
++				ext4_fs_put_inode_ref(&inode_ref);
++			else
++				r = ext4_fs_put_inode_ref(&inode_ref);
+ 
+-		if (r != EOK) {
+-			ext4_trans_abort(mp);
+-			goto Finish;
+-		} else
+-			ext4_trans_stop(mp);
++			if (r != EOK) {
++				ext4_trans_abort(mp);
++				goto Finish;
++			}
++			if (after != before) {
++				ext4_trans_stop(mp);
++				ext4_trans_start(mp);
++			}
++		}
++		ext4_trans_stop(mp);
+ 	}
+ 
+ 	if (inode_size > new_size) {
+diff --git a/src/ext4_balloc.c b/src/ext4_balloc.c
+index b09bc3d..b6aaa7c 100644
+--- a/src/ext4_balloc.c
++++ b/src/ext4_balloc.c
+@@ -361,6 +361,15 @@ int ext4_balloc_alloc_block(struct ext4_inode_ref *inode_ref,
+ 	int r;
+ 	struct ext4_sblock *sb = &inode_ref->fs->sb;
+ 
++	/* FluLuks: like the kernel (ext4_mb_initialize_context), a goal
++	 * outside the filesystem falls back to the first data block.
++	 * ext4_ext_find_goal adds the logical distance to the nearest extent,
++	 * so a write far beyond the end of a file (sparse file) aimed past the
++	 * last group, whose descriptor does not exist (EFSCORRUPTED). */
++	if (goal < ext4_get32(sb, first_data_block) ||
++	    goal >= ext4_sb_get_blocks_cnt(sb))
++		goal = ext4_get32(sb, first_data_block);
++
+ 	/* Load block group number for goal and relative index */
+ 	uint32_t bg_id = ext4_balloc_get_bgid_of_block(sb, goal);
+ 	uint32_t idx_in_bg = ext4_fs_addr_to_idx_bg(sb, goal);
+@@ -593,6 +602,14 @@ int ext4_balloc_try_alloc_block(struct ext4_inode_ref *inode_ref,
+ 	struct ext4_fs *fs = inode_ref->fs;
+ 	struct ext4_sblock *sb = &fs->sb;
+ 
++	/* FluLuks: a block outside the filesystem is simply not free (the
++	 * caller then allocates elsewhere), not a corruption. */
++	if (baddr < ext4_get32(sb, first_data_block) ||
++	    baddr >= ext4_sb_get_blocks_cnt(sb)) {
++		*free = false;
++		return EOK;
++	}
++
+ 	/* Compute indexes */
+ 	uint32_t block_group = ext4_balloc_get_bgid_of_block(sb, baddr);
+ 	uint32_t index_in_group = ext4_fs_addr_to_idx_bg(sb, baddr);

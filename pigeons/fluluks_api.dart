@@ -58,6 +58,7 @@ class VolumeMsg {
     required this.freeBytes,
     required this.needsRecovery,
     required this.roReason,
+    required this.readOnly,
   });
   String id;
   String diskId;
@@ -67,6 +68,7 @@ class VolumeMsg {
   int freeBytes;
   bool needsRecovery;
   String roReason;
+  bool readOnly;
 }
 
 @HostApi()
@@ -75,14 +77,19 @@ abstract class FluLuksHostApi {
   List<VolumeMsg> listVolumes();
   void requestPermission(String diskId);
   @async
-  VolumeMsg unlock(String diskId, int partIndex, Uint8List passphrase);
+  VolumeMsg unlock(String diskId, int partIndex, Uint8List passphrase, bool writable);
   @async
-  VolumeMsg mountPlain(String diskId, int partIndex);
+  VolumeMsg mountPlain(String diskId, int partIndex, bool writable);
   void eject(String volumeId);
   void openInFiles(String volumeId);
+  bool getReadOnlyPreference();
+  void setReadOnlyPreference(bool value);
 }
 
 @FlutterApi()
 abstract class FluLuksEventsApi {
   void onStateChanged(List<DiskMsg> disks, List<VolumeMsg> volumes);
+
+  /// Éjection en cours (synchronisation, démontage) et dernier échec (« Éjection impossible : … »).
+  void onEjectStateChanged(bool ejecting, String? error);
 }

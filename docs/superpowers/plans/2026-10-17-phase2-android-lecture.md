@@ -52,8 +52,8 @@ commit de fin de chaque tâche.
   des chaînes de `lib/src/strings_fr.dart`.
 - Toute entrée disque reste **hostile** (règle de la phase 1). Toute entrée qui vient d'une autre
   application l'est aussi : identifiants de documents, chemins, modes d'ouverture.
-- Appareil de référence : Pixel 4 XL, numéro de série adb `98291FFBA003RN` par câble ou
-  `192.168.0.104:5555` en Wi‑Fi. Quand le disque occupe le port USB-C, on n'utilise que le Wi‑Fi.
+- Appareil de référence : Pixel 4 XL, numéro de série adb `192.168.0.104:5555` (Wi‑Fi). Quand le
+  disque occupe le port USB-C, on n'utilise que le Wi‑Fi.
 - Code natif portable : pas d'`explicit_bzero` dans `native/src` après T2 (on utilise `fl_memzero`).
   Les en-têtes publics ont des gardes `extern "C"`.
 
@@ -114,9 +114,9 @@ cmake -S native -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Debug -DFL_TESTS=ON 
 # Android :
 flutter build apk --debug
 (cd android && ./gradlew :app:testDebugUnitTest)                                         # JVM
-(cd android && ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=…)  # sur le téléphone, ANDROID_SERIAL=98291FFBA003RN
+(cd android && ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=…)  # sur le téléphone, ANDROID_SERIAL=192.168.0.104:5555
 flutter test                                                                              # widgets
-flutter install -d 98291FFBA003RN    # ou 192.168.0.104:5555
+flutter install -d 192.168.0.104:5555
 ```
 
 ---
@@ -343,7 +343,7 @@ Elle reprend les points reportés depuis la phase 1 (voir la feuille de route).
   `NativeEngine.kt`.
 - [ ] **Step 6 : vérifier.** `flutter build apk --debug` réussit, et l'APK contient
   `lib/arm64-v8a/libfluluks_jni.so` (vérifier avec `unzip -l`). `connectedDebugAndroidTest` (classe
-  `EngineTest`) passe sur `98291FFBA003RN`. `flutter run` affiche l'application par défaut sans
+  `EngineTest`) passe sur `192.168.0.104:5555`. `flutter run` affiche l'application par défaut sans
   plantage.
 - [ ] **Step 7 : commit**, en cochant T5 — `feat: projet Flutter Android avec le moteur natif intégré`
 

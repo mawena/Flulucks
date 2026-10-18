@@ -22,6 +22,7 @@
 #include "fluluks/partition.h"
 #include "fluluks/probe.h"
 #include "fluluks/secure.h"
+#include "fs/ext4_policy.h"
 
 #define CLI_PASS_MAX 8192u
 #define CHUNK (1u << 20)
@@ -36,7 +37,9 @@ static int usage(void) {
   fputs("usage:\n"
         "  fluluks-cli parts <image|périphérique>\n"
         "  fluluks-cli ls    <image|périphérique> <n°> <chemin> [--pass-file F]\n"
-        "  fluluks-cli cat   <image|périphérique> <n°> <chemin> [--pass-file F]\n",
+        "  fluluks-cli cat   <image|périphérique> <n°> <chemin> [--pass-file F]\n"
+        "  fluluks-cli diagnostic <image|périphérique> <n°> [--pass-file F]\n"
+        "      (lecture seule : contrôles d'écriture détaillés, puis parcours de toute l'arborescence)\n",
         stderr);
   return 2;
 }
@@ -202,7 +205,7 @@ static int cmd_parts(const char *path) {
   return rc;
 }
 
-static int open_fs(const char *path, const char *idx_s, const char *passfile, ctx *c) {
+static int open_fs(const char *path, const char *idx_s, const char *passfile, ctx *c, bool explain) {
   char *end = NULL;
   errno = 0;
   unsigned long idx = strtoul(idx_s, &end, 10);
@@ -241,6 +244,11 @@ static int open_fs(const char *path, const char *idx_s, const char *passfile, ct
     target = c->plain;
   }
   if (pr.content != FL_CONTENT_EXT4) return fail_err(FL_ENOTSUP);
+  if (explain) {
+    puts("== contrôles faits au montage en écriture (§ 4.2) ==");
+    if ((e = fl_ext4_policy_explain(target, NULL, stdout)) != FL_OK) fprintf(stderr, "fluluks-cli: diagnostic : %s\n", fl_strerror(e));
+    fflush(stdout);
+  }
   if ((e = fl_fs_mount(target, FL_CONTENT_EXT4, false, &c->fs)) != FL_OK) return fail_err(e);
   fl_statfs sf;
   if (fl_fs_statfs(c->fs, &sf) == FL_OK && sf.needs_recovery)
@@ -287,6 +295,67 @@ static int cmd_ls(ctx *c, const char *path) {
   free(l.v);
   if (fflush(stdout) != 0) return 1;
   return 0;
+}
+
+/* ---- diagnostic : parcours de l'arborescence ---- */
+
+typedef struct {
+  unsigned long long dirs, files, others, errors;
+} walk_stats; /* un dossier sous la borne de profondeur compte comme une erreur (non parcouru) */
+
+static void walk_err(walk_stats *w, const char *what, const char *path, int e) {
+  if (w->errors++ < 100) printf("  ERREUR %s %s : %s\n", what, path, fl_strerror(e));
+}
+
+/* Lit les inodes (stat), les blocs de dossier (readdir) et, pour chaque fichier, son premier et son
+ * dernier octet (arbre d'extents) : chaque structure que lwext4 vérifie par somme est touchée. */
+static void walk(ctx *c, char *path, size_t len, unsigned depth, walk_stats *w) {
+  dirlist l = {0};
+  int e = fl_fs_readdir(c->fs, len ? path : "/", collect, &l);
+  if (e != FL_OK) walk_err(w, "dossier", len ? path : "/", e);
+  w->dirs++;
+  for (size_t i = 0; i < l.n; i++) {
+    size_t nl = strlen(l.v[i].name);
+    if (len + 1 + nl >= 4096) { walk_err(w, "chemin trop long sous", path, FL_EINVAL); continue; }
+    path[len] = '/';
+    memcpy(path + len + 1, l.v[i].name, nl + 1);
+    fl_stat st;
+    e = fl_fs_stat(c->fs, path, &st);
+    if (e != FL_OK) walk_err(w, "inode", path, e);
+    else if (st.type == FL_FT_DIR) {
+      if (depth < 256) walk(c, path, len + 1 + nl, depth + 1, w);
+      else walk_err(w, "dossier trop profond (non parcouru)", path, FL_EINVAL);
+    } else if (st.type == FL_FT_FILE) {
+      w->files++;
+      fl_file *f = NULL;
+      if ((e = fl_fs_open(c->fs, path, FL_O_RDONLY, &f)) != FL_OK) walk_err(w, "ouverture", path, e);
+      else {
+        unsigned char b;
+        int64_t r = fl_file_pread(f, &b, 1, 0);
+        if (r >= 0 && st.size > 1) r = fl_file_pread(f, &b, 1, st.size - 1);
+        if (r < 0) walk_err(w, "lecture", path, (int)r);
+        fl_file_close(f);
+      }
+    } else w->others++;
+    path[len] = 0;
+  }
+  free(l.v);
+}
+
+static int cmd_diagnostic(ctx *c) {
+  fl_statfs sf;
+  if (fl_fs_statfs(c->fs, &sf) == FL_OK)
+    printf("== montage en lecture seule : réussi%s ==\n", sf.needs_recovery ? " (journal à rejouer)" : "");
+  puts("== parcours de l'arborescence (inodes, dossiers, extents) ==");
+  fflush(stdout);
+  char *path = calloc(1, 4096);
+  if (!path) return fail_err(FL_ENOMEM);
+  walk_stats w = {0};
+  walk(c, path, 0, 0, &w);
+  free(path);
+  printf("dossiers %llu, fichiers %llu, autres %llu, erreurs %llu%s\n", w.dirs, w.files, w.others, w.errors,
+         w.errors > 100 ? " (100 premières affichées)" : "");
+  return fflush(stdout) == 0 && w.errors == 0 ? 0 : 1;
 }
 
 /* ---- cat ---- */
@@ -337,13 +406,24 @@ int main(int argc, char **argv) {
   if (argc < 3) return usage();
   const char *cmd = argv[1];
   if (!strcmp(cmd, "parts")) return argc == 3 ? cmd_parts(argv[2]) : usage();
+  if (!strcmp(cmd, "diagnostic")) {
+    const char *pf = NULL;
+    if (argc == 6 && !strcmp(argv[4], "--pass-file")) pf = argv[5];
+    else if (argc != 4) return usage();
+    ctx c = {0};
+    int rc = open_fs(argv[2], argv[3], pf, &c, true);
+    if (rc == 0) rc = cmd_diagnostic(&c);
+    else if (rc == 2) usage();
+    ctx_close(&c);
+    return rc;
+  }
   bool is_ls = !strcmp(cmd, "ls"), is_cat = !strcmp(cmd, "cat");
   if (!is_ls && !is_cat) return usage();
   const char *passfile = NULL;
   if (argc == 7 && !strcmp(argv[5], "--pass-file")) passfile = argv[6];
   else if (argc != 5) return usage();
   ctx c = {0};
-  int rc = open_fs(argv[2], argv[3], passfile, &c);
+  int rc = open_fs(argv[2], argv[3], passfile, &c, false);
   if (rc == 0) rc = is_ls ? cmd_ls(&c, argv[4]) : cmd_cat(&c, argv[4]);
   else if (rc == 2) usage();
   ctx_close(&c);

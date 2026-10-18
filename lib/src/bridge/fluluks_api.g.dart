@@ -267,6 +267,7 @@ class VolumeMsg {
     required this.freeBytes,
     required this.needsRecovery,
     required this.roReason,
+    required this.readOnly,
   });
 
   String id;
@@ -285,6 +286,8 @@ class VolumeMsg {
 
   String roReason;
 
+  bool readOnly;
+
   List<Object?> _toList() {
     return <Object?>[
       id,
@@ -295,6 +298,7 @@ class VolumeMsg {
       freeBytes,
       needsRecovery,
       roReason,
+      readOnly,
     ];
   }
 
@@ -312,6 +316,7 @@ class VolumeMsg {
       freeBytes: result[5]! as int,
       needsRecovery: result[6]! as bool,
       roReason: result[7]! as String,
+      readOnly: result[8]! as bool,
     );
   }
 
@@ -324,7 +329,7 @@ class VolumeMsg {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(id, other.id) && _deepEquals(diskId, other.diskId) && _deepEquals(partIndex, other.partIndex) && _deepEquals(title, other.title) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(freeBytes, other.freeBytes) && _deepEquals(needsRecovery, other.needsRecovery) && _deepEquals(roReason, other.roReason);
+    return _deepEquals(id, other.id) && _deepEquals(diskId, other.diskId) && _deepEquals(partIndex, other.partIndex) && _deepEquals(title, other.title) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(freeBytes, other.freeBytes) && _deepEquals(needsRecovery, other.needsRecovery) && _deepEquals(roReason, other.roReason) && _deepEquals(readOnly, other.readOnly);
   }
 
   @override
@@ -333,7 +338,7 @@ class VolumeMsg {
 
   @override
   String toString() {
-    return 'VolumeMsg(id: $id, diskId: $diskId, partIndex: $partIndex, title: $title, totalBytes: $totalBytes, freeBytes: $freeBytes, needsRecovery: $needsRecovery, roReason: $roReason)';
+    return 'VolumeMsg(id: $id, diskId: $diskId, partIndex: $partIndex, title: $title, totalBytes: $totalBytes, freeBytes: $freeBytes, needsRecovery: $needsRecovery, roReason: $roReason, readOnly: $readOnly)';
   }
 }
 
@@ -443,14 +448,14 @@ class FluLuksHostApi {
     ;
   }
 
-  Future<VolumeMsg> unlock(String diskId, int partIndex, Uint8List passphrase) async {
+  Future<VolumeMsg> unlock(String diskId, int partIndex, Uint8List passphrase, bool writable) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.unlock$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[diskId, partIndex, passphrase]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[diskId, partIndex, passphrase, writable]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
@@ -462,14 +467,14 @@ class FluLuksHostApi {
     return pigeonVar_replyValue! as VolumeMsg;
   }
 
-  Future<VolumeMsg> mountPlain(String diskId, int partIndex) async {
+  Future<VolumeMsg> mountPlain(String diskId, int partIndex, bool writable) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.mountPlain$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[diskId, partIndex]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[diskId, partIndex, writable]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
@@ -516,12 +521,52 @@ class FluLuksHostApi {
     )
     ;
   }
+
+  Future<bool> getReadOnlyPreference() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.getReadOnlyPreference$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as bool;
+  }
+
+  Future<void> setReadOnlyPreference(bool value) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.setReadOnlyPreference$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[value]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
 }
 
 abstract class FluLuksEventsApi {
   static const MessageCodec<Object?> pigeonChannelCodec = _PigeonCodec();
 
   void onStateChanged(List<DiskMsg> disks, List<VolumeMsg> volumes);
+
+  /// Éjection en cours (synchronisation, démontage) et dernier échec (« Éjection impossible : … »).
+  void onEjectStateChanged(bool ejecting, String? error);
 
   static void setUp(FluLuksEventsApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
@@ -538,6 +583,28 @@ abstract class FluLuksEventsApi {
           final List<VolumeMsg> arg_volumes = (args[1]! as List<Object?>).cast<VolumeMsg>();
           try {
             api.onStateChanged(arg_disks, arg_volumes);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.fluluks.FluLuksEventsApi.onEjectStateChanged$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final bool arg_ejecting = args[0]! as bool;
+          final String? arg_error = args[1] as String?;
+          try {
+            api.onEjectStateChanged(arg_ejecting, arg_error);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

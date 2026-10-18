@@ -23,6 +23,7 @@ git submodule update --init --recursive
 cmake -S native -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Debug -DFL_TESTS=ON -DFL_SANITIZE=ON
 cmake --build build/native
 ctest --test-dir build/native --output-on-failure -LE lent   # suite rapide
+ctest --test-dir build/native --output-on-failure -L ecriture # banc d'écriture ext4 (PC, e2fsck)
 ctest --test-dir build/native --output-on-failure -L lent    # tests lents (gros fichiers, ~1 min)
 ```
 
@@ -58,7 +59,17 @@ contenu lu être incomplet ; `fluluks-cli` avertit alors sur stderr).
    sudo tools/fixtures/verify_with_kernel.sh build/native/fixtures
    ```
 
-2. Lecture seule d'un vrai disque (ne rien écrire ; adapter le périphérique) :
+2. Images écrites par le moteur (phase 3) : `test_batterie` laisse dans `build/native/batterie/` chaque
+   image écrite (`<nom>.ecrite.img`) avec son manifeste (`<nom>.manifest` : chemin, type, taille,
+   condensat, uid, gid, mode). Le script les monte en lecture seule (`ro,noload`, LUKS par
+   `cryptsetup open --readonly`) et affiche « NOYAU OK <image> » ou la différence :
+
+   ```sh
+   ctest --test-dir build/native -R '^test_batterie$'
+   sudo tools/fixtures/verify_rw_with_kernel.sh build/native/batterie
+   ```
+
+3. Lecture seule d'un vrai disque (ne rien écrire ; adapter le périphérique) :
 
    ```sh
    sudo build/native/fluluks-cli parts /dev/sdX

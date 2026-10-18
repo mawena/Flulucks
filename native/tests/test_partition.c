@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -7,6 +8,7 @@
 #include "fluluks/error.h"
 #include "fluluks/partition.h"
 #include "../src/part/crc32.h"
+#include "../src/part/part_internal.h"
 #include "tt.h"
 
 static fl_bdev *ouvrir(const char *nom) {
@@ -124,7 +126,46 @@ static void test_luks_sans_mbr(void) {
   unlink(path);
 }
 
+/* En-têtes GPT hostiles (primaire et secours, sommes valides) : FL_ECORRUPT, sans lecture hors bornes
+ * (ASan le verrait), et fl_part_scan retombe sur le MBR protecteur, qui ne donne aucune partition. */
+static void test_partition_gpt_hostile(void) {
+  static const char *const v[] = {"nent-enorme", "esize-zero", "esize-impair", "entrees-hors-disque"};
+  for (size_t i = 0; i < sizeof v / sizeof v[0]; i++) {
+    char nom[64];
+    snprintf(nom, sizeof nom, "gpt-hostile-%s.img", v[i]);
+    fl_bdev *d = ouvrir(nom);
+    TT_ASSERT(d != NULL);
+    fl_part_table t;
+    TT_ASSERT_EQ(fl_gpt_read(d, &t), FL_ECORRUPT);
+    TT_ASSERT_EQ(fl_part_scan(d, &t), FL_OK);
+    TT_ASSERT_EQ(t.kind, FL_PT_NONE);
+    TT_ASSERT_EQ(t.count, 1);
+    TT_ASSERT_EQ(t.parts[0].sector_count, d->sector_count);
+    fl_bdev_close(d);
+  }
+}
+
+/* A -> B -> C -> B : arrêt borné, les trois logiques sont lues. */
+static void test_partition_ebr_boucle(void) {
+  fl_part_table t;
+  fl_bdev *d = ouvrir("ebr-boucle.img");
+  TT_ASSERT(d != NULL);
+  TT_ASSERT_EQ(fl_part_scan(d, &t), FL_OK);
+  TT_ASSERT_EQ(t.kind, FL_PT_MBR);
+  TT_ASSERT_EQ(t.count, 4);
+  TT_ASSERT_EQ(t.parts[0].index, 1);
+  TT_ASSERT_EQ(t.parts[1].index, 5);
+  TT_ASSERT_EQ(t.parts[2].index, 6);
+  TT_ASSERT_EQ(t.parts[3].index, 7);
+  TT_ASSERT_EQ(t.parts[1].first_lba, 10240 + 2048);
+  TT_ASSERT_EQ(t.parts[3].first_lba, 10240 + 8192 + 2048);
+  TT_ASSERT_EQ(t.skipped, 0);
+  fl_bdev_close(d);
+}
+
 int main(void) {
+  TT_RUN(test_partition_gpt_hostile);
+  TT_RUN(test_partition_ebr_boucle);
   TT_RUN(test_crc32);
   TT_RUN(test_gpt);
   TT_RUN(test_mbr_etendue);

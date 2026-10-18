@@ -1,0 +1,130 @@
+From 4c44fdf555eb5a8ce2fd353ea5e1233827e7f88f Mon Sep 17 00:00:00 2001
+From: mawena <gamligocharles@gmail.com>
+Date: Sun, 18 Oct 2026 12:16:22 +0000
+Subject: [PATCH] =?UTF-8?q?fix:=20journal=20jbd2=20=E2=80=94=20blocs=20?=
+ =?UTF-8?q?=C3=A9chapp=C3=A9s,=20blocs=20=C3=A0=20z=C3=A9ro,=20option=20v1?=
+ =?UTF-8?q?=20(FluLuks)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+- Somme d'étiquette v3 calculée sur le bloc tel qu'il est dans le journal,
+  donc échappé (jbd2 la vérifie avant de remettre le magique) ; l'amont
+  sommait le bloc d'origine : au rejeu, le noyau et e2fsck sautaient le bloc
+  (« Invalid checksum recovering data block »), la mise à jour était perdue.
+- Blocs de descripteur, de révocation et de commit mis à zéro avant d'être
+  remplis : plus d'octets restés du cache (données d'autres blocs) après la
+  dernière étiquette, dans h_commit_sec ou dans h_chksum[1..7].
+- JBD_FEATURE_COMPAT_CHECKSUM testé comme option compat : l'amont testait le
+  bit incompat de même valeur (REVOKE). Sans effet sur un journal v3 (la somme
+  v3 du commit remet le type à zéro depuis 0004), mais faux pour un journal à
+  sommes v1, que FluLuks refuse désormais en écriture (ext4_policy.c).
+- Somme du commit : seul h_chksum[0] est mis à zéro pendant le calcul, comme
+  jbd2 (h_chksum_type et h_chksum_size sont déjà nuls en v3).
+---
+ src/ext4_journal.c | 36 +++++++++++++++++++++++++-----------
+ 1 file changed, 25 insertions(+), 11 deletions(-)
+
+diff --git a/src/ext4_journal.c b/src/ext4_journal.c
+index 74a6928..5cb3d47 100644
+--- a/src/ext4_journal.c
++++ b/src/ext4_journal.c
+@@ -267,12 +267,11 @@ static uint32_t jbd_commit_csum(struct jbd_fs *jbd_fs,
+ 	uint32_t checksum = 0;
+ 
+ 	if (jbd_has_csum(&jbd_fs->sb)) {
+-		uint8_t orig_checksum_type = header->chksum_type,
+-			 orig_checksum_size = header->chksum_size;
++		/* Only h_chksum[0] is zeroed, as jbd2 does (upstream also
++		 * zeroed h_chksum_type and h_chksum_size: commit blocks
++		 * carrying a type were rejected by the kernel and e2fsck) */
+ 		uint32_t orig_checksum = header->chksum[0];
+ 		uint32_t block_size = jbd_get32(&jbd_fs->sb, blocksize);
+-		header->chksum_type = 0;
+-		header->chksum_size = 0;
+ 		header->chksum[0] = 0;
+ 
+ 		/* First calculate crc32c checksum against fs uuid */
+@@ -282,8 +281,6 @@ static uint32_t jbd_commit_csum(struct jbd_fs *jbd_fs,
+ 		checksum = ext4_crc32c(checksum, header,
+ 				block_size);
+ 
+-		header->chksum_type = orig_checksum_type;
+-		header->chksum_size = orig_checksum_size;
+ 		header->chksum[0] = orig_checksum;
+ 	}
+ 	return checksum;
+@@ -344,7 +341,7 @@ static uint32_t jbd_block_csum(struct jbd_fs *jbd_fs, const void *buf,
+ 		/* Calculate crc32c checksum against tho whole block */
+ 		checksum = ext4_crc32c(checksum, buf,
+ 				block_size);
+-	} else if (JBD_HAS_INCOMPAT_FEATURE(&jbd_fs->sb,
++	} else if (JBD_HAS_COMPAT_FEATURE(&jbd_fs->sb,
+ 				     JBD_FEATURE_COMPAT_CHECKSUM)) {
+ 		uint32_t block_size = jbd_get32(&jbd_fs->sb, blocksize);
+ 		/* Calculate crc32c checksum against tho whole block */
+@@ -1799,12 +1796,17 @@ static int jbd_trans_write_commit_block(struct jbd_trans *trans)
+ 	if (rc != EOK)
+ 		return rc;
+ 
++	/* Never write stale cache bytes into the journal */
++	memset(block.data, 0, journal->block_size);
+ 	header = (struct jbd_commit_header *)block.data;
+ 	jbd_set32(&header->header, magic, JBD_MAGIC_NUMBER);
+ 	jbd_set32(&header->header, blocktype, JBD_COMMIT_BLOCK);
+ 	jbd_set32(&header->header, sequence, trans->trans_id);
+ 
+-	if (JBD_HAS_INCOMPAT_FEATURE(&journal->jbd_fs->sb,
++	/* COMPAT_CHECKSUM is a compat feature: upstream tested the incompat
++	 * bit of the same value (REVOKE) and put a v1 type in the commit
++	 * blocks of every journal with revoke records */
++	if (JBD_HAS_COMPAT_FEATURE(&journal->jbd_fs->sb,
+ 				JBD_FEATURE_COMPAT_CHECKSUM)) {
+ 		header->chksum_type = JBD_CRC32_CHKSUM;
+ 		header->chksum_size = JBD_CRC32_CHKSUM_SIZE;
+@@ -1905,13 +1907,22 @@ static int jbd_journal_prepare(struct jbd_journal *journal,
+ 			ext4_free(jbd_buf);
+ 			continue;
+ 		}
++		if (((struct jbd_bhdr *)jbd_buf->block.data)->magic ==
++				to_be32(JBD_MAGIC_NUMBER))
++			is_escape = true;
++		/* The tag checksum covers the block as stored in the journal,
++		 * i.e. escaped (jbd2 verifies it before restoring the magic);
++		 * upstream summed the original block. The cache block is
++		 * escaped only while it is summed. */
++		if (is_escape)
++			((struct jbd_bhdr *)jbd_buf->block.data)->magic = 0;
+ 		checksum = jbd_block_csum(journal->jbd_fs,
+ 					  jbd_buf->block.data,
+ 					  checksum,
+ 					  trans->trans_id);
+-		if (((struct jbd_bhdr *)jbd_buf->block.data)->magic ==
+-				to_be32(JBD_MAGIC_NUMBER))
+-			is_escape = true;
++		if (is_escape)
++			((struct jbd_bhdr *)jbd_buf->block.data)->magic =
++				to_be32(JBD_MAGIC_NUMBER);
+ 
+ again:
+ 		if (!desc_iblock) {
+@@ -1920,6 +1931,8 @@ again:
+ 			if (rc != EOK)
+ 				break;
+ 
++			/* Bytes past the last tag: zero, not stale cache data */
++			memset(desc_block.data, 0, journal->block_size);
+ 			bhdr = (struct jbd_bhdr *)desc_block.data;
+ 			jbd_set32(bhdr, magic, JBD_MAGIC_NUMBER);
+ 			jbd_set32(bhdr, blocktype, JBD_DESCRIPTOR_BLOCK);
+@@ -2041,6 +2054,7 @@ again:
+ 			if (rc != EOK)
+ 				break;
+ 
++			memset(desc_block.data, 0, journal->block_size);
+ 			bhdr = (struct jbd_bhdr *)desc_block.data;
+ 			jbd_set32(bhdr, magic, JBD_MAGIC_NUMBER);
+ 			jbd_set32(bhdr, blocktype, JBD_REVOKE_BLOCK);
+-- 
+2.43.0
+

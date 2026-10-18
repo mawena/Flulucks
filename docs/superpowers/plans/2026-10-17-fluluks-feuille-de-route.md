@@ -57,12 +57,103 @@ dans le même commit que le travail.
   - Liens symboliques : listés mais non ouverts par le provider → T8
   - Noms de 255 octets (lwext4), extents non écrits, `MAX_DIR_STEPS`, tests manquants (GPT hostile,
     surrogates, boucle EBR, sha512, corruptions LUKS1, label LUKS2) → phase 3 (avant toute écriture)
+- Reports de la phase 2 (revues des tâches et revue finale), à reprendre dans les plans suivants :
+  - **Avant l'écriture (phase 3)** : fenêtre de démontage non forcé qui rend `FL_EINVAL` au lieu de
+    `FL_EBUSY` (`tab_put` doit refuser un enfant si le parent est en fermeture) ; tests manquants :
+    `EBUSY` après attente, `closeDisk` pendant `mount`, `close_children` en attente ; `fj_list`
+    accumule tout le dossier en natif avant le plafond JSON de 16 Mio.
+  - **USB** : `EPROTO` toujours traduit en `FL_ENODEV` ; `clear_halt` sauté si le reset BOT échoue ;
+    tests manquants (tag faux, statut > 2, CSW court, timeout transitoire récupéré) ; endpoint 0
+    accepté ; CD virtuel en LUN 0 et `GET MAX LUN` → phase 6 ; 04/03 affiché comme « erreur
+    d'entrée/sortie » (code d'erreur dédié à créer).
+  - **Cache** : allocation ≤ 320 Kio et double copie, balayage linéaire des emplacements, retours
+    `pthread_*_init` ignorés, lecture anticipée réduite sur une requête en partie déjà en cache.
+  - **Android** : l'exécuteur unique fait attendre l'effacement des clés pendant un Argon2 (≈ 4 s) ;
+    marquer le disque détaché immédiatement ; messages français codés en dur dans Kotlin ; repli
+    API 34+ du service au premier plan (Ruling P8) ; fenêtre de quelques ms entre `stopSelf` et
+    `onDestroy` ; erreur de `runSafely` non publiée si le disque est inconnu ; course de redémarrage
+    non testée automatiquement ; « Aucune partition reconnue » sans test JVM ; pas d'unité « To ».
+  - **Sécurité, risque résiduel** : copies de la phrase de passe hors de notre contrôle (`String` du
+    champ de saisie, clavier, tampons d'encodage de Pigeon en Dart et en Kotlin).
+  - **Outils** : `kotlinOptions` déprécié ; `disable-abi-filtering` est une propriété interne de
+    Flutter (à revérifier à chaque mise à jour) ; Pigeon bloqué en 27.3.0 par Flutter 3.41.4
+    (Ruling P10) ; `$OUT` en lien symbolique dans `run_native_tests.sh` ; shellcheck absent du PC.
+  - **Essais** : refaire la grille avec une clé USB-C sacrifiée (dont le débranchement en cours de
+    lecture) et chronométrer le déverrouillage dans l'application.
 
-### Phase 3 — ext4 en écriture
-- [ ] Plan de la phase 3 écrit
-- [ ] *(tâches détaillées à l'écriture du plan : écriture lwext4 + journal, règles de sécurité § 4.2,
-      propriétaire/droits, écriture via DocumentsProvider, batterie `e2fsck`, tests de coupure)*
-- [ ] Version `v0.2.0`
+### Phase 3 — ext4 en écriture ([plan](2026-10-18-phase3-ext4-ecriture.md))
+- [x] Essai préalable de l'écriture lwext4 face à `e2fsck`
+      ([rapport](../research/2026-10-18-essai-lwext4-ecriture/RAPPORT.md))
+- [x] Plan de la phase 3 écrit
+- [x] T1 — Dettes de lecture dans lwext4 (noms de 255 octets, trous de dossier, entrées hostiles)
+- [x] T2 — Tests manquants des phases 1 et 2, `FL_EBUSY` en fermeture, écriture LUKS2
+- [x] T3 — Banc de non-corruption (images d'écriture, `e2fsck`, `debugfs`, pannes)
+- [x] T4 — Écriture ext4 (API complète, propriétaire hérité, horodatages)
+- [x] T5 — Journal sûr (sommes v3, séquence, barrières) et tests de coupure
+- [x] T6 — Règles de lecture seule du § 4.2 et montage sûr
+- [x] T7 — crc32c rapide *(chemin arm64 à passer sur le Pixel : `run_native_tests.sh`)*
+- [x] T8 — Batterie de non-corruption complète *(vérifiée par le noyau le 2026-10-18 : `sudo tools/fixtures/verify_rw_with_kernel.sh build/native/batterie`, 11 images « NOYAU OK » — `1k`, `luks2`, `reel`, `secteurs-4k`, `seed`, `uninit` produites avec le correctif 0010, les 5 `longue-*` avec le code d'avant ; variante longue repassée avec le code publié en 0.2.0 : verte en 107 min, images `longue-*` à refaire juger par le noyau)*
+- [x] T9 — Écriture USB (WRITE, SYNCHRONIZE CACHE, protection en écriture) *(compilation `build/android-arm64` faite ; tests sur le Pixel à passer)*
+- [x] T10 — JNI et VolumeManager en écriture (synchronisation, éjection, débranchement) *(tests JVM et natifs PC verts, `test_batterie_lent` : 35 min en Debug + ASan ; à passer sur le Pixel, injoignable depuis le conteneur : `connectedDebugAndroidTest` puis `tools/android/check_image.sh <serial>`)*
+- [x] T11 — DocumentsProvider en écriture *(tests JVM verts, dont `WriteOpsTest` sur un système de fichiers en mémoire ; `ProviderWriteTest` compilé, à passer sur le Pixel puis `tools/android/check_image.sh <serial> provider-plein.img`)*
+- [x] T12 — Interface Flutter (lecture seule, éjection, avertissements)
+- Relecture et corrections de T4 à T12 (faites hors de la boucle de relecture, dans une autre session) :
+  - [x] Vérification sur PC du travail récupéré *(2026-10-18 : suite native rapide 20/20 sous ASan/UBSan,
+        0 erreur ; `flutter analyze` propre ; `flutter test` 21/21 ; tests JVM verts)*
+  - [x] Relectures rétroactives de T4 à T12 *(T12 approuvée ; T4, T5, T6, T7, T8, T9, T10-11 à corriger :
+        5 défauts critiques, tous sans effet sur le vrai disque tant qu'aucune écriture n'y est faite)*
+  - [x] Correctif T9 : avertissement USB « support changé » ou « reset » pendant l'écriture *(critique)* + T7 : crc32c dans les tests du téléphone *(UNIT ATTENTION après l'ouverture : 0x28 → disque mort, autre → `FL_EIO` sans réessai et flush en échec ; `test_crc32c` et son débit ajoutés à `run_native_tests.sh` ; PC 20/20, arm64 compilé)*
+  - [x] Correctif T10-T11 : éjection en échec, provider *(en parallèle, branche `fix/p3-ejection`, fusionnée ; JVM 46/46, natifs PC 20/20)*
+  - [x] Correctif journal (T5, T6) : journaux à somme v1 refusés en écriture, blocs échappés, octets non
+        initialisés, juge et barrières *(critique)* *(correctif lwext4 0007 : somme d'étiquette sur le
+        bloc échappé — sans lui, `e2fsck` rejetait le bloc au rejeu —, blocs du journal à zéro ; v1 et
+        ro_compat refusés ; juge aligné sur jbd2 ; ordre des barrières vérifié ; PC 20/20)*
+  - [x] Correctif écriture et politique (T4, T6) : erreur d'E/S pendant une écriture, `rmdir` sur disque
+        hostile, sommes fausses avalées, lecture seule collante jusqu'au démontage *(critique)* *(volume
+        gelé dès la lecture seule en cours de session ; correctifs lwext4 0008 — racine d'extents
+        vérifiée, erreurs de libération remontées : une troncature validait un inode sans ses blocs — et
+        0009 — annulation sans relecture : plantage ; `rmdir` borné ; PC 20/20)*
+  - [x] Correctif T8 : batterie (cadence 200 pas, profondeur 40, copies supprimées en échec) *(jalon
+        tous les 200 pas partout, variante longue comprise ; chaque batterie creuse jusqu'à la profondeur
+        40, jugée aussitôt et affirmée ; en échec l'image est gardée en `<nom>.echec.img`, et les
+        sorties d'un passage précédent sont supprimées au départ ; `test_manifeste` ajouté (manifest.py
+        contre tm_write_manifest, via `debugfs rdump`, sans root) ; PC 20/20, `test_batterie_lent`
+        vert en 83 min)*
+  - [x] Passage sur le Pixel : tests natifs (`run_native_tests.sh`), `connectedDebugAndroidTest`,
+        `check_image.sh` *(2026-10-18, Pixel 4 XL : tests natifs arm64 tous verts, crc32c matériel
+        « armv8-crc » à 9 218 Mo/s contre 300 Mo/s octet par octet, déverrouillage aux paramètres exacts
+        4,45 s ; tests instrumentés 50/50 ; `e2fsck -fn` propre sur `engine-ecriture.img`,
+        `provider-plein.img` et `provider-ecriture.img`. Corrigé en route : éjection refusée sans fin
+        quand une autre application garde un fichier ouvert → démontage forcé après un `sync` réussi
+        (Ruling P12) ; Gradle désinstallait l'application après les tests, et ses images avec →
+        `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true`, et `check_image.sh` exige
+        le magic ext4)*
+  - [x] Correctif : vrai disque refusé en écriture (« sommes de contrôle invalides ») au branchement sur
+        le Pixel *(2026-10-18 : la politique d'écriture lisait comme vides les extents pleins de
+        32 768 blocs (`ee_len` 0x8000) du journal de 1 Gio du disque de 421 Gio → journal « introuvable »,
+        compté comme somme fausse ; toutes les vraies sommes étaient bonnes, rien n'a été écrit. Image
+        de test `ext4-rw-journal-gros.img` (journal de même forme) ; `fluluks-cli diagnostic` (lecture
+        seule, détail des contrôles et parcours de l'arborescence) et détail dans logcat
+        (`FluLuksPolicy`) en cas de refus ; vrai disque monté en écriture sur le Pixel après correction)*
+  - [x] Correctif lwext4 0010 : fichiers creux *(trouvé en vérifiant le correctif précédent :
+        supprimer un gros fichier creux validait une transaction de journal par tranche de 16 Mio — un
+        million pour 16 Tio, des heures sur un disque USB —, et écrire loin au-delà de la fin d'un fichier
+        non vide visait un bloc hors du disque (volume gelé en « corruption »). Test
+        `test_politique_suppression_gros_creux` : 10 vidages de cache au lieu d'environ 130 000)*
+  - [x] Relecture finale de toute la branche *(depuis T12 ; corrigés : fichier à blocs indirects vidé
+        puis volume gelé en « w » — refus à l'ouverture —, dernier bloc logique, `fsync` réussi après gel,
+        éjection après gel, accès hors verrou, nœud d'index vide (0008) ; découpe d'extents à 2 niveaux
+        sur disque plein laissée en limite connue ; PC 20/20, JVM 48/48)*
+- [ ] *(utilisateur)* Clé sacrifiée branchable en USB-C (clé USB-C ou adaptateur OTG USB-A → USB-C)
+- [ ] *(utilisateur)* Sauvegarde complète du vrai disque avant toute écriture dessus
+- [ ] T13 — Essais sur le Pixel : clé sacrifiée, puis vrai disque *(non faits pour la 0.2.0 : pas de clé
+      sacrifiée ni de sauvegarde du vrai disque pour l'instant ; version publiée à la demande de
+      l'utilisateur, écriture par défaut, avec la mention « écriture non essayée sur un vrai disque » dans le
+      README. Le vrai disque s'ouvre bien en écriture sur le Pixel depuis le correctif du journal de 1 Gio,
+      aucune écriture n'y a été faite.)*
+- [x] Fusion `feature/ext4-ecriture` → `develop`
+- [x] Version `v0.2.0` *(2026-10-18, branche `release/0.2.0` → `main` ; écriture non encore essayée sur un vrai
+      disque, voir T13)*
 
 ### Phase 4 — FAT16 / FAT32 / exFAT (lecture puis écriture)
 - [ ] Plan de la phase 4 écrit

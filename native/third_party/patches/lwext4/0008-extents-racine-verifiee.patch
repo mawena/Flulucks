@@ -1,0 +1,185 @@
+From 9fbef7dd1e55eda36eaad3dcb2a1169f51cd4bf8 Mon Sep 17 00:00:00 2001
+From: mawena <gamligocharles@gmail.com>
+Date: Sun, 18 Oct 2026 14:56:39 +0000
+Subject: [PATCH] =?UTF-8?q?fix:=20extents=20=E2=80=94=20en-t=C3=AAte=20rac?=
+ =?UTF-8?q?ine=20v=C3=A9rifi=C3=A9,=20erreurs=20de=20lib=C3=A9ration=20rem?=
+ =?UTF-8?q?ont=C3=A9es=20(FluLuks)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+ext4_find_extent faisait confiance à l'en-tête d'extents rangé dans l'inode
+(racine de l'arbre) : seuls les blocs de l'arbre passaient par ext4_ext_check.
+Sur un disque abîmé ou hostile, une racine effacée se lisait comme un arbre
+vide (une troncature ou une suppression libérait l'inode en laissant tous
+ses blocs alloués) et un eh_depth démesuré dimensionnait l'allocation du
+chemin. La racine est maintenant vérifiée comme un bloc de l'arbre (magique,
+nombre d'entrées, au plus 4 entrées, profondeur au plus 5, comme le noyau),
+sans somme de queue (la somme de l'inode la couvre) : EFSCORRUPTED sinon.
+Un nœud d'index sans entrée (racine ou bloc) est aussi refusé, comme le
+noyau : la recherche dichotomique suivait une entrée quelconque.
+
+ext4_ext_free_blocks jetait le code de ext4_balloc_free_blocks (bitmap
+illisible, ou à la somme fausse : EBADMSG). Une troncature retirait alors
+les extents de l'inode, laissait les blocs alloués et validait la
+transaction (constaté : « Block bitmap differences », « Free blocks count
+wrong » après le rejeu). Le code remonte désormais par ext4_ext_remove_blocks,
+ext4_ext_remove_idx, ext4_ext_remove_leaf et ext4_extent_remove_space (qui
+jetait aussi le code de ext4_ext_remove_leaf et de ext4_ext_dirty) ; l'extent
+n'est modifié qu'après la libération.
+---
+ src/ext4_extent.c | 63 ++++++++++++++++++++++++++++++++++++++---------
+ 1 file changed, 52 insertions(+), 11 deletions(-)
+
+diff --git a/src/ext4_extent.c b/src/ext4_extent.c
+index dd09f9f..b21ccc8 100644
+--- a/src/ext4_extent.c
++++ b/src/ext4_extent.c
+@@ -129,6 +129,8 @@ struct ext4_extent_header {
+ 
+ 
+ #define EXT4_EXTENT_MAGIC 0xF30A
++/* Deepest tree the kernel builds (EXT4_MAX_EXTENT_DEPTH) */
++#define EXT4_EXTENT_MAX_DEPTH 5
+ 
+ #define EXT4_EXTENT_FIRST(header)                                              \
+     ((struct ext4_extent *)(((char *)(header)) +                           \
+@@ -506,11 +508,15 @@ static ext4_fsblk_t ext4_new_meta_blocks(struct ext4_inode_ref *inode_ref,
+ 	return block;
+ }
+ 
+-static void ext4_ext_free_blocks(struct ext4_inode_ref *inode_ref,
++/* Returns the error of ext4_balloc_free_blocks (a bitmap that cannot be
++ * read, or with a bad checksum): upstream discarded it, and a truncation
++ * committed an inode without its extents while the blocks stayed allocated.
++ * The callers that free blocks on an error path keep their first error. */
++static int ext4_ext_free_blocks(struct ext4_inode_ref *inode_ref,
+ 				 ext4_fsblk_t block, uint32_t count,
+ 				 uint32_t flags __unused)
+ {
+-	ext4_balloc_free_blocks(inode_ref, block, count);
++	return ext4_balloc_free_blocks(inode_ref, block, count);
+ }
+ 
+ static uint16_t ext4_ext_space_block(struct ext4_inode_ref *inode_ref)
+@@ -752,6 +758,12 @@ static int ext4_ext_check(struct ext4_inode_ref *inode_ref,
+ 		error_msg = "invalid eh_entries";
+ 		goto corrupted;
+ 	}
++	/* An index node without entries points nowhere (kernel rule):
++	 * the binary search would follow garbage */
++	if (eh->entries_count == 0 && depth > 0) {
++		error_msg = "index node without entries";
++		goto corrupted;
++	}
+ 
+ 	tail = find_ext4_extent_tail(eh);
+ 	if (ext4_sb_feature_ro_com(sb, EXT4_FRO_COM_METADATA_CSUM)) {
+@@ -870,6 +882,21 @@ static int ext4_find_extent(struct ext4_inode_ref *inode_ref, ext4_lblk_t block,
+ 	eh = ext_inode_hdr(inode_ref->inode);
+ 	depth = ext_depth(inode_ref->inode);
+ 
++	/* The root header, in the inode, is checked like the tree blocks
++	 * (without a tail checksum: the inode checksum covers it). Upstream
++	 * trusted it: a zeroed root read as an empty tree (a truncation then
++	 * leaked every block), a huge eh_depth sized the path allocation. */
++	if (to_le16(eh->magic) != EXT4_EXTENT_MAGIC ||
++	    eh->max_entries_count == 0 ||
++	    to_le16(eh->entries_count) > to_le16(eh->max_entries_count) ||
++	    (eh->entries_count == 0 && depth > 0) ||
++	    to_le16(eh->max_entries_count) >
++		(sizeof(inode_ref->inode->blocks) -
++		 sizeof(struct ext4_extent_header)) /
++		sizeof(struct ext4_extent) ||
++	    depth > EXT4_EXTENT_MAX_DEPTH)
++		return EFSCORRUPTED;
++
+ 	if (path) {
+ 		ext4_ext_drop_refs(inode_ref, path, 0);
+ 		if (depth > path[0].maxdepth) {
+@@ -1517,7 +1544,7 @@ out:
+ 	return ret;
+ }
+ 
+-static void ext4_ext_remove_blocks(struct ext4_inode_ref *inode_ref,
++static int ext4_ext_remove_blocks(struct ext4_inode_ref *inode_ref,
+ 				   struct ext4_extent *ex, ext4_lblk_t from,
+ 				   ext4_lblk_t to)
+ {
+@@ -1530,7 +1557,7 @@ static void ext4_ext_remove_blocks(struct ext4_inode_ref *inode_ref,
+ 		 "Freeing %" PRIu32 " at %" PRIu64 ", %" PRIu32 "\n", from,
+ 		 start, len);
+ 
+-	ext4_ext_free_blocks(inode_ref, start, len, 0);
++	return ext4_ext_free_blocks(inode_ref, start, len, 0);
+ }
+ 
+ static int ext4_ext_remove_idx(struct ext4_inode_ref *inode_ref,
+@@ -1557,7 +1584,9 @@ static int ext4_ext_remove_idx(struct ext4_inode_ref *inode_ref,
+ 
+ 	ext4_dbg(DEBUG_EXTENT, "IDX: Freeing %" PRIu32 " at %" PRIu64 ", %d\n",
+ 		 to_le32(path[i].index->first_block), leaf, 1);
+-	ext4_ext_free_blocks(inode_ref, leaf, 1, 0);
++	err = ext4_ext_free_blocks(inode_ref, leaf, 1, 0);
++	if (err != EOK)
++		return err;
+ 
+ 	/*
+ 	 * We may need to correct the paths after the first extents/indexes in
+@@ -1631,7 +1660,11 @@ static int ext4_ext_remove_leaf(struct ext4_inode_ref *inode_ref,
+ 			}
+ 		}
+ 
+-		ext4_ext_remove_blocks(inode_ref, ex, start, start + len - 1);
++		/* Freed first: on an error the extent is left as it was */
++		err = ext4_ext_remove_blocks(inode_ref, ex, start,
++					     start + len - 1);
++		if (err != EOK)
++			return err;
+ 		/*
+ 		 * Set the first block of the extent if it is presented.
+ 		 */
+@@ -1737,7 +1770,9 @@ int ext4_extent_remove_space(struct ext4_inode_ref *inode_ref, ext4_lblk_t from,
+ 		if (unwritten)
+ 			ext4_ext_mark_unwritten(ex);
+ 
+-		ext4_ext_dirty(inode_ref, path + depth);
++		ret = ext4_ext_dirty(inode_ref, path + depth);
++		if (ret != EOK)
++			goto out;
+ 
+ 		newex.first_block = to_le32(to + 1);
+ 		newex.block_count = to_le16(ee_block + len - 1 - to);
+@@ -1777,8 +1812,12 @@ int ext4_extent_remove_space(struct ext4_inode_ref *inode_ref, ext4_lblk_t from,
+ 			if (leaf_to > to)
+ 				leaf_to = to;
+ 
+-			ext4_ext_remove_leaf(inode_ref, path, leaf_from,
+-					     leaf_to);
++			/* Its error was discarded upstream: the
++			 * truncation went on and committed */
++			ret = ext4_ext_remove_leaf(inode_ref, path, leaf_from,
++						   leaf_to);
++			if (ret != EOK)
++				goto out;
+ 			ext4_ext_drop_refs(inode_ref, path + i, 0);
+ 			i--;
+ 			continue;
+@@ -1814,10 +1853,12 @@ int ext4_extent_remove_space(struct ext4_inode_ref *inode_ref, ext4_lblk_t from,
+ 				/*
+ 				 * Garbage entries will finally be cleared here.
+ 				 */
+-				if (!eh->entries_count)
++				if (!eh->entries_count) {
+ 					ret = ext4_ext_remove_idx(inode_ref,
+ 								  path, i - 1);
+-				else
++					if (ret != EOK)
++						goto out;
++				} else
+ 					path[i - 1].index++;
+ 			}
+ 
+-- 
+2.43.0
+

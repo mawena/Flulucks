@@ -21,11 +21,12 @@ object NativeEngine : Engine {
     /** Message français (UTF-8) d'un code fl_err. */
     external override fun strerror(code: Int): ByteArray
 
-    /** Image disque, en lecture seule. Poignée disque > 0, ou code fl_err < 0. */
-    external override fun openImage(path: ByteArray): Long
+    /** Image disque (lecture seule par défaut ; écriture pour les tests). Poignée disque > 0, ou fl_err. */
+    external override fun openImage(path: ByteArray, readOnly: Boolean): Long
 
     /**
-     * Disque USB (interface déjà réclamée) : usb_bdev en lecture seule (LUN 0) + cache 64 Kio × 256.
+     * Disque USB (interface déjà réclamée) : usb_bdev en lecture-écriture (LUN 0 ; MODE SENSE dit si le
+     * disque est protégé) + cache 64 Kio × 256.
      * Le descripteur reste à l'appelant (UsbDeviceConnection), qui ne le ferme qu'après [closeDisk].
      */
     external override fun openUsb(fd: Int, iface: Int, epIn: Int, epOut: Int): Long
@@ -37,12 +38,16 @@ object NativeEngine : Engine {
     external override fun scan(disk: Long): ByteArray
 
     /**
-     * Ouvre la partition `partIndex` (déverrouillage LUKS si besoin, ext4 en lecture seule).
+     * Ouvre la partition `partIndex` (déverrouillage LUKS si besoin), ext4 en écriture si `writable` et
+     * si les règles du moteur le permettent (sinon lecture seule, raison dans [statfs]).
      * `pass` est mis à zéro dans tous les cas, succès ou erreur. Poignée volume ou fl_err.
      */
-    external override fun mount(disk: Long, partIndex: Int, pass: ByteArray?): Long
+    external override fun mount(disk: Long, partIndex: Int, pass: ByteArray?, writable: Boolean): Long
 
-    /** Sans force : FL_EBUSY si un fichier est ouvert. Avec force : ferme d'abord les fichiers. */
+    /**
+     * Sans force : FL_EBUSY si un fichier est ouvert. Avec force : ferme d'abord les fichiers. Un volume en
+     * écriture est synchronisé puis démonté ; disque mort : tout est libéré et l'erreur est rendue.
+     */
     external override fun unmount(vol: Long, force: Boolean): Int
 
     /** JSON de l'espace du volume ([VolumeStat.parse]). */
@@ -54,12 +59,33 @@ object NativeEngine : Engine {
     /** JSON du contenu d'un dossier, trié par nom ([DirEntry.parseList]). */
     external override fun list(vol: Long, path: ByteArray): ByteArray
 
-    /** Ouvre un fichier ordinaire en lecture. Poignée fichier ou fl_err. */
-    external override fun openFile(vol: Long, path: ByteArray): Long
+    /** Ouvre un fichier ordinaire ; `flags` : [OpenFlags]. Poignée fichier ou fl_err. */
+    external override fun openFile(vol: Long, path: ByteArray, flags: Int): Long
 
     /** Lit au plus `len` octets (4 Mio par appel au plus) dans `buf[0..]`. Octets lus, 0 = fin, < 0 = fl_err. */
     external override fun pread(file: Long, offset: Long, buf: ByteArray, len: Int): Int
 
-    /** 0 ou fl_err. */
+    /** Écrit `buf[0..len)` (4 Mio au plus) à `offset`. Octets écrits (= len) ou fl_err. */
+    external override fun pwrite(file: Long, offset: Long, buf: ByteArray, len: Int): Int
+
+    /** Vers le haut (trou) ou vers le bas. 0 ou fl_err. */
+    external override fun truncate(file: Long, size: Long): Int
+
+    /** 0 ou fl_err ; un fichier écrit est synchronisé (le code de la synchronisation est rendu). */
     external override fun closeFile(file: Long): Int
+
+    /** Les chemins sont absolus, en UTF-8. 0 ou fl_err (FL_EEXIST, FL_ENOENT, FL_EROFS…). */
+    external override fun mkdir(vol: Long, path: ByteArray): Int
+
+    /** Fichier ou lien ; FL_EISDIR sur un dossier, FL_EBUSY sur un fichier ouvert. */
+    external override fun unlink(vol: Long, path: ByteArray): Int
+
+    /** Dossier vide seulement (FL_ENOTEMPTY sinon). */
+    external override fun rmdir(vol: Long, path: ByteArray): Int
+
+    /** FL_EEXIST si `to` existe (pas de remplacement), FL_EINVAL si `to` est sous `from`. */
+    external override fun rename(vol: Long, from: ByteArray, to: ByteArray): Int
+
+    /** Vide les caches du moteur et du disque (SYNCHRONIZE CACHE sur USB). 0 ou fl_err. */
+    external override fun sync(vol: Long): Int
 }

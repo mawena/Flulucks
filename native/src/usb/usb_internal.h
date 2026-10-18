@@ -20,7 +20,7 @@ typedef struct {
 extern const fl_usb_clock fl_usb_real_clock;
 
 #define FL_USB_XFER_TIMEOUT_MS 5000u   /* délai par transfert bulk (CBW, commandes courtes) */
-#define FL_USB_MEDIA_TIMEOUT_MS 30000u /* données et CSW de READ(10)/(16) et START STOP UNIT */
+#define FL_USB_MEDIA_TIMEOUT_MS 30000u /* données et CSW de READ, WRITE, SYNCHRONIZE CACHE et START STOP UNIT */
 #define FL_USB_READY_BUDGET_MS 20000u  /* attente maximale d'un disque « pas prêt » */
 #define FL_USB_READY_POLL_MS 200u      /* intervalle entre deux essais */
 #define FL_USB_MAX_XFER 65536u         /* au plus 64 Kio de données par commande */
@@ -33,6 +33,11 @@ typedef struct {
   uint32_t tag;
   bool dead;           /* FL_ENODEV vu : plus rien n'est envoyé */
   bool ignore_residue; /* résidu du CSW fantaisiste (heuristique de Linux) : on compte les octets reçus */
+  bool wp;             /* protection en écriture signalée (MODE SENSE ou DATA PROTECT) : collante */
+  bool opened;         /* ouverture réussie : la politique UNIT ATTENTION change (voir scsi.c) */
+  bool ua_reset;       /* UNIT ATTENTION autre que « support changé » vue après l'ouverture : collant,
+                        * tout flush rend FL_EIO (le cache volatil du disque a pu être perdu) */
+  bool sync_unsupported; /* SYNCHRONIZE CACHE refusé (ILLEGAL REQUEST) */
 } fl_usb_dev;
 
 enum { FL_BOT_NONE = 0, FL_BOT_IN = 1, FL_BOT_OUT = 2 };
@@ -41,7 +46,8 @@ enum { FL_BOT_NONE = 0, FL_BOT_IN = 1, FL_BOT_OUT = 2 };
  * FL_OK : *status = 0 (succès) ou 1 (échec de commande : REQUEST SENSE à faire),
  * *done = octets de données réellement transférés (<= len, résidu pris en compte sauf si
  * u->ignore_residue). Délais : CBW FL_USB_XFER_TIMEOUT_MS ; données et CSW
- * FL_USB_MEDIA_TIMEOUT_MS pour READ(10)/(16) et START STOP UNIT, FL_USB_XFER_TIMEOUT_MS sinon.
+ * FL_USB_MEDIA_TIMEOUT_MS pour READ(10)/(16), WRITE(10)/(16), SYNCHRONIZE CACHE(10) et START STOP
+ * UNIT, FL_USB_XFER_TIMEOUT_MS sinon.
  * Sinon fl_err (FL_ENODEV marque le périphérique mort). */
 int fl_bot_exec(fl_usb_dev *u, const uint8_t *cdb, uint8_t cdblen, int dir, void *buf, uint32_t len,
                 uint32_t *done, uint8_t *status);
@@ -59,7 +65,15 @@ int fl_scsi_wait_ready(fl_usb_dev *u);
 int fl_scsi_read_capacity(fl_usb_dev *u, uint64_t *blocks, uint32_t *block_size);
 /* Lecture de n blocs (n * block_size <= FL_USB_MAX_XFER). */
 int fl_scsi_read(fl_usb_dev *u, uint64_t lba, uint32_t n, uint32_t block_size, void *buf);
-/* SYNCHRONIZE CACHE(10). */
+/* WRITE(10), ou WRITE(16) au-delà de 32 bits ; renvoie la longueur. */
+uint8_t fl_scsi_build_write(uint64_t lba, uint32_t n, uint8_t cdb[16]);
+/* Écriture de n blocs (n * block_size <= FL_USB_MAX_XFER). Sens DATA PROTECT → FL_EROFS. Après
+ * l'ouverture, UNIT ATTENTION : FL_ENODEV (support changé, périphérique mort) ou FL_EIO, sans réessai. */
+int fl_scsi_write(fl_usb_dev *u, uint64_t lba, uint32_t n, uint32_t block_size, const void *buf);
+/* MODE SENSE(6) : *wp = bit de protection en écriture de l'en-tête. */
+int fl_scsi_mode_sense_wp(fl_usb_dev *u, bool *wp);
+/* SYNCHRONIZE CACHE(10) ; ILLEGAL REQUEST (non prise en charge) vaut FL_OK et pose
+ * u->sync_unsupported. */
 int fl_scsi_sync_cache(fl_usb_dev *u);
 
 /* fl_usb_bdev_open avec une horloge choisie (NULL = horloge réelle). */

@@ -22,56 +22,65 @@ class PartitionTile extends StatelessWidget {
     final children = <Widget>[Text(line, style: theme.textTheme.bodyLarge)];
     if (volumeId != null) {
       // Ouverte : jamais de « Déverrouiller » (la phrase de passe ne serait pas revérifiée).
-      children.add(const Text(Fr.openedInFiles));
+      final readOnly = volume?.readOnly ?? true;
+      children.add(Text(readOnly ? Fr.openedInFiles : Fr.openedInFilesRw));
+      if (volume != null && volume.readOnly && volume.roReason.isNotEmpty) {
+        children.add(Text(Fr.readOnly(volume.roReason)));
+      }
       if (volume != null && volume.needsRecovery) {
         children.add(Text(Fr.needsRecovery, style: TextStyle(color: theme.colorScheme.error)));
       }
-      children.add(Wrap(spacing: 8, children: [
-        FilledButton.tonal(
-          onPressed: () => state.openInFiles(volumeId),
-          child: const Text(Fr.openInFiles),
+      children.add(
+        Wrap(
+          spacing: 8,
+          children: [
+            FilledButton.tonal(
+              onPressed: state.ejecting ? null : () => state.openInFiles(volumeId),
+              child: const Text(Fr.openInFiles),
+            ),
+            OutlinedButton(onPressed: state.ejecting ? null : () => state.eject(volumeId), child: const Text(Fr.eject)),
+          ],
         ),
-        OutlinedButton(
-          onPressed: () => state.eject(volumeId),
-          child: const Text(Fr.eject),
-        ),
-      ]));
+      );
     } else if (!partition.supported) {
       children.add(Text(Fr.unsupported(partition.content)));
     } else if (partition.encrypted) {
-      children.add(Align(
-        alignment: Alignment.centerLeft,
-        child: FilledButton(
-          onPressed: () => showDialog<bool>(
-            context: context,
-            barrierDismissible: false,
-            builder: (_) => UnlockDialog(
-              state: state,
-              diskId: disk.id,
-              partIndex: partition.index,
-              partitionName: partition.label.isEmpty ? Fr.partitionName(partition.index) : partition.label,
-            ),
+      children.add(
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton(
+            onPressed: state.ejecting
+                ? null
+                : () => showDialog<bool>(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (_) => UnlockDialog(
+                      state: state,
+                      diskId: disk.id,
+                      partIndex: partition.index,
+                      writable: !state.readOnlyPreference,
+                      partitionName: partition.label.isEmpty ? Fr.partitionName(partition.index) : partition.label,
+                    ),
+                  ),
+            child: const Text(Fr.unlock),
           ),
-          child: const Text(Fr.unlock),
         ),
-      ));
+      );
     } else {
-      children.add(Align(
-        alignment: Alignment.centerLeft,
-        child: FilledButton(
-          onPressed: () => state.mountPlain(disk.id, partition.index),
-          child: const Text(Fr.open),
+      children.add(
+        Align(
+          alignment: Alignment.centerLeft,
+          child: FilledButton(
+            onPressed: state.ejecting ? null : () => state.mountPlain(disk.id, partition.index),
+            child: const Text(Fr.open),
+          ),
         ),
-      ));
+      );
     }
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        spacing: 4,
-        children: children,
-      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 4, children: children),
     );
   }
 }

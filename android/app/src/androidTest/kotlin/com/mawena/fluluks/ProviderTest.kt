@@ -66,7 +66,10 @@ class ProviderTest {
         cr.query(DocumentsContract.buildRootsUri(auth), null, null, null, null)!!.use { c ->
             assertEquals(1, c.count)
             c.moveToFirst()
-            assertEquals("Chiffré (LUKS2) — lecture seule", c.getString(c.getColumnIndexOrThrow(Root.COLUMN_SUMMARY)))
+            assertEquals(
+                "Lecture seule : ouvert en lecture seule à votre demande",
+                c.getString(c.getColumnIndexOrThrow(Root.COLUMN_SUMMARY)),
+            )
             assertEquals("$vol:/", c.getString(c.getColumnIndexOrThrow(Root.COLUMN_DOCUMENT_ID)))
             assertEquals(
                 Root.FLAG_LOCAL_ONLY or Root.FLAG_SUPPORTS_IS_CHILD,
@@ -157,12 +160,21 @@ class ProviderTest {
         }
     }
 
+    /** Volume monté en lecture seule (défaut) : écriture refusée avec la raison ; mode inconnu refusé. */
     @Test fun writeRefused() {
-        for (mode in listOf("w", "rw", "wt", "rwt", "wa", "r+", "", "rx")) {
+        for (mode in listOf("w", "rw", "wt", "rwt", "wa")) {
             try {
                 cr.openFileDescriptor(docUri("/hello.txt"), mode)?.close()
                 fail("mode $mode accepté")
-            } catch (e: FileNotFoundException) { /* attendu */ }
+            } catch (e: FileNotFoundException) {
+                assertEquals("Volume en lecture seule : ouvert en lecture seule à votre demande", e.message)
+            }
+        }
+        for (mode in listOf("r+", "", "rx")) {
+            try {
+                cr.openFileDescriptor(docUri("/hello.txt"), mode)?.close()
+                fail("mode $mode accepté")
+            } catch (e: IllegalArgumentException) { /* attendu */ }
         }
     }
 

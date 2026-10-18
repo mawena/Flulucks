@@ -5,6 +5,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
@@ -18,12 +19,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
 /**
  * Service au premier plan tant qu'au moins un volume est ouvert. Il observe VolumeManager.volumes :
  * il met la notification à jour et s'arrête quand le dernier volume est fermé.
- * L'action « Éjecter » appelle VolumeManager.ejectAll() (exécuté hors du fil principal).
+ * L'action « Éjecter » appelle VolumeManager.ejectAll() (exécuté hors du fil principal) ; pendant
+ * l'éjection, la notification dit « Écriture des données en attente… », puis l'échec éventuel.
  */
 class VolumeService : Service() {
     companion object {
@@ -31,13 +34,37 @@ class VolumeService : Service() {
         @Volatile @JvmStatic var running: Boolean = false
         const val ACTION_EJECT_ALL = "com.mawena.fluluks.EJECT_ALL"
         private const val CHANNEL_ID = "disques_ouverts"
+        private const val WARN_CHANNEL_ID = "avertissements"
         private const val NOTIF_ID = 1
+        private const val WARN_NOTIF_ID = 2
         private const val TAG = "VolumeService"
 
-        fun notificationText(volumes: List<VolumeState>): String = when (volumes.size) {
-            0 -> "Aucun disque ouvert"
-            1 -> "Disque ouvert : ${volumes[0].title}"
+        fun notificationText(volumes: List<VolumeState>, ejecting: Boolean = false, ejectError: String? = null): String = when {
+            ejecting -> VolumeManager.MSG_EJECTING
+            ejectError != null -> ejectError
+            volumes.size == 0 -> "Aucun disque ouvert"
+            volumes.size == 1 -> "Disque ouvert : ${volumes[0].title}"
             else -> "${volumes.size} disques ouverts"
+        }
+
+        /** Avertissement (importance haute), ex. disque débranché pendant une écriture. */
+        fun warn(context: Context, message: String) {
+            try {
+                val nm = context.getSystemService(NotificationManager::class.java)
+                nm.createNotificationChannel(
+                    NotificationChannel(WARN_CHANNEL_ID, "Avertissements", NotificationManager.IMPORTANCE_HIGH)
+                )
+                val n = Notification.Builder(context, WARN_CHANNEL_ID)
+                    .setSmallIcon(R.drawable.ic_disk)
+                    .setContentTitle("FluLuks")
+                    .setContentText(message)
+                    .setStyle(Notification.BigTextStyle().bigText(message))
+                    .setAutoCancel(true)
+                    .build()
+                nm.notify(WARN_NOTIF_ID, n)
+            } catch (e: RuntimeException) { // permission de notification refusée, etc.
+                Log.w(TAG, "avertissement non affiché : ${e.javaClass.simpleName}")
+            }
         }
     }
 
@@ -54,6 +81,12 @@ class VolumeService : Service() {
         createChannel()
         val notif = buildNotification(VolumeManager.volumes.value)
         foregroundOk = startAsForeground(notif)
+        scope.launch {
+            combine(VolumeManager.ejecting, VolumeManager.ejectError) { e, err -> e to err }.collect {
+                val list = VolumeManager.volumes.value
+                if (list.isNotEmpty()) foregroundOk = startAsForeground(buildNotification(list))
+            }
+        }
         scope.launch {
             VolumeManager.volumes.collect { list ->
                 if (list.isEmpty()) {
@@ -134,7 +167,7 @@ class VolumeService : Service() {
         return Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_disk)
             .setContentTitle("FluLuks")
-            .setContentText(notificationText(volumes))
+            .setContentText(notificationText(volumes, VolumeManager.ejecting.value, VolumeManager.ejectError.value))
             .setContentIntent(open)
             .setOngoing(true)
             .addAction(Notification.Action.Builder(null, "Éjecter", eject).build())

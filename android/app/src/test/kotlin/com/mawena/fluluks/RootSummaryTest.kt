@@ -13,13 +13,20 @@ class RootSummaryTest {
     )
 
     @Test fun luksVersionIsTheRealOne() {
-        assertEquals("Chiffré (LUKS1) — lecture seule", RootSummary.of(part("LUKS1", 1)))
-        assertEquals("Chiffré (LUKS2) — lecture seule", RootSummary.of(part("LUKS2", 2)))
-        assertEquals("Chiffré (LUKS1) — lecture seule", RootSummary.of(part("LUKS1", null))) // en-tête non détaillé
+        assertEquals("Chiffré (LUKS1) — lecture et écriture", RootSummary.of(part("LUKS1", 1), false, ""))
+        assertEquals("Chiffré (LUKS2) — lecture et écriture", RootSummary.of(part("LUKS2", 2), false, ""))
+        assertEquals("Chiffré (LUKS1) — lecture et écriture", RootSummary.of(part("LUKS1", null), false, "")) // en-tête non détaillé
     }
 
-    @Test fun plainUnchanged() {
-        assertEquals("Lecture seule", RootSummary.of(part("ext4", null)))
-        assertEquals("Lecture seule", RootSummary.of(null))
+    @Test fun plainWritable() {
+        assertEquals("Lecture et écriture", RootSummary.of(part("ext4", null), false, ""))
+        assertEquals("Lecture et écriture", RootSummary.of(null, false, ""))
+    }
+
+    @Test fun readOnlyGivesTheReason() {
+        val r = "journal à rejouer : branchez le disque sous Ubuntu"
+        assertEquals("Lecture seule : $r", RootSummary.of(part("LUKS2", 2), true, r))
+        assertEquals("Lecture seule : $r", RootSummary.of(null, true, r))
+        assertEquals("Lecture seule", RootSummary.of(null, true, ""))
     }
 }
