@@ -18,7 +18,12 @@
  * Écriture (§ 4.2 de la spec) : seulement si ext4_policy.c le permet (sinon lecture seule, avec
  * la raison), et lecture seule collante en cours de session sur une erreur d'écriture ou une somme
  * fausse. Le journal est démarré au montage et arrêté au
- * démontage ; écriture immédiate, sans cache différé. Chaque opération est vérifiée ici
+ * démontage. Écriture différée par fichier (wbuf.c, correctif 0.2.1) : chaque fl_file_pwrite devenait
+ * une transaction de journal complète (≈ 3,6 vidages de cache, ~20 ms chacun sur un disque dur) ; les
+ * écritures contiguës d'un fichier sont désormais regroupées par 4 Mio. Un seul tampon actif par
+ * volume (v->wb_fh), vidé au début de toute autre opération (voir flush_all) ; un vidage en échec
+ * laisse son erreur sur son fichier (collante), rendue par l'écriture, la troncature et la fermeture
+ * suivantes de ce fichier et par e_sync. Chaque opération est vérifiée ici
  * avant d'appeler lwext4, dont les fonctions de haut niveau ont des effets que l'API
  * n'admet pas : ext4_fopen2 avec O_CREAT crée les dossiers intermédiaires, ext4_dir_rm
  * supprime récursivement, ext4_fremove sur un fichier ouvert libère son inode sous le
@@ -41,6 +46,7 @@
 #include "fs/ext4_policy.h"
 #include "fs/fs_internal.h"
 #include "fs/ro_reasons.h"
+#include "fs/wbuf.h"
 
 static pthread_mutex_t g_lock = PTHREAD_MUTEX_INITIALIZER;
 static uint32_t g_counter; /* protégé par g_lock */
@@ -60,6 +66,7 @@ typedef struct {
   char mp[MP_CAP];
   uint32_t open_files; /* fichiers ouverts + parcours de dossier en cours (g_lock) */
   ext4_fh *files;      /* fichiers ouverts (g_lock) */
+  ext4_fh *wb_fh;      /* fichier dont le tampon d'écriture contient des données, ou NULL (g_lock) */
   uint32_t block_size;
   uint32_t inodes_count;
   uint64_t max_bytes; /* au-delà, les numéros de bloc logique (32 bits) débordent */
@@ -79,6 +86,7 @@ struct ext4_fh {
   ext4_file f;
   ext4_fh *next;
   bool written; /* écrit ou tronqué : sync à la fermeture */
+  fl_wbuf wb;   /* écriture différée (g_lock) ; wb.err : erreur différée, collante */
 };
 
 /* Règles de création du § 4.2 : propriétaire du parent, 0644 / 0755 (setgid hérité). */
@@ -311,12 +319,66 @@ static int inode_of(ext4_vol *v, const char *path, struct ext4_inode *in) {
   return rd_err(v, ext4_raw_inode_fill(full, NULL, in));
 }
 
+/* ---------- écriture différée (wbuf.c) ---------- */
+
+typedef struct {
+  ext4_vol *v;
+  ext4_fh *h;
+} wb_ctx;
+
+/* Chemin d'écriture réel (sous g_lock) : positionnement, ext4_fwrite (une transaction), wr_err. Volume
+ * arrêté ou gelé : rien n'est écrit, FL_EIO. */
+static int wb_write(void *ctx, const void *p, size_t len, uint64_t off) {
+  wb_ctx *c = ctx;
+  size_t done = 0;
+  int r = stopped(c->v) ? EIO : ext4_fseek(&c->h->f, (int64_t)off, SEEK_SET);
+  if (r == EOK) r = ext4_fwrite(&c->h->f, p, len, &done);
+  int rc = wr_err(c->v, r);
+  if (rc == FL_OK && done != len) rc = FL_EIO;
+  return rc;
+}
+
+/* Vide le tampon de h (sous g_lock) ; une erreur reste mémorisée dans h->wb.err. */
+static int wb_flush(ext4_vol *v, ext4_fh *h) {
+  wb_ctx c = {v, h};
+  if (v->wb_fh == h) v->wb_fh = NULL;
+  return fl_wbuf_flush(&h->wb, wb_write, &c);
+}
+
+/* Vide le tampon du volume (au plus un), au début de toute opération autre qu'une écriture qui le
+ * prolonge : lectures (d'un autre descripteur aussi), stat, statfs, readdir, ouverture, opérations de
+ * dossier, sync, fermeture, démontage voient ainsi les données écrites. L'erreur d'un vidage reste sur
+ * son fichier : l'opération en cours ne la rend pas (elle échoue d'elle-même si le volume est gelé). Sous
+ * g_lock. */
+static void flush_all(ext4_vol *v) {
+  if (v->wb_fh) (void)wb_flush(v, v->wb_fh);
+}
+
+/* Erreur différée d'un fichier ouvert (sous g_lock), FL_OK sinon. */
+static int pending_err(const ext4_vol *v) {
+  for (const ext4_fh *h = v->files; h; h = h->next)
+    if (h->wb.err != FL_OK) return h->wb.err;
+  return FL_OK;
+}
+
+/* Près du disque plein, écriture directe (sous g_lock) : FL_ENOSPC est alors rendu par l'écriture qui ne
+ * tient pas, comme sans tampon, et non par un vidage différé qui perdrait des données déjà acquittées (le
+ * client ne voit pas l'erreur d'une fermeture, onRelease). Marge : deux fois les données en jeu
+ * (métadonnées largement comprises) plus un tampon. */
+static bool near_full(ext4_vol *v, uint64_t pending) {
+  struct ext4_mount_stats st;
+  if (ext4_mount_point_stats(v->mp, &st) != EOK) return true;
+  uint64_t libres = st.free_blocks_count < st.blocks_count ? st.free_blocks_count : st.blocks_count;
+  return libres * st.block_size < 2 * pending + FL_WBUF_CAP; /* ≤ taille du disque ; pending < 2^45 */
+}
+
 /* ---------- opérations ---------- */
 
 static int e_statfs(fl_fs *fs, fl_statfs *out) {
   ext4_vol *v = fs->priv;
   struct ext4_mount_stats st;
   pthread_mutex_lock(&g_lock);
+  flush_all(v);
   int r = ext4_mount_point_stats(v->mp, &st);
   int rc = r != EOK ? rd_err(v, r) : FL_OK; /* sticky lit et pose l'état du volume : sous g_lock */
   pthread_mutex_unlock(&g_lock);
@@ -335,6 +397,7 @@ static int e_stat(fl_fs *fs, const char *path, fl_stat *out) {
   ext4_vol *v = fs->priv;
   struct ext4_inode in;
   pthread_mutex_lock(&g_lock);
+  flush_all(v); /* taille et contenu à jour */
   int rc = inode_of(v, path, &in);
   pthread_mutex_unlock(&g_lock);
   if (rc != FL_OK) return rc;
@@ -378,6 +441,7 @@ static int e_readdir(fl_fs *fs, const char *path, fl_readdir_cb cb, void *ctx) {
   full_path(v, path, full);
 
   pthread_mutex_lock(&g_lock);
+  flush_all(v);
   int rc = inode_of(v, path, &in);
   if (rc == FL_OK && (to_le16(in.mode) & EXT4_INODE_MODE_TYPE_MASK) != EXT4_INODE_MODE_DIRECTORY)
     rc = FL_ENOTDIR;
@@ -390,6 +454,7 @@ static int e_readdir(fl_fs *fs, const char *path, fl_readdir_cb cb, void *ctx) {
   for (;;) {
     bool fin = false;
     pthread_mutex_lock(&g_lock);
+    flush_all(v); /* le rappel a pu écrire */
     rc = next_entry(v, &d, &e, &fin);
     pthread_mutex_unlock(&g_lock);
     if (rc != FL_OK || fin) break;
@@ -468,6 +533,7 @@ static int e_open(fl_fs *fs, const char *path, int flags, fl_file **out) {
   }
 
   pthread_mutex_lock(&g_lock);
+  flush_all(v);
   int rc = inode_of(v, path, &in);
   bool creer = false, ouvert = false;
   if (rc == FL_OK) {
@@ -525,6 +591,7 @@ static int64_t e_pread(fl_file *f, void *buf, size_t len, uint64_t off) {
   if (len > v->max_bytes - off) len = (size_t)(v->max_bytes - off); /* max_bytes ≤ 2^48 */
   size_t got = 0;
   pthread_mutex_lock(&g_lock);
+  flush_all(v); /* ce descripteur ou un autre du même fichier : les données écrites sont lues */
   int r = ext4_fseek(&h->f, (int64_t)off, SEEK_SET);
   if (r == EOK) r = ext4_fread(&h->f, buf, len, &got); /* rien au-delà de la fin */
   int rc = r != EOK ? rd_err(v, r) : FL_OK;
@@ -533,22 +600,35 @@ static int64_t e_pread(fl_file *f, void *buf, size_t len, uint64_t off) {
   return (int64_t)got;
 }
 
-/* Tout ou rien vu de l'appelant : une écriture interrompue rend l'erreur (le fichier garde ce
- * qui a été écrit, taille comprise). */
+/* Écriture différée (wbuf.c) : les bornes, le volume arrêté ou gelé et l'erreur différée du fichier
+ * sont vérifiés tout de suite ; puis les données vont dans le tampon du fichier (len rendu), vidé par le
+ * chemin d'écriture réel (wb_write) quand l'écriture ne le prolonge pas ou n'y tient pas. Un vidage en
+ * échec rend son erreur, qui reste collante. Le tampon d'un autre fichier est vidé d'abord (un seul par
+ * volume : 4 Mio au plus) ; son erreur reste sur son fichier. Une écriture directe (≥ 4 Mio, mémoire
+ * refusée, disque presque plein) qui échoue rend son erreur sans la rendre collante : tout ou rien vu de
+ * l'appelant, le fichier garde ce qui a été écrit, taille comprise. */
 static int64_t e_pwrite(fl_file *f, const void *buf, size_t len, uint64_t off) {
   ext4_vol *v = f->fs->priv;
   ext4_fh *h = f->priv;
   if (len == 0) return 0;
   if (off > v->max_write || len > v->max_write - off || len > INT64_MAX) return FL_EINVAL;
-  size_t done = 0;
   pthread_mutex_lock(&g_lock);
   h->written = true;
-  int r = stopped(v) ? EIO : ext4_fseek(&h->f, (int64_t)off, SEEK_SET);
-  if (r == EOK) r = ext4_fwrite(&h->f, buf, len, &done);
-  int rc = wr_err(v, r);
+  int rc = h->wb.err;
+  if (rc == FL_OK && v->wb_fh && v->wb_fh != h) flush_all(v);
+  if (rc == FL_OK && stopped(v)) rc = wr_err(v, EIO);
+  if (rc == FL_OK) {
+    wb_ctx c = {v, h};
+    if (near_full(v, (uint64_t)h->wb.len + len)) {
+      rc = wb_flush(v, h);
+      if (rc == FL_OK) rc = wb_write(&c, buf, len, off);
+    } else {
+      rc = fl_wbuf_write(&h->wb, buf, len, off, wb_write, &c);
+    }
+    v->wb_fh = h->wb.len ? h : NULL;
+  }
   pthread_mutex_unlock(&g_lock);
   if (rc != FL_OK) return rc;
-  if (done != len) return FL_EIO;
   return (int64_t)len;
 }
 
@@ -557,18 +637,23 @@ static int e_truncate(fl_file *f, uint64_t size) {
   ext4_fh *h = f->priv;
   if (size > v->max_write) return FL_EINVAL;
   pthread_mutex_lock(&g_lock);
+  flush_all(v);
   h->written = true;
-  int rc = stopped(v) ? FL_EIO : wr_err(v, (ext4_ftruncate(&h->f, size)));
+  int rc = h->wb.err != FL_OK ? h->wb.err : stopped(v) ? FL_EIO : wr_err(v, (ext4_ftruncate(&h->f, size)));
   pthread_mutex_unlock(&g_lock);
   return rc;
 }
 
-/* § 4.2 : sync à chaque fermeture d'un fichier ouvert en écriture (écrit ou tronqué). */
+/* § 4.2 : sync à chaque fermeture d'un fichier ouvert en écriture (écrit ou tronqué), après le vidage
+ * de son tampon. L'erreur différée du fichier l'emporte : des données acquittées ont été perdues. */
 static int e_close(fl_file *f) {
   ext4_vol *v = f->fs->priv;
   ext4_fh *h = f->priv;
   int rc = FL_OK;
   pthread_mutex_lock(&g_lock);
+  flush_all(v);
+  int differee = h->wb.err;
+  fl_wbuf_free(&h->wb);
   ext4_fclose(&h->f);
   for (ext4_fh **p = &v->files; *p; p = &(*p)->next)
     if (*p == h) {
@@ -577,6 +662,7 @@ static int e_close(fl_file *f) {
     }
   v->open_files--;
   if (h->written) rc = wr_fl(v, stopped(v) ? FL_EIO : sync_locked(v));
+  if (differee != FL_OK) rc = differee;
   pthread_mutex_unlock(&g_lock);
   free(h);
   free(f);
@@ -589,6 +675,7 @@ static int e_mkdir(fl_fs *fs, const char *path) {
   struct ext4_inode in;
   full_path(v, path, full);
   pthread_mutex_lock(&g_lock);
+  flush_all(v);
   int rc = inode_of(v, path, &in);
   if (rc == FL_OK) rc = FL_EEXIST;
   else if (rc == FL_ENOENT) {
@@ -608,6 +695,7 @@ static int e_unlink(fl_fs *fs, const char *path) {
   if (!strcmp(path, "/")) return FL_EISDIR;
   full_path(v, path, full);
   pthread_mutex_lock(&g_lock);
+  flush_all(v);
   int rc = inode_ino_of(v, path, &in, &ino);
   if (rc == FL_OK && inode_type(&in) == EXT4_INODE_MODE_DIRECTORY) rc = FL_EISDIR;
   /* lwext4 libérerait l'inode sous le descripteur ouvert */
@@ -659,6 +747,7 @@ static int e_rmdir(fl_fs *fs, const char *path) {
   if (!strcmp(path, "/")) return FL_EINVAL;
   full_path(v, path, full);
   pthread_mutex_lock(&g_lock);
+  flush_all(v);
   int rc = inode_of(v, path, &in);
   if (rc == FL_OK && inode_type(&in) != EXT4_INODE_MODE_DIRECTORY) rc = FL_ENOTDIR;
   if (rc == FL_OK) rc = dir_empty(v, full, &empty);
@@ -681,6 +770,7 @@ static int e_rename(fl_fs *fs, const char *from, const char *to) {
   full_path(v, from, ffrom);
   full_path(v, to, fto);
   pthread_mutex_lock(&g_lock);
+  flush_all(v);
   int rc = inode_of(v, from, &in);
   if (rc == FL_OK) {
     rc = inode_of(v, to, &in);
@@ -693,10 +783,14 @@ static int e_rename(fl_fs *fs, const char *from, const char *to) {
   return rc;
 }
 
+/* Vide le tampon, puis les caches ; rend aussi l'erreur différée d'un fichier encore ouvert (onFsync, sync
+ * de l'éjection et sync périodique : jamais « réussi » quand des données acquittées ont été perdues). */
 static int e_sync(fl_fs *fs) {
   ext4_vol *v = fs->priv;
   pthread_mutex_lock(&g_lock);
+  flush_all(v);
   int rc = stopped(v) ? FL_EIO : wr_fl(v, sync_locked(v));
+  if (rc == FL_OK) rc = pending_err(v);
   pthread_mutex_unlock(&g_lock);
   return rc;
 }
@@ -716,6 +810,8 @@ static int e_unmount(fl_fs *fs) {
     pthread_mutex_unlock(&g_lock);
     return FL_EINVAL;
   }
+  /* sans fichier ouvert, aucun tampon (vidé à la fermeture) ; gelé : rien n'est écrit (wb_write) */
+  flush_all(v);
   /* Disque mort : tout est libéré quand même (correctif 0004 : ext4_umount libère le point de
    * montage sur erreur), et la première erreur est rendue. */
   int rc = v->rw ? map_err(ext4_journal_stop(v->mp)) : FL_OK;

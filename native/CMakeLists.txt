@@ -42,6 +42,7 @@ set(FL_SOURCES
   src/fs/fs.c
   src/fs/ext4_glue.c
   src/fs/ext4_policy.c
+  src/fs/wbuf.c
   src/usb/bot.c
   src/usb/scsi.c
   src/usb/usb_bdev.c
@@ -127,6 +128,8 @@ if(FL_TESTS)
   target_link_libraries(test_ext4_coupure PRIVATE fl_testsupport)
   fl_add_test(test_ext4_politique LABELS ecriture)
   target_link_libraries(test_ext4_politique PRIVATE fl_testsupport)
+  fl_add_test(test_ext4_tampon LABELS ecriture)
+  target_link_libraries(test_ext4_tampon PRIVATE fl_testsupport)
   fl_add_test(test_batterie LABELS ecriture)
   target_link_libraries(test_batterie PRIVATE fl_testsupport)
   # test_manifeste lance tools/fixtures/manifest.py
