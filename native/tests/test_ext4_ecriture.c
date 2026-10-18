@@ -299,7 +299,7 @@ static long refs_cache(uint64_t lba) {
 
 static void test_ecriture_raisons(void) {
   static const char *const r[] = {FL_RO_FEATURES, FL_RO_RECOVERY, FL_RO_ERRORS, FL_RO_CSUM, FL_RO_NOJOURNAL,
-                                  FL_RO_BLOCKSIZE, FL_RO_WP, FL_RO_USER, FL_RO_IOERR};
+                                  FL_RO_BLOCKSIZE, FL_RO_WP, FL_RO_USER, FL_RO_IOERR, FL_RO_CORRUPT, FL_RO_ABORT};
   for (size_t i = 0; i < sizeof r / sizeof *r; i++) TT_ASSERT(strlen(r[i]) <= 127);
   TT_ASSERT_STR_EQ(FL_RO_FEATURES, "options ext4 non prises en charge en écriture");
   TT_ASSERT_STR_EQ(FL_RO_RECOVERY, "journal à rejouer : branchez le disque sous Ubuntu");

@@ -9,6 +9,7 @@ typedef struct {
   fl_bdev *parent;
   uint64_t writes_ok, writes, flushes;
   int err;
+  int read_err; /* fl_fault_bdev_fail_reads : 0 = lectures normales */
   pthread_mutex_t mu;
   char *trace; /* fl_fault_bdev_trace */
   size_t trace_cap, trace_len;
@@ -39,6 +40,10 @@ static void trace_add(fault *f, char c) {
 
 static int f_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
   fault *f = d->priv;
+  pthread_mutex_lock(&f->mu);
+  int re = f->read_err;
+  pthread_mutex_unlock(&f->mu);
+  if (re) return re;
   return fl_bdev_read(f->parent, lba, count, buf);
 }
 
@@ -121,5 +126,12 @@ void fl_fault_bdev_trace(fl_bdev *d, uint32_t block_size, char *buf, size_t cap)
   f->trace_len = 0;
   f->trace_bs = block_size ? block_size : 4096;
   if (f->trace) f->trace[0] = 0;
+  pthread_mutex_unlock(&f->mu);
+}
+
+void fl_fault_bdev_fail_reads(fl_bdev *d, int err) {
+  fault *f = d->priv;
+  pthread_mutex_lock(&f->mu);
+  f->read_err = err < 0 ? err : 0;
   pthread_mutex_unlock(&f->mu);
 }

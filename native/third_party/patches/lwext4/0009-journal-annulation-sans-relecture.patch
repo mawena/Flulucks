@@ -1,0 +1,57 @@
+From 5f46542a618a88e2e9acadab2411fb3b239d62ff Mon Sep 17 00:00:00 2001
+From: mawena <gamligocharles@gmail.com>
+Date: Sun, 18 Oct 2026 13:03:32 +0000
+Subject: [PATCH] =?UTF-8?q?fix:=20journal=20=E2=80=94=20annulation=20sans?=
+ =?UTF-8?q?=20relecture=20possible=20(FluLuks)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+À l'annulation d'une transaction, jbd_trans_finish_callback restaure un bloc
+modifié depuis sa copie déjà validée dans le journal. Si cette copie ne peut
+pas être relue (erreur du périphérique), l'amont se contentait d'un
+ext4_assert, absent des builds sans assertions : memcpy depuis NULL, plantage
+de l'application. Le bloc n'est alors pas restauré et l'erreur de l'opération
+annulée remonte ; FluLuks gèle le volume (plus rien n'est écrit), le cache
+divergent n'atteint donc jamais le disque.
+---
+ src/ext4_journal.c | 21 ++++++++++++++++++---
+ 1 file changed, 18 insertions(+), 3 deletions(-)
+
+diff --git a/src/ext4_journal.c b/src/ext4_journal.c
+index 5cb3d47..8f441d4 100644
+--- a/src/ext4_journal.c
++++ b/src/ext4_journal.c
+@@ -1575,11 +1575,26 @@ jbd_trans_finish_callback(struct jbd_journal *journal,
+ 				r = ext4_block_get_noread(fs->bdev,
+ 							&block,
+ 							block_rec->lba);
+-				ext4_assert(r == EOK);
+-				r = jbd_block_get(journal->jbd_fs,
++				if (r == EOK) {
++					r = jbd_block_get(journal->jbd_fs,
+ 							&jbd_block,
+ 							jbd_buf->jbd_lba);
+-				ext4_assert(r == EOK);
++					if (r != EOK)
++						ext4_block_set(fs->bdev, &block);
++				}
++				if (r != EOK) {
++					/* The journal copy cannot be read back
++					 * (device error): no roll back of the
++					 * data, the caller sees the error of the
++					 * aborted operation (upstream asserted,
++					 * then copied from NULL when assertions
++					 * are compiled out). The record still
++					 * goes back to the committed transaction,
++					 * which keeps using it. */
++					jbd_trans_change_ownership(block_rec,
++							jbd_buf->trans);
++					return;
++				}
+ 				memcpy(block.data, jbd_block.data,
+ 						journal->block_size);
+ 
+-- 
+2.43.0
+

@@ -18,7 +18,10 @@
     détaillé en 12) ;
   - `native/third_party/patches/lwext4/0006-crc32c-rapide.patch` (phase 3, T7, détaillé en 13) ;
   - `native/third_party/patches/lwext4/0007-journal-commit-echappement-zero.patch` (phase 3, correctif
-    du journal après relecture, détaillé en 14).
+    du journal après relecture, détaillé en 14) ;
+  - `native/third_party/patches/lwext4/0008-extents-racine-verifiee.patch` et
+    `native/third_party/patches/lwext4/0009-journal-annulation-sans-relecture.patch` (phase 3, correctif
+    écriture et politique après relecture, détaillés en 15).
 - Application (`native/cmake/third_party.cmake`, à la configuration CMake) : `src/` et `include/` du
   sous-module sont copiés dans `${CMAKE_BINARY_DIR}/third_party/lwext4`, puis chaque correctif y est
   appliqué par `git apply -p1` (avec `GIT_CEILING_DIRECTORIES`, sinon `git apply` lancé à l'intérieur
@@ -35,7 +38,7 @@
 Aucune fonctionnalité du disque réel (`metadata_csum`, `64bit`, `flex_bg`, `extent`, `huge_file`,
 `dir_nlink`, `extra_isize`, journal présent mais non rejoué…) n'est refusée par lwext4 : le montage en
 lecture seule fonctionne sans correctif. Les correctifs 0001 et 0002 portent sur la justesse de la
-lecture et sur la robustesse face à un disque hostile ; 0003 sur l'écriture ; 0004 sur le journal ; 0005 sur le montage ; 0006 sur la vitesse ; 0007 corrige encore le journal.
+lecture et sur la robustesse face à un disque hostile ; 0003 sur l'écriture ; 0004 sur le journal ; 0005 sur le montage ; 0006 sur la vitesse ; 0007 corrige encore le journal ; 0008 et 0009 les erreurs pendant une écriture.
 
 ### 1. `ext4_fread` : trous et extents non écrits lus comme des zéros
 
@@ -289,6 +292,31 @@ le bloc de l'inode racine commence par le magique), `test_ext4_coupure_echappeme
 le commit, rejeu par `e2fsck -E journal_only`), `test_ext4_barrieres` vérifie l'ordre (chaque commit
 écrit seul entre deux vidages, d'après une trace de `fault_bdev`) et plus seulement le nombre de vidages ;
 `test_politique_journal_options`.
+
+### 15. Erreurs pendant une écriture
+
+- 0008, extents : la racine de l'arbre (en-tête dans l'inode) est vérifiée comme les blocs de l'arbre
+  (magique, nombre d'entrées, profondeur au plus 5) ; avant, une racine effacée se lisait comme un arbre
+  vide et une suppression laissait tous les blocs alloués. Les erreurs de libération des blocs (bitmap
+  illisible, ou à la somme fausse : `EBADMSG`) remontent par `ext4_ext_free_blocks`,
+  `ext4_ext_remove_blocks`, `ext4_ext_remove_idx`, `ext4_ext_remove_leaf` et
+  `ext4_extent_remove_space`, qui les jetaient : une troncature validait un inode sans ses extents (ou à
+  la taille nulle) avec des blocs encore alloués.
+- 0009, journal : à l'annulation d'une transaction, la restauration d'un bloc depuis sa copie validée
+  ne copie plus depuis NULL quand cette copie est illisible (`ext4_assert` absent des builds) ; le bloc
+  reste rattaché à la transaction validée (sinon, utilisation après libération au point de contrôle).
+
+Côté colle (`ext4_glue.c`) : lwext4 annule une transaction en échec sans défaire les blocs déjà modifiés
+dans son cache, que la transaction suivante écrirait. Dès qu'un volume passe en lecture seule en cours
+de session (erreur d'écriture, somme fausse, ou échec d'une opération d'écriture autre que le disque
+plein : `RO_IOERR`, `RO_CSUM`, `RO_CORRUPT`, `RO_ABORT`), il est gelé : plus rien n'atteint le disque,
+ni fermeture, ni sync, ni démontage (qui rend `FL_EIO`, journal laissé à rejouer). Le disque garde la
+dernière transaction validée. `rmdir` : un dossier dont le parcours s'arrête sur la borne d'entrées
+ignorées n'est plus déclaré vide (`ext4_dir_rm`, récursif, aurait supprimé la suite).
+
+Tests (`test_ext4_politique.c`) : `test_politique_somme_en_cours` (gel jusqu'au démontage, rejeu),
+`test_politique_lecture_eio_en_ecriture` (lecture impossible au milieu d'une suppression : seul le
+rejeu du journal est nécessaire), `test_politique_corruption_en_ecriture` (racine d'extents effacée).
 
 ## Protections côté FluLuks (sans correctif lwext4)
 

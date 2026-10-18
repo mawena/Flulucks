@@ -108,8 +108,11 @@ dans le même commit que le travail.
         initialisés, juge et barrières *(critique)* *(correctif lwext4 0007 : somme d'étiquette sur le
         bloc échappé — sans lui, `e2fsck` rejetait le bloc au rejeu —, blocs du journal à zéro ; v1 et
         ro_compat refusés ; juge aligné sur jbd2 ; ordre des barrières vérifié ; PC 20/20)*
-  - [ ] Correctif écriture et politique (T4, T6) : erreur d'E/S pendant une écriture, `rmdir` sur disque
-        hostile, sommes fausses avalées, lecture seule collante jusqu'au démontage *(critique)*
+  - [x] Correctif écriture et politique (T4, T6) : erreur d'E/S pendant une écriture, `rmdir` sur disque
+        hostile, sommes fausses avalées, lecture seule collante jusqu'au démontage *(critique)* *(volume
+        gelé dès la lecture seule en cours de session ; correctifs lwext4 0008 — racine d'extents
+        vérifiée, erreurs de libération remontées : une troncature validait un inode sans ses blocs — et
+        0009 — annulation sans relecture : plantage ; `rmdir` borné ; PC 20/20)*
   - [ ] Correctif T8 : batterie (cadence 200 pas, profondeur 40, copies supprimées en échec)
   - [ ] Passage sur le Pixel : tests natifs (`run_native_tests.sh`), `connectedDebugAndroidTest`,
         `check_image.sh`

@@ -13,5 +13,7 @@
 #define FL_RO_WP "disque protégé en écriture"
 #define FL_RO_USER "ouvert en lecture seule à votre demande"
 #define FL_RO_IOERR "erreur d'écriture : volume passé en lecture seule"
+#define FL_RO_CORRUPT "structure incohérente vue pendant une écriture : vérifiez le disque sous Ubuntu"
+#define FL_RO_ABORT "écriture interrompue : volume passé en lecture seule"
 
 #endif

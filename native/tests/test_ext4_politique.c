@@ -325,26 +325,113 @@ static void test_politique_somme_descripteur(void) {
   unlink(ref);
 }
 
+/* Rejeu du journal seul (e2fsck -fy -E journal_only), sans réparer le reste : 0 si e2fsck a réussi. */
+static int rejouer(const char *img) {
+  static char out[1 << 16];
+  char *const argv[] = {(char *)"e2fsck", (char *)"-fy", (char *)"-E", (char *)"journal_only", (char *)img, NULL};
+  int rc = fu_run(argv, out, sizeof out);
+  if (rc >= 4) fprintf(stderr, "e2fsck journal_only = %d\n%s\n", rc, out);
+  return rc >= 4 ? rc : 0;
+}
+
 /* Somme fausse découverte en cours de session : l'opération rend FL_ECORRUPT et le volume passe en
- * lecture seule (RO_CSUM), la lecture continue. */
+ * lecture seule (RO_CSUM), la lecture continue. La lecture seule est collante jusqu'au démontage
+ * compris : plus aucune écriture n'atteint le disque (ni fermeture, ni démontage, qui rend FL_EIO), le
+ * journal reste à rejouer et contient ce qui a été validé avant. */
 static void test_politique_somme_en_cours(void) {
   char img[4096];
   vol v;
   TT_ASSERT(copie_de("ext4-rw-reel.img", img, sizeof img) == 0);
   /* un octet du nom « données.bin » (entrée à l'octet 24, nom à 32) du bloc de /sous-dossier */
   TT_ASSERT_EQ(debugfs_w(img, "zap_block -f /sous-dossier -o 33 -l 1 -p 0x55 0"), 0);
-  TT_ASSERT_EQ(vol_monter(&v, img, 0, 0), FL_OK);
+  TT_ASSERT_EQ(vol_monter(&v, img, UINT64_MAX, FL_EIO), FL_OK);
   TT_ASSERT(en_ecriture(v.fs));
   TT_ASSERT_EQ(ecrire_fichier(v.fs, "/avant.txt", "a", 1), FL_OK);
   fl_file *f = NULL;
   TT_ASSERT_EQ(fl_fs_open(v.fs, "/sous-dossier/nouveau", FL_O_RDWR | FL_O_CREAT, &f), FL_ECORRUPT);
+  uint64_t w = fl_fault_bdev_writes(v.dev), fl = fl_fault_bdev_flushes(v.dev);
   TT_ASSERT(lecture_seule(v.fs, FL_RO_CSUM));
   TT_ASSERT_EQ(fl_fs_mkdir(v.fs, "/apres"), FL_EROFS);
   TT_ASSERT_EQ(ecrire_fichier(v.fs, "/apres.txt", "b", 1), FL_EROFS);
+  TT_ASSERT_EQ(fl_fs_sync(v.fs), FL_OK); /* rien à faire en lecture seule */
   TT_ASSERT(lire_hello(v.fs));
-  TT_ASSERT_EQ(vol_demonter(&v), FL_OK);
+  int ru = fl_fs_unmount(v.fs);
+  TT_ASSERT_EQ(ru, FL_EIO);
+  TT_ASSERT_EQ(fl_fault_bdev_writes(v.dev), w); /* gelé : rien d'écrit après l'échec */
+  TT_ASSERT_EQ(fl_fault_bdev_flushes(v.dev), fl);
+  fl_bdev_close(v.dev);
+  fl_bdev_close(v.file);
+  /* needs_recovery reste posé ; le rejeu rend ce qui a été validé */
+  char out[1 << 14];
+  char *const argv[] = {(char *)"dumpe2fs", (char *)"-h", img, NULL};
+  fu_run(argv, out, sizeof out);
+  TT_ASSERT(strstr(out, "needs_recovery") != NULL);
+  TT_ASSERT_EQ(rejouer(img), 0);
   uint8_t b[4];
   TT_ASSERT_EQ(fu_debugfs_cat(img, "/avant.txt", b, sizeof b), 1);
+  unlink(img);
+}
+
+/* Récupération après une coupure ou un gel : e2fsck -fy ne fait que rejouer (et corriger les
+ * compteurs), puis -fn est propre. */
+static int recuperable(const char *img) {
+  static char fy[1 << 16], fn[1 << 16];
+  int rejoue = 0, fy_rc = 0;
+  int rc = fu_e2fsck_recover(img, &rejoue, &fy_rc, fy, sizeof fy, fn, sizeof fn);
+  if (rc != 0) fprintf(stderr, "récupération : %d\n-- -fy --\n%s\n-- -fn --\n%s\n", rc, fy, fn);
+  return rc;
+}
+
+/* Erreur de lecture au milieu d'une opération d'écriture (bitmap lu par ext4_fremove) : FL_EIO,
+ * RO_IOERR, et plus rien n'est écrit — lwext4 annule la transaction sans défaire son cache, qui
+ * aurait été écrit au démontage. Le disque reste récupérable (rejeu seul), le fichier toujours lié. */
+static void test_politique_lecture_eio_en_ecriture(void) {
+  char img[4096];
+  vol v;
+  TT_ASSERT(copie_de("ext4-rw-reel.img", img, sizeof img) == 0);
+  TT_ASSERT_EQ(vol_monter(&v, img, UINT64_MAX, FL_EIO), FL_OK);
+  TT_ASSERT(en_ecriture(v.fs));
+  /* rien d'écrit avant : les bitmaps ne sont pas encore dans le cache de lwext4 */
+  fl_stat st;
+  TT_ASSERT_EQ(fl_fs_stat(v.fs, "/gros.bin", &st), FL_OK); /* dossier et inode en cache */
+  fl_fault_bdev_fail_reads(v.dev, FL_EIO);
+  TT_ASSERT_EQ(fl_fs_unlink(v.fs, "/gros.bin"), FL_EIO);
+  /* la troncature a pu valider des transactions avant l'échec ; après lui, plus rien */
+  uint64_t w = fl_fault_bdev_writes(v.dev), fl = fl_fault_bdev_flushes(v.dev);
+  TT_ASSERT(lecture_seule(v.fs, FL_RO_IOERR));
+  TT_ASSERT_EQ(fl_fs_mkdir(v.fs, "/apres"), FL_EROFS);
+  fl_fault_bdev_fail_reads(v.dev, 0);
+  TT_ASSERT_EQ(fl_fs_unmount(v.fs), FL_EIO);
+  TT_ASSERT_EQ(fl_fault_bdev_writes(v.dev), w);
+  TT_ASSERT_EQ(fl_fault_bdev_flushes(v.dev), fl);
+  fl_bdev_close(v.dev);
+  fl_bdev_close(v.file);
+  TT_ASSERT_EQ(recuperable(img), 0);
+  uint64_t taille = 0; /* toujours lié, éventuellement tronqué en partie (transactions validées) */
+  TT_ASSERT_EQ(fu_debugfs_inode_field(img, "/gros.bin", "size", &taille), 0);
+  unlink(img);
+}
+
+/* Structure incohérente découverte pendant une écriture (en-tête d'extents détruit, somme d'inode
+ * juste) : l'opération échoue, RO_CORRUPT, volume gelé. */
+static void test_politique_corruption_en_ecriture(void) {
+  char img[4096];
+  vol v;
+  TT_ASSERT(copie_de("ext4-rw-reel.img", img, sizeof img) == 0);
+  TT_ASSERT_EQ(debugfs_w(img, "sif /gros.bin block[0] 0"), 0);
+  TT_ASSERT_EQ(vol_monter(&v, img, UINT64_MAX, FL_EIO), FL_OK);
+  TT_ASSERT(en_ecriture(v.fs));
+  uint64_t w = fl_fault_bdev_writes(v.dev), fl = fl_fault_bdev_flushes(v.dev);
+  int rc = fl_fs_unlink(v.fs, "/gros.bin");
+  fprintf(stderr, "unlink sur extents détruits : %d\n", rc);
+  TT_ASSERT(rc == FL_ECORRUPT);
+  TT_ASSERT(lecture_seule(v.fs, FL_RO_CORRUPT));
+  TT_ASSERT(lire_hello(v.fs));
+  TT_ASSERT_EQ(fl_fs_unmount(v.fs), FL_EIO);
+  TT_ASSERT_EQ(fl_fault_bdev_writes(v.dev), w);
+  TT_ASSERT_EQ(fl_fault_bdev_flushes(v.dev), fl);
+  fl_bdev_close(v.dev);
+  fl_bdev_close(v.file);
   unlink(img);
 }
 
@@ -475,6 +562,8 @@ int main(void) {
   TT_RUN(test_politique_journal_options);
   TT_RUN(test_politique_somme_descripteur);
   TT_RUN(test_politique_somme_en_cours);
+  TT_RUN(test_politique_lecture_eio_en_ecriture);
+  TT_RUN(test_politique_corruption_en_ecriture);
   TT_RUN(test_politique_etat_pendant_montage);
   TT_RUN(test_politique_premier_montage_sobre);
   TT_RUN(test_politique_disque_mort);
