@@ -544,6 +544,29 @@ object VolumeManager {
         pendingSync.remove(volumeId)
         val rc = engine.sync(m.handle)
         if (rc >= 0) syncedGen[volumeId] = gen else Log.w(TAG, "sync($volumeId) : code $rc")
+        refreshLocked(volumeId)
+    }
+
+    /**
+     * Relit l'état du volume auprès du moteur et le publie s'il a changé : le moteur peut passer le
+     * volume en lecture seule en cours de session (erreur d'écriture, somme fausse), et la place libre
+     * bouge. Appelé après chaque synchronisation programmée, et par le provider après un échec d'écriture.
+     */
+    fun refresh(volumeId: String) {
+        exec.execute { runSafely(null) { refreshLocked(volumeId) } }
+    }
+
+    private fun refreshLocked(volumeId: String) {
+        val m = mounts[volumeId] ?: return
+        val st = try {
+            VolumeStat.parse(engine.statfs(m.handle))
+        } catch (e: Exception) {
+            return // volume détruit côté natif, ou réponse illisible : l'éjection ou le débranchement le traitera
+        }
+        val s = m.state.copy(freeBytes = st.freeBytes, readOnly = st.readOnly, roReason = st.roReason)
+        if (s == m.state) return
+        mounts[volumeId] = MountEntry(s, m.handle)
+        publishVolumes()
     }
 
     /** Titre d'un volume : son étiquette, sinon « Disque <taille> » (taille de la partition). */

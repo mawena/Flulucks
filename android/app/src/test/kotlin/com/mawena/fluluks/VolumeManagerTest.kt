@@ -272,6 +272,24 @@ class VolumeManagerTest {
         assertEquals(1, engine.syncs)
     }
 
+    /** Le moteur passe le volume en lecture seule en cours de session : l'état publié suit. */
+    @Test fun readOnlyMidSessionIsPublished() = runBlocking {
+        engine.readOnly = false
+        val v = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
+        assertFalse(v.readOnly)
+        engine.readOnly = true
+        engine.roReason = "erreur d'écriture : volume passé en lecture seule"
+        VolumeManager.noteWrite(v.id)
+        delayer.advance(SYNC)
+        val now = VolumeManager.volume(v.id)!!
+        assertTrue(now.readOnly)
+        assertEquals("erreur d'écriture : volume passé en lecture seule", now.roReason)
+        assertEquals(now, VolumeManager.volumes.value.single())
+        VolumeManager.refresh(v.id) // sans changement : rien de neuf
+        assertEquals(now, VolumeManager.volume(v.id))
+        VolumeManager.refresh("inconnu")
+    }
+
     @Test fun markSyncedClearsOnlyIfNoNewWrite() = runBlocking {
         val v = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
         VolumeManager.noteWrite(v.id)

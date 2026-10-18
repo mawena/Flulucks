@@ -392,6 +392,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
                 val n = NativeEngine.pwrite(file, base + offset + done, buf, len)
                 if (n < 0) {
                     warnOnce("pwrite", n)
+                    VolumeManager.refresh(w.volumeId) // le volume a pu passer en lecture seule
                     throw ErrnoException("pwrite", errno(n))
                 }
                 done += n
@@ -409,6 +410,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
             if (rc >= 0) VolumeManager.markSynced(w.volumeId, gen)
             if (rc < 0) {
                 warnOnce("sync", rc)
+                VolumeManager.refresh(w.volumeId)
                 throw ErrnoException("fsync", errno(rc))
             }
         }
@@ -421,7 +423,10 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
             if (write != null) {
                 // la fermeture d'un fichier écrit par ce descripteur synchronise le volume
                 if (rc >= 0 && bytesWritten > 0) VolumeManager.markSynced(write.volumeId, gen)
-                if (rc < 0 && rc != EngineError.FL_EINVAL) Log.w(TAG, "closeFile : code $rc")
+                if (rc < 0 && rc != EngineError.FL_EINVAL) {
+                    Log.w(TAG, "closeFile : code $rc")
+                    VolumeManager.refresh(write.volumeId)
+                }
                 write.onClosed()
             }
             val readMs = maxOf(1L, readNanos / 1_000_000)
