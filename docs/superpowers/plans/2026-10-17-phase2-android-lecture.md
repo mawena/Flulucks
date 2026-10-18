@@ -52,8 +52,8 @@ commit de fin de chaque tâche.
   des chaînes de `lib/src/strings_fr.dart`.
 - Toute entrée disque reste **hostile** (règle de la phase 1). Toute entrée qui vient d'une autre
   application l'est aussi : identifiants de documents, chemins, modes d'ouverture.
-- Appareil de référence : Pixel 4 XL, numéro de série adb `192.168.0.104:5555` par câble ou
-  `192.168.0.104:5555` en Wi‑Fi. Quand le disque occupe le port USB-C, on n'utilise que le Wi‑Fi.
+- Appareil de référence : Pixel 4 XL, numéro de série adb `192.168.0.104:5555` (Wi‑Fi). Quand le
+  disque occupe le port USB-C, on n'utilise que le Wi‑Fi.
 - Code natif portable : pas d'`explicit_bzero` dans `native/src` après T2 (on utilise `fl_memzero`).
   Les en-têtes publics ont des gardes `extern "C"`.
 
@@ -116,7 +116,7 @@ flutter build apk --debug
 (cd android && ./gradlew :app:testDebugUnitTest)                                         # JVM
 (cd android && ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=…)  # sur le téléphone, ANDROID_SERIAL=192.168.0.104:5555
 flutter test                                                                              # widgets
-flutter install -d 192.168.0.104:5555    # ou 192.168.0.104:5555
+flutter install -d 192.168.0.104:5555
 ```
 
 ---

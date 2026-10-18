@@ -2,7 +2,7 @@
 
 Pas à pas de la tâche 13 du plan de la phase 3 (`2026-10-18-phase3-ext4-ecriture.md`). Toutes les
 commandes partent de la racine du dépôt, sur le PC Ubuntu, téléphone branché en USB (débogage USB
-actif). Numéro de série : `192.168.0.104:5555` (ou `192.168.0.104:5555` en Wi‑Fi).
+actif). Numéro de série adb : `192.168.0.104:5555` (Wi‑Fi).
 
 ```bash
 git checkout feature/ext4-ecriture && git pull
