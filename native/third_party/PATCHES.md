@@ -326,6 +326,23 @@ Tests (`test_ext4_politique.c`) : `test_politique_somme_en_cours` (gel jusqu'au 
 `test_politique_lecture_eio_en_ecriture` (lecture impossible au milieu d'une suppression : seul le
 rejeu du journal est nécessaire), `test_politique_corruption_en_ecriture` (racine d'extents effacée).
 
+### 16. Fichiers creux (0010)
+
+- `ext4_trunc_inode` : la troncature avance par pas de `CONFIG_MAX_TRUNCATE_SIZE` (16 Mio) pour borner
+  les blocs libérés par transaction, mais validait une transaction (et ses vidages de cache) à chaque
+  pas, trou compris. Supprimer un fichier creux de 16 Tio ne contenant qu'un bloc coûtait un million de
+  validations de journal (des heures sur un disque USB). Désormais, si les blocs réellement alloués
+  (`i_blocks`) tiennent dans un pas, la troncature se fait d'un coup ; sinon un pas qui ne libère rien
+  garde la transaction ouverte, et seuls les pas qui libèrent des blocs en valident une.
+- `ext4_balloc_alloc_block` : `ext4_ext_find_goal` ajoute la distance logique à l'extent voisin, si
+  bien qu'une écriture loin au-delà de la fin d'un fichier non vide visait un bloc physique hors du
+  système de fichiers ; le groupe correspondant n'existe pas (`EFSCORRUPTED`, le volume était gelé).
+  Comme le noyau (`ext4_mb_initialize_context`), une cible hors du système de fichiers devient le
+  premier bloc de données ; `ext4_balloc_try_alloc_block` répond « pas libre » pour un tel bloc.
+
+Test : `test_politique_suppression_gros_creux` (20 Mio de données, 1 octet à 1 Tio, suppression en au
+plus 64 vidages de cache — 10 mesurés —, `e2fsck` propre).
+
 ## Protections côté FluLuks (sans correctif lwext4)
 
 En écriture, `ext4_glue.c` vérifie chaque opération avant d'appeler lwext4, dont les fonctions de haut

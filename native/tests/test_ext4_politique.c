@@ -510,6 +510,34 @@ static void test_politique_dernier_bloc(void) {
   unlink(img);
 }
 
+/* Suppression d'un gros fichier creux (correctif lwext4 0010) : 20 Mio de données au début, 1 octet à
+ * 1 Tio. lwext4 tronque par pas de 16 Mio et validait une transaction (avec ses vidages de cache) à
+ * chaque pas, trou compris : 65 536 validations ici, un million pour 16 Tio (des heures sur un disque
+ * USB). Seuls les pas qui libèrent des blocs valident désormais une transaction. */
+static void test_politique_suppression_gros_creux(void) {
+  char img[4096];
+  vol v;
+  static uint8_t data[1 << 20];
+  remplir(data, sizeof data, 3);
+  TT_ASSERT(copie_de("ext4-rw-reel.img", img, sizeof img) == 0);
+  TT_ASSERT_EQ(vol_monter(&v, img, UINT64_MAX, FL_EIO), FL_OK);
+  TT_ASSERT(v.dev != v.file);
+  fl_file *f = NULL;
+  TT_ASSERT_EQ(fl_fs_open(v.fs, "/creux.bin", FL_O_RDWR | FL_O_CREAT, &f), FL_OK);
+  for (uint64_t i = 0; i < 20; i++) TT_ASSERT_EQ(fl_file_pwrite(f, data, sizeof data, i << 20), (int64_t)sizeof data);
+  TT_ASSERT_EQ(fl_file_pwrite(f, "x", 1, (uint64_t)1 << 40), 1);
+  TT_ASSERT_EQ(fl_file_close(f), FL_OK);
+  uint64_t avant = fl_fault_bdev_flushes(v.dev);
+  TT_ASSERT_EQ(fl_fs_unlink(v.fs, "/creux.bin"), FL_OK);
+  uint64_t vidages = fl_fault_bdev_flushes(v.dev) - avant;
+  fprintf(stderr, "suppression du fichier creux de 1 Tio : %llu vidages de cache\n", (unsigned long long)vidages);
+  TT_ASSERT(vidages <= 64);
+  TT_ASSERT(en_ecriture(v.fs));
+  TT_ASSERT_EQ(vol_demonter(&v), FL_OK);
+  TT_ASSERT_EQ(e2fsck_propre(img), 0);
+  unlink(img);
+}
+
 /* Pendant un montage en écriture, le superbloc dit « clean » et needs_recovery (comme le noyau) ;
  * avant le correctif 0005 : « not clean with errors ». */
 static void test_politique_etat_pendant_montage(void) {
@@ -642,6 +670,7 @@ int main(void) {
   TT_RUN(test_politique_corruption_en_ecriture);
   TT_RUN(test_politique_fichier_indirect);
   TT_RUN(test_politique_dernier_bloc);
+  TT_RUN(test_politique_suppression_gros_creux);
   TT_RUN(test_politique_etat_pendant_montage);
   TT_RUN(test_politique_premier_montage_sobre);
   TT_RUN(test_politique_disque_mort);

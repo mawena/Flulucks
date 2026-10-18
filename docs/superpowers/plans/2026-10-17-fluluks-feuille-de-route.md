@@ -135,6 +135,11 @@ dans le même commit que le travail.
         de test `ext4-rw-journal-gros.img` (journal de même forme) ; `fluluks-cli diagnostic` (lecture
         seule, détail des contrôles et parcours de l'arborescence) et détail dans logcat
         (`FluLuksPolicy`) en cas de refus ; vrai disque monté en écriture sur le Pixel après correction)*
+  - [x] Correctif lwext4 0010 : fichiers creux *(trouvé en vérifiant le correctif précédent :
+        supprimer un gros fichier creux validait une transaction de journal par tranche de 16 Mio — un
+        million pour 16 Tio, des heures sur un disque USB —, et écrire loin au-delà de la fin d'un fichier
+        non vide visait un bloc hors du disque (volume gelé en « corruption »). Test
+        `test_politique_suppression_gros_creux` : 10 vidages de cache au lieu d'environ 130 000)*
   - [x] Relecture finale de toute la branche *(depuis T12 ; corrigés : fichier à blocs indirects vidé
         puis volume gelé en « w » — refus à l'ouverture —, dernier bloc logique, `fsync` réussi après gel,
         éjection après gel, accès hors verrou, nœud d'index vide (0008) ; découpe d'extents à 2 niveaux
