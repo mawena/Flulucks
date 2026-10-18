@@ -10,6 +10,9 @@
 
 #include "cJSON.h"
 #include "fluluks/error.h"
+#include "fluluks/fs.h"
+#include "fs/ro_reasons.h"
+#include "fsck_util.h"
 #include "handles.h"
 #include "tt.h"
 
@@ -28,13 +31,13 @@ static cJSON *json_de(int rc, fl_json *j) {
 }
 
 static int64_t monter_plain(int64_t *disk) {
-  *disk = fj_open_image(tt_fixture("ext4-plain.img"));
+  *disk = fj_open_image(tt_fixture("ext4-plain.img"), true);
   if (*disk <= 0) return *disk;
-  return fj_mount(*disk, 0, NULL, 0);
+  return fj_mount(*disk, 0, NULL, 0, false);
 }
 
 static void test_scan_gpt_luks2(void) {
-  int64_t d = fj_open_image(tt_fixture("gpt-luks2.img"));
+  int64_t d = fj_open_image(tt_fixture("gpt-luks2.img"), true);
   TT_ASSERT(d > 0);
   fl_json j;
   fl_json_init(&j);
@@ -78,7 +81,7 @@ static void test_scan_primaire_abime(void) {
   char dst[4096];
   snprintf(dst, sizeof dst, "%s", tt_fixture("tmp-handles-magie.img"));
   TT_ASSERT(copie_entete_detruit(tt_fixture("whole-luks2-4k.img"), dst));
-  int64_t d = fj_open_image(dst);
+  int64_t d = fj_open_image(dst, true);
   unlink(dst); /* l'image reste ouverte */
   TT_ASSERT(d > 0);
   fl_json j;
@@ -100,7 +103,7 @@ static void test_scan_primaire_abime(void) {
 }
 
 static void test_scan_ext4_et_fat(void) {
-  int64_t d = fj_open_image(tt_fixture("ext4-plain.img"));
+  int64_t d = fj_open_image(tt_fixture("ext4-plain.img"), true);
   TT_ASSERT(d > 0);
   fl_json j;
   fl_json_init(&j);
@@ -114,7 +117,7 @@ static void test_scan_ext4_et_fat(void) {
   cJSON_Delete(r);
   TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
 
-  d = fj_open_image(tt_fixture("fat16.img"));
+  d = fj_open_image(tt_fixture("fat16.img"), true);
   TT_ASSERT(d > 0);
   r = json_de(fj_scan(d, &j), &j);
   fl_json_free(&j);
@@ -123,10 +126,10 @@ static void test_scan_ext4_et_fat(void) {
   TT_ASSERT_STR_EQ(cJSON_GetObjectItem(p, "content")->valuestring, "FAT16");
   TT_ASSERT(cJSON_IsFalse(cJSON_GetObjectItem(p, "supported")));
   cJSON_Delete(r);
-  TT_ASSERT_EQ(fj_mount(d, 0, NULL, 0), FL_ENOTSUP);
-  TT_ASSERT_EQ(fj_mount(d, 7, NULL, 0), FL_EINVAL);
+  TT_ASSERT_EQ(fj_mount(d, 0, NULL, 0, false), FL_ENOTSUP);
+  TT_ASSERT_EQ(fj_mount(d, 7, NULL, 0, false), FL_EINVAL);
   TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
-  TT_ASSERT_EQ(fj_open_image(tt_fixture("absent.img")) < 0, 1);
+  TT_ASSERT_EQ(fj_open_image(tt_fixture("absent.img"), true) < 0, 1);
   TT_ASSERT_EQ(fj_debug_used(), 0);
 }
 
@@ -176,7 +179,7 @@ static void test_lecture_plain(void) {
   cJSON_Delete(r);
   fl_json_free(&j);
 
-  int64_t f = fj_open_file(v, "/hello.txt");
+  int64_t f = fj_open_file(v, "/hello.txt", FL_O_RDONLY);
   TT_ASSERT(f > 0);
   char buf[64];
   TT_ASSERT_EQ(fj_pread(f, buf, sizeof buf, 0), 16);
@@ -184,7 +187,7 @@ static void test_lecture_plain(void) {
   TT_ASSERT_EQ(fj_pread(f, buf, sizeof buf, 16), 0);
   TT_ASSERT_EQ(fj_pread(f, buf, 3, 8), 3);
   TT_ASSERT_MEM_EQ(buf, "Flu", 3);
-  TT_ASSERT_EQ(fj_open_file(v, "/sous-dossier"), FL_EISDIR);
+  TT_ASSERT_EQ(fj_open_file(v, "/sous-dossier", FL_O_RDONLY), FL_EISDIR);
   TT_ASSERT_EQ(fj_close_file(f), FL_OK);
   TT_ASSERT_EQ(fj_unmount(v, false), FL_OK);
   TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
@@ -195,14 +198,14 @@ static void test_luks_phrase(void) {
   char pass[256];
   size_t n = lire_pass(pass, sizeof pass, "pass.txt");
   TT_ASSERT(n > 0);
-  int64_t d = fj_open_image(tt_fixture("gpt-luks2.img"));
+  int64_t d = fj_open_image(tt_fixture("gpt-luks2.img"), true);
   TT_ASSERT(d > 0);
-  TT_ASSERT_EQ(fj_mount(d, 1, "faux", 4), FL_EBADPASS);
-  TT_ASSERT_EQ(fj_mount(d, 1, NULL, 0), FL_EINVAL);
-  TT_ASSERT_EQ(fj_mount(d, 2, pass, n), FL_EINVAL);
-  int64_t v = fj_mount(d, 1, pass, n);
+  TT_ASSERT_EQ(fj_mount(d, 1, "faux", 4, false), FL_EBADPASS);
+  TT_ASSERT_EQ(fj_mount(d, 1, NULL, 0, false), FL_EINVAL);
+  TT_ASSERT_EQ(fj_mount(d, 2, pass, n, false), FL_EINVAL);
+  int64_t v = fj_mount(d, 1, pass, n, false);
   TT_ASSERT(v > 0);
-  int64_t f = fj_open_file(v, "/hello.txt");
+  int64_t f = fj_open_file(v, "/hello.txt", FL_O_RDONLY);
   TT_ASSERT(f > 0);
   char buf[32];
   TT_ASSERT_EQ(fj_pread(f, buf, sizeof buf, 0), 16);
@@ -217,7 +220,7 @@ static void test_luks_phrase(void) {
 static void test_poignees_invalides(void) {
   int64_t d, v = monter_plain(&d);
   TT_ASSERT(v > 0);
-  int64_t f = fj_open_file(v, "/hello.txt");
+  int64_t f = fj_open_file(v, "/hello.txt", FL_O_RDONLY);
   TT_ASSERT(f > 0);
   char buf[8];
   fl_json j;
@@ -230,7 +233,7 @@ static void test_poignees_invalides(void) {
   TT_ASSERT_EQ(fj_close_disk(v), FL_EINVAL);
   TT_ASSERT_EQ(fj_close_file(d), FL_EINVAL);
   TT_ASSERT_EQ(fj_unmount(f, true), FL_EINVAL);
-  TT_ASSERT_EQ(fj_mount(v, 0, NULL, 0), FL_EINVAL);
+  TT_ASSERT_EQ(fj_mount(v, 0, NULL, 0, false), FL_EINVAL);
   /* valeurs absurdes */
   int64_t absurdes[] = {0, -1, -5, INT64_MIN, INT64_MAX, 1, 1023, (int64_t)1 << 16 | 1024, f + 1, f + ((int64_t)1 << 16)};
   for (size_t i = 0; i < sizeof absurdes / sizeof absurdes[0]; i++) {
@@ -244,7 +247,7 @@ static void test_poignees_invalides(void) {
   TT_ASSERT_EQ(fj_close_file(f), FL_OK);
   TT_ASSERT_EQ(fj_close_file(f), FL_EINVAL);
   TT_ASSERT_EQ(fj_pread(f, buf, sizeof buf, 0), FL_EINVAL);
-  int64_t f2 = fj_open_file(v, "/hello.txt");
+  int64_t f2 = fj_open_file(v, "/hello.txt", FL_O_RDONLY);
   TT_ASSERT(f2 > 0 && f2 != f);
   TT_ASSERT_EQ(fj_pread(f, buf, sizeof buf, 0), FL_EINVAL);
   TT_ASSERT_EQ(fj_pread(f2, buf, 4, 0), 4);
@@ -265,7 +268,7 @@ static void test_table_pleine(void) {
   TT_ASSERT(v > 0);
   unsigned n = 0;
   for (;;) {
-    int64_t f = fj_open_file(v, "/vide.txt");
+    int64_t f = fj_open_file(v, "/vide.txt", FL_O_RDONLY);
     if (f < 0) {
       TT_ASSERT_EQ(f, FL_ENOMEM);
       break;
@@ -337,12 +340,12 @@ static void lecteurs(int fermeture /* 0 aucune, 1 unmount force, 2 close disk, 3
   enum { N = 8 };
   pthread_t th[N];
   lecteur ls[N];
-  int64_t partage = fj_open_file(v, "/gros.bin");
+  int64_t partage = fj_open_file(v, "/gros.bin", FL_O_RDONLY);
   TT_ASSERT(partage > 0);
   for (int i = 0; i < N; i++) {
     memset(&ls[i], 0, sizeof ls[i]);
     /* moitié sur une poignée partagée, moitié sur des poignées propres */
-    ls[i].f = i % 2 ? partage : fj_open_file(v, "/gros.bin");
+    ls[i].f = i % 2 ? partage : fj_open_file(v, "/gros.bin", FL_O_RDONLY);
     TT_ASSERT(ls[i].f > 0);
     ls[i].seed = 1234u + (unsigned)i;
     ls[i].stop_on_einval = fermeture != 0 && !(fermeture == 3 && i % 2 == 0);
@@ -400,7 +403,7 @@ static void liberer_montage(void) {
 
 static void *tache_monter(void *arg) {
   tache *t = arg;
-  t->rc = fj_mount(t->disk, 0, NULL, 0);
+  t->rc = fj_mount(t->disk, 0, NULL, 0, false);
   return NULL;
 }
 
@@ -469,6 +472,91 @@ static void test_handles_ebusy_fermeture(void) {
   TT_ASSERT_EQ(fj_debug_used(), 0);
 }
 
+/* ---------- écriture (phase 3, T10) ---------- */
+
+static cJSON *statfs_de(int64_t v) {
+  fl_json j;
+  fl_json_init(&j);
+  cJSON *r = json_de(fj_statfs(v, &j), &j);
+  fl_json_free(&j);
+  return r;
+}
+
+/* Création, écriture, fermeture (synchronisée), renommage, dossiers, démontage, puis e2fsck -fn
+ * propre sur l'image (PC seulement). */
+static void test_handles_ecriture(void) {
+  if (!fu_tools_available()) {
+    fprintf(stderr, "test_handles_ecriture sauté : e2fsck/debugfs absents\n");
+    return;
+  }
+  char src[4096], img[4096], out[1 << 14];
+  snprintf(src, sizeof src, "%s", tt_fixture("ext4-rw-reel.img"));
+  TT_ASSERT_EQ(fu_copy_image(src, img, sizeof img), 0);
+  int64_t d = fj_open_image(img, false);
+  TT_ASSERT(d > 0);
+  int64_t v = fj_mount(d, 0, NULL, 0, true);
+  TT_ASSERT(v > 0);
+  cJSON *r = statfs_de(v);
+  TT_ASSERT(r != NULL);
+  TT_ASSERT(cJSON_IsFalse(cJSON_GetObjectItem(r, "read_only")));
+  TT_ASSERT_STR_EQ(cJSON_GetObjectItem(r, "ro_reason")->valuestring, "");
+  cJSON_Delete(r);
+  uint8_t b[5000];
+  for (size_t i = 0; i < sizeof b; i++) b[i] = (uint8_t)(i * 7);
+  int64_t f = fj_open_file(v, "/jni.bin", FL_O_RDWR | FL_O_CREAT);
+  TT_ASSERT(f > 0);
+  TT_ASSERT_EQ(fj_pwrite(f, b, sizeof b, 0), (int64_t)sizeof b);
+  TT_ASSERT_EQ(fj_pwrite(f, b, FJ_PREAD_MAX + 1, 0), FL_EINVAL);
+  TT_ASSERT_EQ(fj_truncate(f, 4000), FL_OK);
+  int64_t avant = fj_debug_flushes(d);
+  TT_ASSERT_EQ(fj_close_file(f), FL_OK);
+  TT_ASSERT(fj_debug_flushes(d) > avant); /* fermeture d'un fichier écrit : synchronisation */
+  TT_ASSERT_EQ(fj_mkdir(v, "/jd"), FL_OK);
+  TT_ASSERT_EQ(fj_mkdir(v, "/jd"), FL_EEXIST);
+  TT_ASSERT_EQ(fj_rename(v, "/jni.bin", "/jd/jni2.bin"), FL_OK);
+  TT_ASSERT_EQ(fj_mkdir(v, "/vide"), FL_OK);
+  TT_ASSERT_EQ(fj_rmdir(v, "/vide"), FL_OK);
+  TT_ASSERT_EQ(fj_unlink(v, "/hello.txt"), FL_OK);
+  TT_ASSERT_EQ(fj_sync(v), FL_OK);
+  TT_ASSERT_EQ(fj_mkdir(0, "/x"), FL_EINVAL);
+  TT_ASSERT_EQ(fj_rename(v, NULL, "/x"), FL_EINVAL);
+  avant = fj_debug_flushes(d);
+  TT_ASSERT_EQ(fj_unmount(v, false), FL_OK);
+  TT_ASSERT(fj_debug_flushes(d) > avant);
+  TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
+  int rc = fu_e2fsck_n(img, out, sizeof out);
+  if (rc != 0) fprintf(stderr, "%s\n", out);
+  TT_ASSERT_EQ(rc, 0);
+  uint8_t lu[5001];
+  TT_ASSERT_EQ(fu_debugfs_cat(img, "/jd/jni2.bin", lu, sizeof lu), 4000);
+  TT_ASSERT_MEM_EQ(lu, b, 4000);
+  unlink(img);
+}
+
+static void test_handles_lecture_seule_demandee(void) {
+  int64_t d = fj_open_image(tt_fixture("ext4-rw-reel.img"), true);
+  TT_ASSERT(d > 0);
+  int64_t v = fj_mount(d, 0, NULL, 0, false);
+  TT_ASSERT(v > 0);
+  cJSON *r = statfs_de(v);
+  TT_ASSERT(r != NULL);
+  TT_ASSERT(cJSON_IsTrue(cJSON_GetObjectItem(r, "read_only")));
+  TT_ASSERT_STR_EQ(cJSON_GetObjectItem(r, "ro_reason")->valuestring, FL_RO_USER);
+  cJSON_Delete(r);
+  TT_ASSERT_EQ(fj_open_file(v, "/x", FL_O_RDWR | FL_O_CREAT), FL_EROFS);
+  TT_ASSERT_EQ(fj_mkdir(v, "/x"), FL_EROFS);
+  TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
+  /* écriture demandée sur une image ouverte en lecture seule : disque protégé */
+  d = fj_open_image(tt_fixture("ext4-rw-reel.img"), true);
+  v = fj_mount(d, 0, NULL, 0, true);
+  TT_ASSERT(v > 0);
+  r = statfs_de(v);
+  TT_ASSERT(r != NULL);
+  TT_ASSERT_STR_EQ(cJSON_GetObjectItem(r, "ro_reason")->valuestring, FL_RO_WP);
+  cJSON_Delete(r);
+  TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
+}
+
 int main(void) {
   srand((unsigned)time(NULL));
   TT_RUN(test_scan_gpt_luks2);
@@ -483,5 +571,7 @@ int main(void) {
   TT_RUN(test_fermeture_fichier_pendant_lectures);
   TT_RUN(test_luks_phrase);
   TT_RUN(test_handles_ebusy_fermeture);
+  TT_RUN(test_handles_ecriture);
+  TT_RUN(test_handles_lecture_seule_demandee);
   TT_MAIN_END();
 }

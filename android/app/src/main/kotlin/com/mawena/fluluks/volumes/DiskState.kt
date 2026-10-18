@@ -22,4 +22,5 @@ data class VolumeState(
     val freeBytes: Long,
     val needsRecovery: Boolean,
     val roReason: String,
+    val readOnly: Boolean = true,
 )

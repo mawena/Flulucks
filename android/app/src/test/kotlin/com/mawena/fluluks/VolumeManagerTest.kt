@@ -23,20 +23,25 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
     val events = mutableListOf<String>()
     var statfsFails = false
     var label = "MonDisque"
+    var readOnly = true
+    var syncResult = 0
+    var syncs = 0
+    var lastWritable: Boolean? = null
     private var next = 100L
 
     override fun version() = "fake"
     override fun strerror(code: Int) = "erreur $code".toByteArray()
-    override fun openImage(path: ByteArray) = next++
+    override fun openImage(path: ByteArray, readOnly: Boolean) = next++
     override fun openUsb(fd: Int, iface: Int, epIn: Int, epOut: Int) = next++
     override fun closeDisk(disk: Long): Int { closedDisks += disk; events += "closeDisk"; return 0 }
     override fun scan(disk: Long) = """{"sector_size":512,"size":1048576,"table":"gpt","parts":[
         {"index":1,"first_lba":2048,"size":524288,"content":"LUKS2","label":"","uuid":"u1","supported":true,
          "luks":{"version":2,"cipher":"aes-xts-plain64","primary_damaged":false,"max_kdf_memory_kib":$kdfKib}},
         {"index":2,"first_lba":4096,"size":262144,"content":"ext4","label":"Photos","uuid":"u2","supported":true}]}""".toByteArray()
-    override fun mount(disk: Long, partIndex: Int, pass: ByteArray?): Long {
+    override fun mount(disk: Long, partIndex: Int, pass: ByteArray?, writable: Boolean): Long {
         mountCalls++
         lastPass = pass
+        lastWritable = writable
         if (partIndex == 1 && (pass == null || !pass.contentEquals(expectedPass))) return EngineError.FL_EBADPASS.toLong()
         return next++
     }
@@ -46,21 +51,52 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
         return if (!force && openFiles > 0) EngineError.FL_EBUSY else 0
     }
     override fun statfs(vol: Long) = if (statfsFails) """{"total":""".toByteArray() else
-        """{"total":1000,"free":400,"label":"$label","read_only":true,"ro_reason":"lecture seule","needs_recovery":false}""".toByteArray()
+        """{"total":1000,"free":400,"label":"$label","read_only":$readOnly,"ro_reason":"${if (readOnly) "lecture seule" else ""}","needs_recovery":false}""".toByteArray()
     override fun stat(vol: Long, path: ByteArray) = ByteArray(0)
     override fun list(vol: Long, path: ByteArray) = ByteArray(0)
-    override fun openFile(vol: Long, path: ByteArray): Long { openFiles++; return next++ }
+    override fun openFile(vol: Long, path: ByteArray, flags: Int): Long { openFiles++; return next++ }
     override fun pread(file: Long, offset: Long, buf: ByteArray, len: Int) = 0
+    override fun pwrite(file: Long, offset: Long, buf: ByteArray, len: Int) = len
+    override fun truncate(file: Long, size: Long) = 0
     override fun closeFile(file: Long): Int { openFiles--; return 0 }
+    override fun mkdir(vol: Long, path: ByteArray) = 0
+    override fun unlink(vol: Long, path: ByteArray) = 0
+    override fun rmdir(vol: Long, path: ByteArray) = 0
+    override fun rename(vol: Long, from: ByteArray, to: ByteArray) = 0
+    override fun sync(vol: Long): Int { syncs++; events += "sync"; return syncResult }
 }
+
+/** Horloge virtuelle des synchronisations différées : les tâches partent quand on avance le temps. */
+class FakeDelayer : VolumeManager.Delayer {
+    var now = 0L
+    private val tasks = mutableListOf<Triple<Long, Runnable, BooleanArray>>()
+    override fun schedule(delayMs: Long, task: Runnable): () -> Unit {
+        val cancelled = BooleanArray(1)
+        tasks += Triple(now + delayMs, task, cancelled)
+        return { cancelled[0] = true }
+    }
+    fun advance(ms: Long) {
+        now += ms
+        val due = tasks.filter { it.first <= now }
+        tasks.removeAll(due)
+        due.filter { !it.third[0] }.forEach { it.second.run() }
+    }
+}
+
+private const val SYNC = VolumeManager.SYNC_DELAY_MS
 
 class VolumeManagerTest {
     private lateinit var engine: FakeEngine
     private lateinit var disk: String
 
+    private lateinit var delayer: FakeDelayer
+    private val warnings = mutableListOf<String>()
+
     private fun setup(kdf: Long = 1024, avail: Long = Long.MAX_VALUE) {
         engine = FakeEngine(kdf)
-        VolumeManager.resetForTests(engine, { avail })
+        delayer = FakeDelayer()
+        warnings.clear()
+        VolumeManager.resetForTests(engine, { avail }, delayer = delayer, detachWarner = { warnings += it })
         disk = VolumeManager.addImageDiskForTests("/x/gpt-luks2.img")
     }
 
@@ -159,13 +195,69 @@ class VolumeManagerTest {
         assertTrue(VolumeManager.volumes.value.isEmpty())
     }
 
-    @Test fun ejectUnmountsWithForce() = runBlocking {
-        val v = VolumeManager.unlock(disk, 1, "secret".toByteArray())
+    @Test fun ejectSyncsBeforeUnmountAndRelease() = runBlocking {
+        val v = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
         val handle = VolumeManager.nativeVolume(v.id)
         VolumeManager.eject(v.id)
-        assertEquals(listOf(handle to true), engine.unmounts)
+        assertEquals(listOf("sync", "unmount", "closeDisk"), engine.events) // démontage normal, puis libération
+        assertEquals(listOf(handle to false), engine.unmounts)
         assertTrue(VolumeManager.volumes.value.isEmpty())
-        assertEquals(1, VolumeManager.disks.value.size)
+        assertEquals(1, VolumeManager.disks.value.size) // le disque reste listé
+        assertFalse(VolumeManager.ejecting.value)
+        assertEquals(null, VolumeManager.ejectError.value)
+        // rouvert à la demande
+        val again = VolumeManager.unlock(disk, 1, "secret".toByteArray())
+        assertTrue(VolumeManager.nativeVolume(again.id) > 0)
+    }
+
+    @Test fun ejectFailureKeepsVolume() = runBlocking {
+        val v = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
+        engine.syncResult = EngineError.FL_ENOSPC
+        VolumeManager.eject(v.id)
+        assertEquals(listOf("sync"), engine.events) // ni démontage ni libération
+        assertEquals(listOf(v), VolumeManager.volumes.value)
+        assertTrue(VolumeManager.ejectError.value!!.startsWith("Éjection impossible : "))
+        // fichier encore ouvert : démontage normal refusé (FL_EBUSY), volume gardé
+        engine.syncResult = 0
+        engine.openFile(VolumeManager.nativeVolume(v.id), "/a".toByteArray())
+        VolumeManager.eject(v.id)
+        assertEquals(listOf(v), VolumeManager.volumes.value)
+        assertEquals(0, engine.closedDisks.size)
+    }
+
+    @Test fun writeSchedulesSyncAfter3s() = runBlocking {
+        engine.readOnly = false
+        val v = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
+        assertTrue(engine.lastWritable == true)
+        assertFalse(v.readOnly)
+        VolumeManager.noteWrite(v.id)
+        delayer.advance(2000)
+        VolumeManager.noteWrite(v.id) // rafale : la synchronisation repart de cette écriture
+        delayer.advance(2000)
+        assertEquals(0, engine.syncs)
+        assertTrue(VolumeManager.hasUnsyncedWrites(v.id))
+        delayer.advance(1000)
+        assertEquals(1, engine.syncs)
+        assertFalse(VolumeManager.hasUnsyncedWrites(v.id))
+        delayer.advance(10_000)
+        assertEquals(1, engine.syncs) // une seule pour la rafale
+        VolumeManager.noteWrite("inconnu") // volume absent : rien
+        delayer.advance(SYNC)
+        assertEquals(1, engine.syncs)
+    }
+
+    @Test fun detachDuringWriteWarns() = runBlocking {
+        val v = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
+        VolumeManager.noteWrite(v.id)
+        VolumeManager.onUsbDetachedName(disk)
+        assertEquals(listOf(VolumeManager.MSG_DETACH_DURING_WRITE), warnings)
+        delayer.advance(SYNC)
+        assertEquals(0, engine.syncs) // la synchronisation programmée est annulée
+        // sans écriture en attente : aucun avertissement
+        setup()
+        VolumeManager.unlock(disk, 1, "secret".toByteArray())
+        VolumeManager.onUsbDetachedName(disk)
+        assertTrue(warnings.isEmpty())
     }
 
     @Test fun wrongPassKeepsDisk() = runBlocking {

@@ -66,6 +66,7 @@ typedef struct {
   bool needs_recovery;
   bool rw;            /* monté en écriture, journal démarré */
   bool io_err;        /* une écriture ou une barrière a échoué : plus rien n'est écrit (g_lock) */
+  bool io_wp;         /* l'échec venait d'une protection en écriture signalée (FL_EROFS) */
   fl_fs *fs;          /* pour la lecture seule collante */
   uint8_t sb[1024];   /* superbloc validé, octets [1024, 2048) du disque (tenu à jour) */
 } ext4_vol;
@@ -141,8 +142,10 @@ static int bd_bwrite(struct ext4_blockdev *bd, const void *buf, uint64_t blk_id,
   if (v->io_err) return EIO;
   if (blk_cnt == 0) return EOK;
   if ((uint64_t)blk_cnt > (uint64_t)SIZE_MAX / v->dev->sector_size) return EIO;
-  if (fl_bdev_write(v->dev, blk_id, blk_cnt, buf) != FL_OK) {
+  int w = fl_bdev_write(v->dev, blk_id, blk_cnt, buf);
+  if (w != FL_OK) {
     v->io_err = true;
+    v->io_wp = w == FL_EROFS; /* disque qui signale sa protection en cours de session (USB) */
     return EIO;
   }
   /* le superbloc écrit devient celui que bd_bread sert */
@@ -178,7 +181,7 @@ static int bd_bflush(struct ext4_blockdev *bd) {
  * son cache). Sous g_lock. */
 static void sticky(ext4_vol *v, int e) {
   if (!v->rw) return;
-  if (v->io_err) fl_fs_go_read_only(v->fs, FL_RO_IOERR);
+  if (v->io_err) fl_fs_go_read_only(v->fs, v->io_wp ? FL_RO_WP : FL_RO_IOERR);
   else if (e == EBADMSG) fl_fs_go_read_only(v->fs, FL_RO_CSUM);
 }
 static int rd_err(ext4_vol *v, int e) {

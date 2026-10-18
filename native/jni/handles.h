@@ -29,10 +29,11 @@ extern "C" {
 /* Nombre maximal d'entrées rendues par fj_list (au-delà : FL_ENOMEM). */
 #define FJ_LIST_MAX 262144u
 
-/* Image disque en lecture seule (secteurs de 512 octets), avec le cache 64 Kio × 256 par-dessus. */
-int64_t fj_open_image(const char *path);
-/* Disque USB (usbdevfs, LUN 0, lecture seule) + cache 64 Kio × 256. Le fd reste à l'appelant.
- * FL_ENOTSUP hors Linux/Android. */
+/* Image disque (secteurs de 512 octets), avec le cache 64 Kio × 256 par-dessus ; read_only = false
+ * pour les tests d'écriture. */
+int64_t fj_open_image(const char *path, bool read_only);
+/* Disque USB (usbdevfs, LUN 0) ouvert en lecture-écriture (MODE SENSE décide de la protection) + cache
+ * 64 Kio × 256. Le fd reste à l'appelant. FL_ENOTSUP hors Linux/Android. */
 int64_t fj_open_usb(int fd, int iface, int ep_in, int ep_out);
 /* Démonte de force les volumes du disque, puis ferme toute la pile (transport USB en dernier). */
 int fj_close_disk(int64_t disk);
@@ -40,12 +41,15 @@ int fj_close_disk(int64_t disk);
 /* JSON du disque dans *out (voir task-6-brief) ; renvoie FL_OK, ou un fl_err (out non défini). */
 int fj_scan(int64_t disk, fl_json *out);
 /* Ouvre la partition d'indice part_index : tranche, fl_probe, déverrouillage LUKS si besoin
- * (pass peut être NULL pour un volume en clair), puis ext4 en lecture seule. Poignée volume ou fl_err. */
-int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t passlen);
+ * (pass peut être NULL pour un volume en clair), puis ext4, en écriture si want_rw et si le système de
+ * fichiers le permet (sinon lecture seule, raison dans fj_statfs ; want_rw = false → RO_USER, disque
+ * protégé → RO_WP). Poignée volume ou fl_err. */
+int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t passlen, bool want_rw);
 /* Sans force : FL_EBUSY si un fichier est ouvert, ou si le disque parent est en cours de fermeture
  * (c'est lui qui démontera le volume). Un enregistrement d'enfant (fj_mount, fj_open_file) sous un
  * parent en cours de fermeture rend aussi FL_EBUSY. Avec force : ferme les fichiers (en attendant les
- * lectures en cours) puis démonte. */
+ * lectures en cours) puis démonte. Un volume en écriture est synchronisé puis démonté (journal arrêté,
+ * SYNCHRONIZE CACHE) ; disque mort : tout est libéré quand même et l'erreur est rendue. */
 int fj_unmount(int64_t vol, bool force);
 
 int fj_statfs(int64_t vol, fl_json *out);
@@ -53,10 +57,20 @@ int fj_stat(int64_t vol, const char *path, fl_json *out);
 /* Tableau trié par nom (ordre des octets). */
 int fj_list(int64_t vol, const char *path, fl_json *out);
 
-int64_t fj_open_file(int64_t vol, const char *path);
+/* flags : FL_O_* (fs.h). */
+int64_t fj_open_file(int64_t vol, const char *path, int flags);
 /* Octets lus (<= min(len, FJ_PREAD_MAX)), 0 = fin, < 0 = fl_err. */
 int64_t fj_pread(int64_t file, void *buf, size_t len, uint64_t off);
+/* Octets écrits (= len, len <= FJ_PREAD_MAX sinon FL_EINVAL) ou fl_err. */
+int64_t fj_pwrite(int64_t file, const void *buf, size_t len, uint64_t off);
+int fj_truncate(int64_t file, uint64_t size);
+/* Un fichier écrit est synchronisé à la fermeture (code rendu). */
 int fj_close_file(int64_t file);
+int fj_mkdir(int64_t vol, const char *path);
+int fj_unlink(int64_t vol, const char *path);
+int fj_rmdir(int64_t vol, const char *path);
+int fj_rename(int64_t vol, const char *from, const char *to);
+int fj_sync(int64_t vol);
 
 /* Références et état « en fermeture » d'une entrée (tests) ; FL_EINVAL si la poignée est invalide. */
 int fj_debug_slot(int64_t h, unsigned *refs, bool *closing);
@@ -65,6 +79,8 @@ int fj_debug_slot(int64_t h, unsigned *refs, bool *closing);
 void fj_debug_set_mount_hook(void (*fn)(void *), void *arg);
 /* Nombre d'entrées occupées (tests). */
 unsigned fj_debug_used(void);
+/* Vidages (fl_bdev_flush) reçus par le disque sous son cache, ou fl_err (tests). */
+int64_t fj_debug_flushes(int64_t disk);
 
 #ifdef __cplusplus
 }
