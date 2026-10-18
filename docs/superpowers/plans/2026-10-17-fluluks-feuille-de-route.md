@@ -151,8 +151,9 @@ dans le même commit que le travail.
       l'utilisateur, écriture par défaut, avec la mention « écriture non essayée sur un vrai disque » dans le
       README. Le vrai disque s'ouvre bien en écriture sur le Pixel depuis le correctif du journal de 1 Gio,
       aucune écriture n'y a été faite.)*
-- [ ] Fusion `feature/ext4-ecriture` → `develop`
-- [ ] Version `v0.2.0`
+- [x] Fusion `feature/ext4-ecriture` → `develop`
+- [x] Version `v0.2.0` *(2026-10-18, branche `release/0.2.0` → `main` ; écriture non encore essayée sur un vrai
+      disque, voir T13)*
 
 ### Phase 4 — FAT16 / FAT32 / exFAT (lecture puis écriture)
 - [ ] Plan de la phase 4 écrit
