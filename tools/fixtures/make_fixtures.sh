@@ -138,6 +138,56 @@ for motif in "Entry 'a-hors-bornes' in /hostile ([0-9]*) has invalid inode #: $h
 done
 if grep -qi checksum <<<"$h_fsck"; then echo "somme de contrôle fausse dans /hostile" >&2; exit 1; fi
 
+# --- ext4 : images d'écriture (phase 3, T3) --------------------------------
+# Banc de non-corruption : le moteur écrit sur une COPIE de ces images, e2fsck -fn juge le résultat.
+# Toutes sont créées avec « -d tree/ » puis passées par l'étape journal. mkfs laisse les options du
+# journal vides ; le vrai disque a « journal_incompat_revoke journal_64bit journal_checksum_v3 ».
+#   debugfs -w : jo -c (ouvre le journal, somme v3), jw -r 100 (transaction de révocation du bloc 100 :
+#   ne réécrit aucun bloc), jc (ferme) ; e2fsck -fy rejoue cette transaction (l'image redevient propre,
+#   les options du journal restent posées).
+#   Sans metadata_csum (ext4-rw-uninit.img, anciens disques) debugfs pose la somme v1 « journal_checksum »
+#   à la place de « journal_checksum_v3 » : la bibliothèque e2fsprogs n'écrit le v3 qu'avec metadata_csum.
+journal_step() {
+  local img="$1" f csum=journal_checksum_v3
+  [ "$img" = ext4-rw-uninit.img ] && csum=journal_checksum
+  printf 'jo -c\njw -r 100\njc\n' > work/jcmd
+  DBG -w -f work/jcmd "$img" >/dev/null
+  e2fsck -fy "$img" >/dev/null 2>&1 || { echo "$img : e2fsck -fy a échoué après l'étape journal" >&2; exit 1; }
+  f="$(LC_ALL=C dumpe2fs -h "$img" 2>/dev/null)"
+  for opt in journal_incompat_revoke journal_64bit $csum; do
+    grep -E '^Journal features:' <<<"$f" | grep -qw "$opt" || { echo "$img : $opt absent du journal" >&2; exit 1; }
+  done
+  if grep -E '^Filesystem features:' <<<"$f" | grep -q needs_recovery; then
+    echo "$img : needs_recovery encore posé" >&2; exit 1
+  fi
+  LC_ALL=C e2fsck -fn "$img" >/dev/null 2>&1 || { echo "$img : pas propre après l'étape journal" >&2; exit 1; }
+}
+# mk_rw <nom> <taille> <n-fixe> <options mkfs...>
+mk_rw() {
+  local name="$1" size="$2" n="$3"; shift 3
+  truncate -s "$size" "$name"
+  mkfs.ext4 -q -F -T default $(fixe "$n") -L "FLURW" -d tree/ "$@" "$name"
+  if [ "$name" != ext4-rw-sans-journal.img ]; then journal_step "$name"; fi
+  LC_ALL=C e2fsck -fn "$name" >/dev/null 2>&1 || { echo "$name : e2fsck -fn" >&2; exit 1; }
+}
+mk_rw ext4-rw-reel.img 256M 5 -b 4096 -I 256 -O ^orphan_file,^metadata_csum_seed
+mk_rw ext4-rw-1k.img 64M 6 -b 1024 -I 256 -O ^orphan_file,^metadata_csum_seed
+mk_rw ext4-rw-uninit.img 128M 7 -b 4096 -I 256 -O ^metadata_csum,uninit_bg,^orphan_file,^metadata_csum_seed
+mk_rw ext4-rw-seed.img 128M 8 -b 4096 -I 256 -O metadata_csum_seed,orphan_file
+mk_rw ext4-rw-sans-journal.img 64M 9 -b 4096 -I 256 -O ^has_journal,^orphan_file,^metadata_csum_seed
+mk_rw ext4-rw-meta-bg.img 64M a -b 4096 -I 256 -O meta_bg,^resize_inode,^orphan_file,^metadata_csum_seed
+mk_rw ext4-rw-gros.img 8G b -b 4096 -I 256 -O ^orphan_file,^metadata_csum_seed   # creux : reste creux sur disque
+for img in ext4-rw-*.img; do
+  f="$(LC_ALL=C dumpe2fs -h "$img" 2>/dev/null | grep -E '^Filesystem features:')"
+  case "$img" in
+    ext4-rw-sans-journal.img) ! grep -q has_journal <<<"$f" ;;
+    ext4-rw-seed.img) grep -q metadata_csum_seed <<<"$f" && grep -q orphan_file <<<"$f" ;;
+    ext4-rw-meta-bg.img) grep -q meta_bg <<<"$f" ;;
+    ext4-rw-uninit.img) grep -q uninit_bg <<<"$f" && ! grep -q metadata_csum <<<"$f" ;;
+    *) grep -q metadata_csum <<<"$f" && ! grep -q orphan_file <<<"$f" ;;
+  esac || { echo "$img : options mkfs inattendues" >&2; exit 1; }
+done
+
 # --- LUKS ----------------------------------------------------------------
 # luks_offset <fichier> : décalage des données en octets
 luks_offset() {
@@ -150,6 +200,7 @@ luks_offset() {
   echo "$o"
 }
 
+# DATA_SZ (taille des données, défaut 64 Mio) et PLAIN (image claire, défaut ext4-plain.img) : variables d'environnement.
 # make_luks <nom> <mode-luks_encrypt> <taille-secteur> <vk-octets> <args luksFormat...>
 # produit work/<nom>.luks (conteneur de taille exacte offset + 64 Mio) et <nom>.vk
 make_luks() {
@@ -159,9 +210,9 @@ make_luks() {
   truncate -s 200M "$c"
   cryptsetup luksFormat -q --volume-key-file "$name.vk" --key-file pass.txt "$@" "$c"
   off=$(luks_offset "$c")
-  truncate -s $((off + DATA)) "$c"
+  truncate -s $((off + ${DATA_SZ:-$DATA})) "$c"
   $PY "$HERE/luks_encrypt.py" encrypt --image "$c" --offset "$off" --sector-size "$ss" \
-    --mode "$mode" --key-file "$name.vk" --plain ext4-plain.img
+    --mode "$mode" --key-file "$name.vk" --plain "${PLAIN:-ext4-plain.img}"
   echo "$off" > "work/$name.off"
 }
 
@@ -181,6 +232,13 @@ make_luks whole-luks1-xts xts-plain64 512 64 --type luks1 --cipher aes-xts-plain
   --hash sha1 --pbkdf-force-iterations 1000
 make_luks whole-luks2-exact xts-plain64 512 64 --type luks2 --cipher aes-xts-plain64 --key-size 512 \
   --sector-size 512 --pbkdf argon2id --pbkdf-force-iterations 7 --pbkdf-memory 1048576 --pbkdf-parallel 4
+
+# luks2-rw-reel.img : 256 Mio de données (copie d'ext4-rw-reel.img), pbkdf2 à 1000 itérations (rapide
+# pour la batterie d'écriture), secteurs de 512 octets.
+DATA_SZ=$((256 * MIB)) PLAIN=ext4-rw-reel.img make_luks luks2-rw-reel xts-plain64 512 64 --type luks2 \
+  --cipher aes-xts-plain64 --key-size 512 --sector-size 512 --pbkdf pbkdf2 --hash sha256 \
+  --pbkdf-force-iterations 1000
+mv work/luks2-rw-reel.luks luks2-rw-reel.img
 
 # images sans table
 for n in whole-luks2-4k whole-luks2-2slots whole-luks1-xts whole-luks2-exact; do

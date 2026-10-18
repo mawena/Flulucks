@@ -89,6 +89,14 @@ if(FL_TESTS)
     endif()
   endfunction()
 
+  # Banc de non-corruption (T3) : juges e2fsck/debugfs, modèle d'arborescence, périphérique à pannes.
+  # Test seulement ; les tests d'écriture le lient. fsck_util.c ne lance rien sur Android.
+  add_library(fl_testsupport STATIC tests/support/fsck_util.c tests/support/fault_bdev.c
+              tests/support/tree_model.c)
+  target_include_directories(fl_testsupport PUBLIC tests/support PRIVATE src)
+  target_link_libraries(fl_testsupport PUBLIC fluluks)
+  target_compile_options(fl_testsupport PRIVATE -Wall -Wextra -Werror)
+
   fl_add_test(test_error)
   fl_add_test(test_blockdev)
   fl_add_test(test_partition)
@@ -99,6 +107,8 @@ if(FL_TESTS)
   fl_add_test(test_luks2_lent LABELS lent)
   fl_add_test(test_ext4)
   fl_add_test(test_cache)
+  fl_add_test(test_banc LABELS ecriture)
+  target_link_libraries(test_banc PRIVATE fl_testsupport)
   fl_add_test(test_usb)
   target_sources(test_usb PRIVATE tests/support/fake_msc.c)
 
@@ -113,8 +123,11 @@ if(FL_TESTS)
   fl_add_test(test_handles)
   target_link_libraries(test_handles PRIVATE fl_jnicore)
 
-  add_test(NAME test_cli COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli.sh $<TARGET_FILE:fluluks-cli>)
-  set_tests_properties(test_cli PROPERTIES
-    ENVIRONMENT "FL_FIXTURES=${CMAKE_BINARY_DIR}/fixtures"
-    FIXTURES_REQUIRED fx)
+  # fluluks-cli n'existe pas sous Android (cible absente) : test_cli est réservé au PC.
+  if(NOT ANDROID)
+    add_test(NAME test_cli COMMAND sh ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_cli.sh $<TARGET_FILE:fluluks-cli>)
+    set_tests_properties(test_cli PROPERTIES
+      ENVIRONMENT "FL_FIXTURES=${CMAKE_BINARY_DIR}/fixtures"
+      FIXTURES_REQUIRED fx)
+  endif()
 endif()
