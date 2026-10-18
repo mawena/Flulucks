@@ -21,7 +21,9 @@ tools/android/run_native_tests.sh $ANDROID_SERIAL
 
 # 1b. Tests instrumentés (moteur, gestionnaire de volumes, fournisseur Fichiers en lecture et écriture)
 flutter build apk --debug
-(cd android && ./gradlew :app:connectedDebugAndroidTest)
+# (l'option garde l'application installée après les tests : sinon Gradle la désinstalle, et les
+#  images de 1c disparaissent avec son cache)
+(cd android && ./gradlew :app:connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true)
 
 # 1c. Images écrites par ces tests, vérifiées par e2fsck sur le PC (doivent finir par « clean », code 0)
 tools/android/check_image.sh $ANDROID_SERIAL engine-ecriture.img

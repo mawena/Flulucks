@@ -119,8 +119,15 @@ dans le même commit que le travail.
         sorties d'un passage précédent sont supprimées au départ ; `test_manifeste` ajouté (manifest.py
         contre tm_write_manifest, via `debugfs rdump`, sans root) ; PC 20/20, `test_batterie_lent`
         vert en 83 min)*
-  - [ ] Passage sur le Pixel : tests natifs (`run_native_tests.sh`), `connectedDebugAndroidTest`,
-        `check_image.sh`
+  - [x] Passage sur le Pixel : tests natifs (`run_native_tests.sh`), `connectedDebugAndroidTest`,
+        `check_image.sh` *(2026-10-18, Pixel 4 XL : tests natifs arm64 tous verts, crc32c matériel
+        « armv8-crc » à 9 218 Mo/s contre 300 Mo/s octet par octet, déverrouillage aux paramètres exacts
+        4,45 s ; tests instrumentés 50/50 ; `e2fsck -fn` propre sur `engine-ecriture.img`,
+        `provider-plein.img` et `provider-ecriture.img`. Corrigé en route : éjection refusée sans fin
+        quand une autre application garde un fichier ouvert → démontage forcé après un `sync` réussi
+        (Ruling P12) ; Gradle désinstallait l'application après les tests, et ses images avec →
+        `-Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true`, et `check_image.sh` exige
+        le magic ext4)*
   - [x] Relecture finale de toute la branche *(depuis T12 ; corrigés : fichier à blocs indirects vidé
         puis volume gelé en « w » — refus à l'ouverture —, dernier bloc logique, `fsync` réussi après gel,
         éjection après gel, accès hors verrou, nœud d'index vide (0008) ; découpe d'extents à 2 niveaux
