@@ -7,13 +7,13 @@ une vidéo dans VLC, un PDF ou une photo dans les applications habituelles.
 Elle est née d'un besoin simple : utiliser sur un téléphone non rooté (un Pixel 4 XL) le disque
 LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permettait.
 
-> **État actuel : version 0.2.0, lecture et écriture sur ext4.** L'écriture a été vérifiée sur PC
+> **État actuel : version 0.2.1, lecture et écriture sur ext4.** L'écriture a été vérifiée sur PC
 > (batteries de non-corruption jugées par `e2fsck`, `debugfs` et le noyau Linux, coupures simulées) et
 > sur le téléphone avec des images, mais **pas encore sur un vrai disque USB** : faites une sauvegarde
 > avant d'écrire sur un disque qui compte, ou activez « Ouvrir les disques en lecture seule ». Voir les
 > [limites](#limites-actuelles).
 
-## Ce que fait la version 0.2.0
+## Ce que fait la version 0.2.1
 
 - **Détecte** un disque USB de stockage de masse branché en USB-C, et demande la permission d'accès.
 - **Lit les tables de partitions** GPT et MBR (partitions étendues comprises), ainsi qu'un disque sans
@@ -30,6 +30,8 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
   - Les fichiers créés appartiennent au propriétaire du dossier parent (droits 0644, dossiers 0755)
     et sont datés à l'heure du téléphone : ils apparaissent normalement sous Ubuntu.
   - Les données sont synchronisées à la fermeture de chaque fichier et 3 s après la dernière écriture.
+  - Les écritures successives d'un fichier sont regroupées par 4 Mio (0.2.1) : une copie n'attend plus
+    le disque à chaque bloc.
 - **Lecture seule quand il le faut**, avec la raison affichée : interrupteur « Ouvrir les disques en
   lecture seule », disque protégé en écriture, journal à rejouer, système de fichiers marqué en erreur,
   somme de contrôle fausse, option ext4 non prise en charge en écriture, ou erreur d'écriture en cours
@@ -188,7 +190,7 @@ Le dépôt suit git flow :
 |---|---|---|
 | 1 | Moteur natif en lecture sur PC | — |
 | 2 | Android en lecture : « mon disque dans VLC » | **v0.1.0** |
-| 3 | ext4 en écriture (essai sur un vrai disque à faire) | **v0.2.0** |
+| 3 | ext4 en écriture (essai sur un vrai disque à faire) | **v0.2.1** |
 | 4 | FAT16 / FAT32 / exFAT | v0.3.0 |
 | 5 | NTFS | v0.4.0 |
 | 6 | Finitions : explorateur intégré, copies avec progression, réglages, robustesse | v1.0.0 |

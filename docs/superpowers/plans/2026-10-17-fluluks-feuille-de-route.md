@@ -163,7 +163,7 @@ dans le même commit que le travail.
         disque plein, pour que `FL_ENOSPC` revienne à l'écriture fautive. Test `test_ext4_tampon`, jugé par
         `e2fsck` et `debugfs` : 9 cas, dont l'erreur différée, la panne et le disque plein ; PC 21/21 sous
         ASan/UBSan, arm64 compilé)*
-  - [ ] Version `v0.2.1`
+  - [x] Version `v0.2.1` *(2026-10-18, branche `hotfix/0.2.1` → `main` et `develop`)*
 
 ### Phase 4 — FAT16 / FAT32 / exFAT (lecture puis écriture)
 - [ ] Plan de la phase 4 écrit
