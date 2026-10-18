@@ -113,7 +113,12 @@ dans le même commit que le travail.
         gelé dès la lecture seule en cours de session ; correctifs lwext4 0008 — racine d'extents
         vérifiée, erreurs de libération remontées : une troncature validait un inode sans ses blocs — et
         0009 — annulation sans relecture : plantage ; `rmdir` borné ; PC 20/20)*
-  - [ ] Correctif T8 : batterie (cadence 200 pas, profondeur 40, copies supprimées en échec)
+  - [x] Correctif T8 : batterie (cadence 200 pas, profondeur 40, copies supprimées en échec) *(jalon
+        tous les 200 pas partout, variante longue comprise ; chaque batterie creuse jusqu'à la profondeur
+        40, jugée aussitôt et affirmée ; en échec l'image est gardée en `<nom>.echec.img`, et les
+        sorties d'un passage précédent sont supprimées au départ ; `test_manifeste` ajouté (manifest.py
+        contre tm_write_manifest, via `debugfs rdump`, sans root) ; PC 20/20, `test_batterie_lent`
+        vert en 83 min)*
   - [ ] Passage sur le Pixel : tests natifs (`run_native_tests.sh`), `connectedDebugAndroidTest`,
         `check_image.sh`
   - [ ] Relecture finale de toute la branche
