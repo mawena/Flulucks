@@ -95,7 +95,7 @@ dans le même commit que le travail.
 - [x] T8 — Batterie de non-corruption complète *(vérification par le noyau : `sudo tools/fixtures/verify_rw_with_kernel.sh build/native/batterie`, à lancer par l’utilisateur)*
 - [x] T9 — Écriture USB (WRITE, SYNCHRONIZE CACHE, protection en écriture) *(compilation `build/android-arm64` faite ; tests sur le Pixel à passer)*
 - [x] T10 — JNI et VolumeManager en écriture (synchronisation, éjection, débranchement) *(tests JVM et natifs PC verts, `test_batterie_lent` : 35 min en Debug + ASan ; à passer sur le Pixel, injoignable depuis le conteneur : `connectedDebugAndroidTest` puis `tools/android/check_image.sh <serial>`)*
-- [ ] T11 — DocumentsProvider en écriture
+- [x] T11 — DocumentsProvider en écriture *(tests JVM verts, dont `WriteOpsTest` sur un système de fichiers en mémoire ; `ProviderWriteTest` compilé, à passer sur le Pixel puis `tools/android/check_image.sh <serial> provider-plein.img`)*
 - [ ] T12 — Interface Flutter (lecture seule, éjection, avertissements)
 - [ ] *(utilisateur)* Clé sacrifiée branchable en USB-C (clé USB-C ou adaptateur OTG USB-A → USB-C)
 - [ ] *(utilisateur)* Sauvegarde complète du vrai disque avant toute écriture dessus

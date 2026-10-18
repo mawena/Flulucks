@@ -42,7 +42,7 @@ fi
 # Tests, dans l'ordre ; test_luks2_lent est le plus long (Argon2 aux paramètres exacts du disque).
 TESTS=(test_error test_crypto test_luks1 test_luks2 test_ext4 test_usb test_cache test_banc test_luks2_lent)
 # Images et fichiers nécessaires (sous-ensemble : le Wi-Fi est lent).
-FIXTURES=(ext4-plain.img gpt-luks2.img whole-luks2-4k.img whole-luks2-2slots.img whole-luks1-xts.img
+FIXTURES=(ext4-plain.img ext4-rw-1k.img gpt-luks2.img whole-luks2-4k.img whole-luks2-2slots.img whole-luks1-xts.img
           mbr-luks1-essiv.img whole-luks2-exact.img luks2-entete-abime.img luks-tronque.img
           whole-luks2-impair.img pass.txt pass2.txt cipher-kat.json
           ext4-rw-reel.img ext4-nom255.img ext4-trou-dossier.img ext4-trou-dossier.blocs ext4-indirect.img ext4-entrees-hostiles.img
