@@ -474,10 +474,12 @@ object VolumeManager {
                         continue
                     }
                 }
-                val rc = engine.unmount(m.handle, false)
-                if (rc == EngineError.FL_EBUSY) { // fichier ouvert : volume intact, gardé
-                    _ejectError.value = msgEjectFailed(EngineError(rc).message ?: "erreur $rc")
-                    continue
+                var rc = engine.unmount(m.handle, false)
+                if (rc == EngineError.FL_EBUSY) {
+                    // Fichier encore ouvert par une autre application (lecteur vidéo…) : les données sont
+                    // déjà synchronisées, et le démontage forcé ferme ces fichiers puis resynchronise avant
+                    // de démonter. L'application reçoit ensuite une erreur d'E/S (Ruling P12 de la phase 3).
+                    rc = engine.unmount(m.handle, true)
                 }
                 // Toute autre erreur : le moteur a déjà détruit le volume (clé effacée, poignée invalide).
                 // On l'oublie et on libère le disque comme après une éjection réussie.

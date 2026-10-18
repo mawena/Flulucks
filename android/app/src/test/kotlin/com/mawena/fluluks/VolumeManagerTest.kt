@@ -220,12 +220,19 @@ class VolumeManagerTest {
         assertEquals(listOf("sync"), engine.events) // ni démontage ni libération
         assertEquals(listOf(v), VolumeManager.volumes.value)
         assertTrue(VolumeManager.ejectError.value!!.startsWith("Éjection impossible : "))
-        // fichier encore ouvert : démontage normal refusé (FL_EBUSY), volume gardé
-        engine.syncResult = 0
+    }
+
+    /** Fichier encore ouvert : après un sync réussi, démontage forcé (le moteur ferme le fichier et resynchronise). */
+    @Test fun ejectWithOpenFileForcesAfterSync() = runBlocking {
+        engine.readOnly = false
+        val v = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
         engine.openFile(VolumeManager.nativeVolume(v.id), "/a".toByteArray())
+        engine.events.clear()
         VolumeManager.eject(v.id)
-        assertEquals(listOf(v), VolumeManager.volumes.value)
-        assertEquals(0, engine.closedDisks.size)
+        assertEquals(listOf("sync", "unmount", "unmount(force)"), engine.events.filter { it.startsWith("sync") || it.startsWith("unmount") })
+        assertTrue(VolumeManager.volumes.value.isEmpty())
+        assertEquals(1, engine.closedDisks.size)
+        assertEquals(null, VolumeManager.ejectError.value)
     }
 
     /** Le vidage échoue et le moteur gèle le volume : démontage enchaîné, avertissement, disque libéré. */
