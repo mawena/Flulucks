@@ -6,7 +6,8 @@
 # Usage : sudo tools/fixtures/verify_rw_with_kernel.sh build/native/batterie
 set -uo pipefail
 [ "$(id -u)" -eq 0 ] || { echo "à lancer avec sudo" >&2; exit 2; }
-DIR="$(cd "${1:?usage: verify_rw_with_kernel.sh <dossier-batterie>}" && pwd)"
+DIR="$(cd "${1:?usage: verify_rw_with_kernel.sh <dossier-batterie>}" && pwd)" || exit 2
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)" || exit 2
 MAP="fluluks-rw-verify-$$"
 MNT=""; LOOP=""
 
@@ -20,40 +21,10 @@ cleanup() {
 trap cleanup EXIT
 
 # Manifeste du dossier monté, au format de tm_write_manifest (lost+found à la racine exclu).
-manifeste() {
-  python3 - "$1" <<'PY'
-import hashlib, os, stat, sys
-root = sys.argv[1]
-CH = 1 << 20
-def cond(p, size):
-    digs = b''
-    with open(p, 'rb') as f:
-        while True:
-            b = f.read(CH)
-            if not b:
-                break
-            digs += hashlib.sha256(b).digest()
-    return hashlib.sha256(digs).hexdigest()
-lignes = []
-for d, sous, fichiers in os.walk(root):
-    rel = '/' + os.path.relpath(d, root) if d != root else '/'
-    if rel == '/' and 'lost+found' in sous:
-        sous.remove('lost+found')
-    st = os.lstat(d)
-    lignes.append(('d', 0, '-', st.st_uid, st.st_gid, st.st_mode, rel))
-    for n in fichiers:
-        p = os.path.join(d, n)
-        st = os.lstat(p)
-        chemin = (rel.rstrip('/') + '/' + n)
-        if stat.S_ISREG(st.st_mode):
-            lignes.append(('f', st.st_size, cond(p, st.st_size), st.st_uid, st.st_gid, st.st_mode, chemin))
-        else:
-            lignes.append(('?', st.st_size, '-', st.st_uid, st.st_gid, st.st_mode, chemin))
-lignes.sort(key=lambda l: l[6].encode())
-for t, s, h, u, g, m, c in lignes:
-    print('%s\t%d\t%s\t%d\t%d\t%o\t%s' % (t, s, h, u, g, m, c))
-PY
-}
+manifeste() { python3 "$SCRIPT_DIR/manifest.py" "$1"; }
+
+# Lignes « EXT4-fs error|warning » du journal du noyau (pour comparer avant/après un montage).
+dmesg_ext4() { dmesg 2>/dev/null | grep -E 'EXT4-fs (error|warning)' || true; }
 
 # check <image>
 check() {
@@ -66,13 +37,30 @@ check() {
   fi
   MNT="$(mktemp -d)"
   # noload : jamais de rejeu du journal (l'image doit être propre telle quelle)
-  mount -o ro,noload "$dev" "$MNT" || return 1
+  mount -t ext4 -o ro,noload "$dev" "$MNT" || return 1
+  # toute ligne EXT4-fs error/warning apparue depuis le début du montage est un échec
+  local apres nouvelles
+  apres="$(dmesg_ext4)"
+  nouvelles="$(comm -13 <(printf '%s\n' "$AVANT" | sort -u) <(printf '%s\n' "$apres" | sort -u))"
+  if [ -n "$nouvelles" ]; then
+    echo "le noyau signale des erreurs ext4 :" >&2
+    printf '%s\n' "$nouvelles" >&2
+    return 1
+  fi
   diff <(sort "$base.manifest") <(manifeste "$MNT" | sort) || return 1
 }
 
 n=0
 for img in "$DIR"/*.ecrite.img; do
   [ -e "$img" ] || { echo "aucune image *.ecrite.img dans $DIR" >&2; exit 1; }
+  # seulement des fichiers réguliers, jamais un lien ; le manifeste est obligatoire
+  if [ ! -f "$img" ] || [ -L "$img" ]; then
+    echo "NOYAU ÉCHEC $(basename "$img") (pas un fichier régulier)"; n=$((n + 1)); continue
+  fi
+  if [ ! -f "${img%.ecrite.img}.manifest" ]; then
+    echo "NOYAU ÉCHEC $(basename "$img") (manifeste absent)"; n=$((n + 1)); continue
+  fi
+  AVANT="$(dmesg_ext4)"
   if check "$img"; then echo "NOYAU OK $(basename "$img")"
   else echo "NOYAU ÉCHEC $(basename "$img")"; n=$((n + 1)); fi
   cleanup
