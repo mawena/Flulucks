@@ -155,6 +155,36 @@ static void test_luks1_corrompu(void) {
   corrompu(mut_digest_iter, FL_ENOTSUP);
 }
 
+static void mut_stripes_zero(uint8_t *h) { memset(h + 208 + 44, 0, 4); }
+/* matériaux de clé du slot 0 : débutent dans le disque (secteur 8000 sur 8192) mais en sortent */
+static void mut_kmo_bord(uint8_t *h) {
+  uint32_t kmo = 8000;
+  h[208 + 40] = (uint8_t)(kmo >> 24); h[208 + 41] = (uint8_t)(kmo >> 16);
+  h[208 + 42] = (uint8_t)(kmo >> 8); h[208 + 43] = (uint8_t)kmo;
+}
+/* digest tronqué : sa zone (itérations, sel, empreinte) est remise à zéro */
+static void mut_digest_tronque(uint8_t *h) { memset(h + 112, 0, 20); memset(h + 132, 0, 32); memset(h + 164, 0, 4); }
+
+/* Disque plus court que l'en-tête déclaré : la charge utile et les matériaux sortent du disque. */
+static void luks1_disque_court(void) {
+  fl_bdev *src = ouvrir("whole-luks1-xts.img");
+  TT_ASSERT(src != NULL);
+  uint8_t m[1024];
+  TT_ASSERT_EQ(fl_bdev_read_bytes(src, 0, sizeof m, m), FL_OK);
+  fl_bdev_close(src);
+  fl_bdev dev = {&mem_ops, 512, sizeof m / 512, true, m};
+  fl_luks *l = (fl_luks *)1;
+  TT_ASSERT_EQ(fl_luks_open(&dev, &l), FL_ECORRUPT);
+  TT_ASSERT(l == NULL);
+}
+
+static void test_luks1_corruptions(void) {
+  corrompu(mut_kmo_bord, FL_ECORRUPT);
+  corrompu(mut_stripes_zero, FL_ECORRUPT);
+  corrompu(mut_digest_tronque, FL_ECORRUPT);
+  luks1_disque_court();
+}
+
 /* Lecture mémoire avec zone en échec (EIO) pour tester la poursuite après erreur de slot. */
 static uint64_t fail_lo, fail_hi;
 static int mem_read_fail(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
@@ -292,6 +322,7 @@ int main(void) {
   TT_RUN(test_crypt_bdev_ecriture_4k);
   TT_RUN(test_luks1_pas_luks);
   TT_RUN(test_luks1_corrompu);
+  TT_RUN(test_luks1_corruptions);
   TT_RUN(test_luks1_poursuite_apres_erreur);
   TT_RUN(test_luks1_mauvaise_phrase);
   TT_RUN(test_luks1_essiv);

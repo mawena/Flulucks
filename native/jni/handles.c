@@ -14,6 +14,7 @@
 #include "handles.h"
 
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -46,7 +47,8 @@ static unsigned g_used;
 static pthread_mutex_t g_mu = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t g_cv = PTHREAD_COND_INITIALIZER;
 
-typedef void (*destroy_fn)(void *obj, int64_t h);
+/* Détruit l'objet ; rend le code de la fermeture (synchronisation, démontage). */
+typedef int (*destroy_fn)(void *obj, int64_t h);
 
 static int64_t mkhandle(unsigned idx) { return (int64_t)(((uint64_t)g_tab[idx].gen << 16) | idx); }
 
@@ -60,8 +62,22 @@ static slot *lookup(int64_t h, int type) {
   return s;
 }
 
+/* Enregistre un objet. Un enfant (volume, fichier) n'est jamais enregistré sous un parent en cours de
+ * fermeture : FL_EBUSY (transitoire, la fermeture du parent va aboutir) ; parent disparu : FL_EINVAL.
+ * L'appelant libère l'objet quand le résultat est < 0. */
 static int64_t tab_put(int type, int64_t parent, void *obj) {
   pthread_mutex_lock(&g_mu);
+  if (parent != 0) {
+    slot *ps = lookup(parent, type - 1); /* T_VOL -> T_DISK, T_FILE -> T_VOL */
+    if (!ps) {
+      pthread_mutex_unlock(&g_mu);
+      return FL_EINVAL;
+    }
+    if (ps->closing) {
+      pthread_mutex_unlock(&g_mu);
+      return FL_EBUSY;
+    }
+  }
   for (unsigned k = 0; k < FJ_MAX; k++) {
     unsigned i = (g_next + k) % FJ_MAX;
     slot *s = &g_tab[i];
@@ -105,12 +121,12 @@ static void tab_release(int64_t h, int type) {
 }
 
 /* Sous g_mu, s déjà marqué closing : attend les opérations en cours, détruit l'objet hors du mutex,
- * libère l'entrée. Rend la main avec g_mu tenu. */
-static void finish_close_locked(slot *s, int64_t h, destroy_fn fn) {
+ * libère l'entrée. Rend la main avec g_mu tenu, et le code du destructeur. */
+static int finish_close_locked(slot *s, int64_t h, destroy_fn fn) {
   while (s->refs) pthread_cond_wait(&g_cv, &g_mu);
   void *obj = s->obj;
   pthread_mutex_unlock(&g_mu);
-  fn(obj, h);
+  int rc = fn(obj, h);
   pthread_mutex_lock(&g_mu);
   s->type = T_FREE;
   s->closing = false;
@@ -119,6 +135,7 @@ static void finish_close_locked(slot *s, int64_t h, destroy_fn fn) {
   s->gen = s->gen == UINT32_MAX ? 1 : s->gen + 1;
   g_used--;
   pthread_cond_broadcast(&g_cv);
+  return rc;
 }
 
 /* Ferme une entrée (FL_EINVAL si invalide ou déjà en fermeture). */
@@ -130,9 +147,9 @@ static int tab_close(int64_t h, int type, destroy_fn fn) {
     return FL_EINVAL;
   }
   s->closing = true;
-  finish_close_locked(s, h, fn);
+  int rc = finish_close_locked(s, h, fn);
   pthread_mutex_unlock(&g_mu);
-  return FL_OK;
+  return rc;
 }
 
 /* Sous g_mu : nombre d'enfants de `parent` du type donné qui ne sont pas en fermeture. */
@@ -170,6 +187,20 @@ static void close_children(int64_t parent, int type, destroy_fn fn) {
   pthread_mutex_unlock(&g_mu);
 }
 
+int fj_debug_slot(int64_t h, unsigned *refs, bool *closing) {
+  int rc = FL_EINVAL;
+  pthread_mutex_lock(&g_mu);
+  for (int t = T_DISK; t <= T_FILE && rc != FL_OK; t++) {
+    slot *s = lookup(h, t);
+    if (!s) continue;
+    if (refs) *refs = s->refs;
+    if (closing) *closing = s->closing;
+    rc = FL_OK;
+  }
+  pthread_mutex_unlock(&g_mu);
+  return rc;
+}
+
 unsigned fj_debug_used(void) {
   pthread_mutex_lock(&g_mu);
   unsigned n = g_used;
@@ -182,8 +213,24 @@ unsigned fj_debug_used(void) {
 typedef struct {
   fl_usb_transport *usb; /* NULL pour une image */
   fl_bdev *base;         /* fichier image ou usb_bdev */
-  fl_bdev *dev;          /* cache au-dessus de base : seul utilisé */
+  fl_bdev counted;       /* base, vidages comptés (fj_debug_flushes) */
+  _Atomic uint64_t flushes;
+  fl_bdev *dev;          /* cache au-dessus de counted : seul utilisé */
 } jdisk;
+
+static int counted_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
+  return fl_bdev_read(((jdisk *)d->priv)->base, lba, count, buf);
+}
+static int counted_write(fl_bdev *d, uint64_t lba, uint32_t count, const void *buf) {
+  return fl_bdev_write(((jdisk *)d->priv)->base, lba, count, buf);
+}
+static int counted_flush(fl_bdev *d) {
+  jdisk *j = d->priv;
+  atomic_fetch_add(&j->flushes, 1);
+  return fl_bdev_flush(j->base);
+}
+static void counted_destroy(fl_bdev *d) { (void)d; /* intégré à jdisk */ }
+static const fl_bdev_ops counted_ops = {counted_read, counted_write, counted_flush, counted_destroy};
 
 typedef struct {
   fl_bdev *slice, *plain; /* plain : déchiffré (NULL si en clair) */
@@ -191,24 +238,30 @@ typedef struct {
   fl_fs *fs;
 } jvol;
 
-static void file_destroy(void *obj, int64_t h) {
+static int file_destroy(void *obj, int64_t h) {
   (void)h;
-  fl_file_close(obj);
+  return fl_file_close(obj); /* fichier écrit : synchronisation */
 }
 
-/* Ordre de la phase 1 : fs, déchiffré, luks, tranche. */
-static void vol_free(jvol *v) {
-  if (!v) return;
-  if (v->fs) fl_fs_unmount(v->fs); /* aucun fichier ouvert : close_children est passé avant */
+/* Ordre de la phase 1 : fs, déchiffré, luks, tranche. Rend le code du démontage. */
+static int vol_free(jvol *v) {
+  if (!v) return FL_OK;
+  int rc = FL_OK;
+  if (v->fs) {
+    rc = fl_fs_sync(v->fs);       /* aucun fichier ouvert : close_children est passé avant */
+    int ru = fl_fs_unmount(v->fs); /* libère même sur un disque mort */
+    if (rc == FL_OK) rc = ru;
+  }
   fl_bdev_close(v->plain);
   fl_luks_close(v->luks);
   fl_bdev_close(v->slice);
   free(v);
+  return rc;
 }
 
-static void vol_destroy(void *obj, int64_t h) {
+static int vol_destroy(void *obj, int64_t h) {
   close_children(h, T_FILE, file_destroy);
-  vol_free(obj);
+  return vol_free(obj);
 }
 
 /* Pile entière avant le transport : le usb_bdev copie le transport sans le posséder. */
@@ -222,14 +275,16 @@ static void disk_free(jdisk *d) {
   free(d);
 }
 
-static void disk_destroy(void *obj, int64_t h) {
+static int disk_destroy(void *obj, int64_t h) {
   close_children(h, T_VOL, vol_destroy);
   disk_free(obj);
+  return FL_OK;
 }
 
 /* d->base rempli : ajoute le cache, enregistre le disque. Libère tout en cas d'échec. */
 static int64_t disk_register(jdisk *d) {
-  int rc = fl_cache_bdev_new(d->base, CACHE_BLOCK, CACHE_BLOCKS, &d->dev);
+  d->counted = (fl_bdev){&counted_ops, d->base->sector_size, d->base->sector_count, d->base->read_only, d};
+  int rc = fl_cache_bdev_new(&d->counted, CACHE_BLOCK, CACHE_BLOCKS, &d->dev);
   if (rc != FL_OK) {
     d->dev = NULL;
     disk_free(d);
@@ -240,11 +295,11 @@ static int64_t disk_register(jdisk *d) {
   return h;
 }
 
-int64_t fj_open_image(const char *path) {
+int64_t fj_open_image(const char *path, bool read_only) {
   if (!path) return FL_EINVAL;
   jdisk *d = calloc(1, sizeof *d);
   if (!d) return FL_ENOMEM;
-  int rc = fl_file_bdev_open(path, 512, true, &d->base);
+  int rc = fl_file_bdev_open(path, 512, read_only, &d->base);
   if (rc != FL_OK) {
     d->base = NULL;
     disk_free(d);
@@ -260,7 +315,8 @@ int64_t fj_open_usb(int fd, int iface, int ep_in, int ep_out) {
   jdisk *d = calloc(1, sizeof *d);
   if (!d) return FL_ENOMEM;
   int rc = fl_usbdevfs_transport_new(fd, (uint8_t)iface, (uint8_t)ep_in, (uint8_t)ep_out, &d->usb);
-  if (rc == FL_OK) rc = fl_usb_bdev_open(d->usb, 0, true /* lecture seule jusqu'au SCSI */, &d->base);
+  /* en écriture : MODE SENSE dit si le disque est protégé (alors lecture seule, RO_WP au montage) */
+  if (rc == FL_OK) rc = fl_usb_bdev_open(d->usb, 0, false, &d->base);
   if (rc != FL_OK) {
     d->base = NULL;
     disk_free(d);
@@ -378,7 +434,7 @@ int fj_scan(int64_t disk, fl_json *out) {
 
 /* ---- volumes ---- */
 
-static int vol_open(fl_bdev *dev, uint32_t part_index, const void *pass, size_t passlen, jvol *v) {
+static int vol_open(fl_bdev *dev, uint32_t part_index, const void *pass, size_t passlen, bool want_rw, jvol *v) {
   fl_part_table *t = calloc(1, sizeof *t);
   if (!t) return FL_ENOMEM;
   int rc = fl_part_scan(dev, t);
@@ -410,10 +466,17 @@ static int vol_open(fl_bdev *dev, uint32_t part_index, const void *pass, size_t 
     target = v->plain;
   }
   if (pr.content != FL_CONTENT_EXT4) return FL_ENOTSUP;
-  return fl_fs_mount(target, FL_CONTENT_EXT4, false, &v->fs);
+  return fl_fs_mount(target, FL_CONTENT_EXT4, want_rw, &v->fs);
 }
 
-int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t passlen) {
+static void (*g_mount_hook)(void *);
+static void *g_mount_hook_arg;
+void fj_debug_set_mount_hook(void (*fn)(void *), void *arg) {
+  g_mount_hook = fn;
+  g_mount_hook_arg = arg;
+}
+
+int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t passlen, bool want_rw) {
   jdisk *d = tab_acquire(disk, T_DISK);
   if (!d) return FL_EINVAL;
   int64_t h;
@@ -421,11 +484,12 @@ int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t pas
   if (!v) {
     h = FL_ENOMEM;
   } else {
-    int rc = vol_open(d->dev, part_index, pass, passlen, v);
+    int rc = vol_open(d->dev, part_index, pass, passlen, want_rw, v);
     if (rc != FL_OK) {
       vol_free(v);
       h = rc;
     } else {
+      if (g_mount_hook) g_mount_hook(g_mount_hook_arg); /* tests : pause avant l'enregistrement */
       /* enregistré tant que l'on tient la référence du disque : fj_close_disk le verra */
       h = tab_put(T_VOL, disk, v);
       if (h < 0) vol_free(v);
@@ -438,7 +502,19 @@ int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t pas
 int fj_unmount(int64_t vol, bool force) {
   pthread_mutex_lock(&g_mu);
   slot *s = lookup(vol, T_VOL);
-  if (!s || s->closing) {
+  if (!s) {
+    pthread_mutex_unlock(&g_mu);
+    return FL_EINVAL;
+  }
+  if (!force) {
+    /* le disque parent ferme ses volumes : ce démontage-ci n'a plus rien à faire, et n'est pas une erreur de poignée */
+    slot *ps = lookup(s->parent, T_DISK);
+    if (ps && ps->closing) {
+      pthread_mutex_unlock(&g_mu);
+      return FL_EBUSY;
+    }
+  }
+  if (s->closing) {
     pthread_mutex_unlock(&g_mu);
     return FL_EINVAL;
   }
@@ -457,9 +533,9 @@ int fj_unmount(int64_t vol, bool force) {
       return FL_EBUSY;
     }
   }
-  finish_close_locked(s, vol, vol_destroy);
+  int rc = finish_close_locked(s, vol, vol_destroy);
   pthread_mutex_unlock(&g_mu);
-  return FL_OK;
+  return rc;
 }
 
 static const char *type_code(fl_ftype t) {
@@ -585,12 +661,12 @@ int fj_list(int64_t vol, const char *path, fl_json *out) {
 
 /* ---- fichiers ---- */
 
-int64_t fj_open_file(int64_t vol, const char *path) {
+int64_t fj_open_file(int64_t vol, const char *path, int flags) {
   if (!path) return FL_EINVAL;
   jvol *v = tab_acquire(vol, T_VOL);
   if (!v) return FL_EINVAL;
   fl_file *f = NULL;
-  int64_t h = fl_fs_open(v->fs, path, FL_O_RDONLY, &f);
+  int64_t h = fl_fs_open(v->fs, path, flags, &f);
   if (h == FL_OK) {
     /* enregistré sous la référence du volume : fj_unmount le verra */
     h = tab_put(T_FILE, vol, f);
@@ -610,4 +686,60 @@ int64_t fj_pread(int64_t file, void *buf, size_t len, uint64_t off) {
   return r;
 }
 
+int64_t fj_pwrite(int64_t file, const void *buf, size_t len, uint64_t off) {
+  if ((!buf && len) || len > FJ_PREAD_MAX) return FL_EINVAL;
+  fl_file *f = tab_acquire(file, T_FILE);
+  if (!f) return FL_EINVAL;
+  int64_t r = fl_file_pwrite(f, buf, len, off);
+  tab_release(file, T_FILE);
+  return r;
+}
+
+int fj_truncate(int64_t file, uint64_t size) {
+  fl_file *f = tab_acquire(file, T_FILE);
+  if (!f) return FL_EINVAL;
+  int rc = fl_file_truncate(f, size);
+  tab_release(file, T_FILE);
+  return rc;
+}
+
 int fj_close_file(int64_t file) { return tab_close(file, T_FILE, file_destroy); }
+
+/* Opération sur un chemin d'un volume, référence tenue. */
+static int vol_path_op(int64_t vol, const char *path, int (*op)(fl_fs *, const char *)) {
+  if (!path) return FL_EINVAL;
+  jvol *v = tab_acquire(vol, T_VOL);
+  if (!v) return FL_EINVAL;
+  int rc = op(v->fs, path);
+  tab_release(vol, T_VOL);
+  return rc;
+}
+
+int fj_mkdir(int64_t vol, const char *path) { return vol_path_op(vol, path, fl_fs_mkdir); }
+int fj_unlink(int64_t vol, const char *path) { return vol_path_op(vol, path, fl_fs_unlink); }
+int fj_rmdir(int64_t vol, const char *path) { return vol_path_op(vol, path, fl_fs_rmdir); }
+
+int fj_rename(int64_t vol, const char *from, const char *to) {
+  if (!from || !to) return FL_EINVAL;
+  jvol *v = tab_acquire(vol, T_VOL);
+  if (!v) return FL_EINVAL;
+  int rc = fl_fs_rename(v->fs, from, to);
+  tab_release(vol, T_VOL);
+  return rc;
+}
+
+int fj_sync(int64_t vol) {
+  jvol *v = tab_acquire(vol, T_VOL);
+  if (!v) return FL_EINVAL;
+  int rc = fl_fs_sync(v->fs);
+  tab_release(vol, T_VOL);
+  return rc;
+}
+
+int64_t fj_debug_flushes(int64_t disk) {
+  jdisk *d = tab_acquire(disk, T_DISK);
+  if (!d) return FL_EINVAL;
+  int64_t n = (int64_t)atomic_load(&d->flushes);
+  tab_release(disk, T_DISK);
+  return n;
+}

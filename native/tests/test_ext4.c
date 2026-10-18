@@ -1,5 +1,7 @@
 #define _DEFAULT_SOURCE
+#include <errno.h>
 #include <pthread.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,7 +12,15 @@
 #include "fluluks/fs.h"
 #include "fluluks/luks.h"
 #include "fluluks/partition.h"
+#include "fs/ro_reasons.h"
+#include "ext4.h"
+#include "ext4_blockdev.h"
 #include "ext4_crc32.h"
+#include "ext4_dir.h"
+#include "ext4_dir_idx.h"
+#include "ext4_errno.h"
+#include "ext4_fs.h"
+#include "ext4_types.h"
 #include "tt.h"
 
 #define CLAIRSEME_TAILLE 5368709120ull
@@ -325,7 +335,8 @@ static void test_ext4_lecture_seule(void) {
   fl_bdev *d = ouvrir("ext4-plain.img");
   TT_ASSERT(d != NULL);
   fl_fs *fs = NULL;
-  TT_ASSERT_EQ(fl_fs_mount(d, FL_CONTENT_EXT4, true, &fs), FL_OK); /* want_rw ignoré */
+  /* image ouverte en lecture seule : want_rw donne la lecture seule « disque protégé » */
+  TT_ASSERT_EQ(fl_fs_mount(d, FL_CONTENT_EXT4, true, &fs), FL_OK);
   fl_file *f = (fl_file *)0x1;
   TT_ASSERT_EQ(fl_fs_open(fs, "/hello.txt", FL_O_RDWR, &f), FL_EROFS);
   TT_ASSERT(f == NULL);
@@ -345,7 +356,7 @@ static void test_ext4_lecture_seule(void) {
   TT_ASSERT_EQ(fl_fs_statfs(fs, &s), FL_OK);
   TT_ASSERT(s.read_only);
   TT_ASSERT_STR_EQ(s.label, "FLUTEST");
-  TT_ASSERT_STR_EQ(s.ro_reason, "écriture pas encore disponible");
+  TT_ASSERT_STR_EQ(s.ro_reason, FL_RO_WP);
   TT_ASSERT(!s.needs_recovery);
   TT_ASSERT_EQ(s.total_bytes, 64u << 20);
   TT_ASSERT(s.free_bytes > 0 && s.free_bytes < s.total_bytes);
@@ -811,6 +822,443 @@ static void test_ext4_superbloc_change(void) {
   TT_ASSERT(lectures >= 2); /* lwext4 a bien relu le superbloc */
 }
 
+/* ---------- dettes de lecture de lwext4 (correctif 0002) ---------- */
+
+/* 255 octets : « é » × 100 + « n » × 51 + « .txt » (voir make_fixtures.sh). */
+static void nom_255(char *buf) {
+  char *p = buf;
+  for (int i = 0; i < 100; i++) *p++ = (char)0xC3, *p++ = (char)0xA9;
+  memset(p, 'n', 51);
+  memcpy(p + 51, ".txt", 5);
+}
+
+static void test_ext4_nom_255(void) {
+  char n255[256], d255[256], chemin[600];
+  nom_255(n255);
+  TT_ASSERT_EQ(strlen(n255), 255);
+  memset(d255, 'd', 255);
+  d255[255] = 0;
+  fl_bdev *d = ouvrir("ext4-nom255.img");
+  TT_ASSERT(d != NULL);
+  fl_fs *fs = NULL;
+  if (fl_fs_mount(d, FL_CONTENT_EXT4, false, &fs) != FL_OK) fl_bdev_close(d);
+  TT_ASSERT(fs != NULL);
+  fl_stat st;
+  snprintf(chemin, sizeof chemin, "/%s", n255);
+  int rs = fl_fs_stat(fs, chemin, &st);
+  fl_file *f = NULL;
+  char buf[64] = {0};
+  int ro = fl_fs_open(fs, chemin, FL_O_RDONLY, &f);
+  int64_t n = ro == FL_OK ? fl_file_pread(f, buf, sizeof buf, 0) : -1;
+  fl_file_close(f);
+  /* composant intermédiaire de 255 octets */
+  snprintf(chemin, sizeof chemin, "/%s/f.txt", d255);
+  fl_stat st2;
+  int rs2 = fl_fs_stat(fs, chemin, &st2);
+  f = NULL;
+  char buf2[16] = {0};
+  int ro2 = fl_fs_open(fs, chemin, FL_O_RDONLY, &f);
+  int64_t n2 = ro2 == FL_OK ? fl_file_pread(f, buf2, sizeof buf2, 0) : -1;
+  fl_file_close(f);
+  collecte c = {0};
+  int rd = fl_fs_readdir(fs, "/", cb_collecte, &c);
+  /* 256 octets : toujours refusé par fs.c */
+  char n256[300];
+  snprintf(n256, sizeof n256, "/%sx", n255);
+  int r256 = fl_fs_stat(fs, n256, &st2);
+  TT_ASSERT_EQ(fl_fs_unmount(fs), FL_OK);
+  fl_bdev_close(d);
+  TT_ASSERT_EQ(rs, FL_OK);
+  TT_ASSERT_EQ(st.type, FL_FT_FILE);
+  TT_ASSERT_EQ(st.size, 18);
+  TT_ASSERT_EQ(ro, FL_OK);
+  TT_ASSERT_EQ(n, 18);
+  TT_ASSERT_MEM_EQ(buf, "nom de 255 octets\n", 18);
+  TT_ASSERT_EQ(rs2, FL_OK);
+  TT_ASSERT_EQ(st2.size, 8);
+  TT_ASSERT_EQ(ro2, FL_OK);
+  TT_ASSERT_EQ(n2, 8);
+  TT_ASSERT_MEM_EQ(buf2, "profond\n", 8);
+  TT_ASSERT_EQ(rd, FL_OK);
+  TT_ASSERT_EQ(c.n, 3); /* N255, D255, lost+found */
+  TT_ASSERT(trouver(&c, n255) >= 0);
+  TT_ASSERT(trouver(&c, d255) >= 0);
+  TT_ASSERT_EQ(c.e[trouver(&c, n255)].st.size, 18);
+  TT_ASSERT_EQ(c.e[trouver(&c, d255)].st.type, FL_FT_DIR);
+  TT_ASSERT_EQ(r256, FL_EINVAL);
+}
+
+/* Périphérique qui compte les lectures touchant les octets [0, 4096) (bloc 0 du système) et fait
+ * échouer celles qui touchent le bloc ext4 de 4 Kio `panne` (0 : aucun). */
+typedef struct {
+  fl_bdev *parent;
+  int bloc0;
+  uint64_t panne;
+} compteur;
+
+static int cpt_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
+  compteur *c = d->priv;
+  uint64_t debut = lba * d->sector_size, fin = debut + (uint64_t)count * d->sector_size;
+  if (count && debut < 4096) c->bloc0++;
+  if (c->panne && debut < (c->panne + 1) * 4096 && fin > c->panne * 4096) return FL_EIO;
+  return fl_bdev_read(c->parent, lba, count, buf);
+}
+
+static const fl_bdev_ops cpt_ops = {cpt_read, rec_write, NULL, rec_destroy};
+
+static void nom_trou(char *buf, size_t cap, const char *dossier, int i) {
+  snprintf(buf, cap, "/%s/fichier-%03d-abcdefghijklmnopqrstuvwxyz", dossier, i);
+}
+
+/* /d (linéaire) et /h (htree) ont chacun un bloc logique sans bloc physique. */
+static void test_ext4_trou_de_dossier(void) {
+  fl_bdev *d = ouvrir("ext4-trou-dossier.img");
+  TT_ASSERT(d != NULL);
+  compteur c = {d, 0, 0};
+  fl_bdev cd = {&cpt_ops, d->sector_size, d->sector_count, true, &c};
+  fl_fs *fs = NULL;
+  if (fl_fs_mount(&cd, FL_CONTENT_EXT4, false, &fs) != FL_OK) fl_bdev_close(d);
+  TT_ASSERT(fs != NULL);
+  c.bloc0 = 0; /* le montage lit le superbloc ; plus rien ensuite */
+  fl_stat st;
+  collecte cl = {0};
+  int rd = fl_fs_readdir(fs, "/d", cb_collecte, &cl);
+  int rs = fl_fs_stat(fs, "/d/x", &st);
+  char p[128];
+  nom_trou(p, sizeof p, "d", 1); /* dans le bloc 0 de /d, avant le trou */
+  int rs1 = fl_fs_stat(fs, p, &st);
+  int rsd = fl_fs_stat(fs, "/d", &st);
+  collecte ch = {0};
+  int rh = fl_fs_readdir(fs, "/h", cb_collecte, &ch);
+  /* recherche par hachage : les noms de la feuille trouée → FL_ECORRUPT, les autres → FL_OK */
+  int ok = 0, corrompus = 0, autres = 0;
+  for (int i = 1; i <= 300; i++) {
+    nom_trou(p, sizeof p, "h", i);
+    int r = fl_fs_stat(fs, p, &st);
+    if (r == FL_OK) ok++;
+    else if (r == FL_ECORRUPT) corrompus++;
+    else autres++;
+  }
+  int rsh = fl_fs_stat(fs, "/h/x", &st);
+  int bloc0 = c.bloc0;
+  TT_ASSERT_EQ(fl_fs_unmount(fs), FL_OK);
+  fl_bdev_close(d);
+  TT_ASSERT_EQ(rd, FL_ECORRUPT);
+  TT_ASSERT_EQ(rs, FL_ECORRUPT);
+  TT_ASSERT_EQ(rs1, FL_OK);
+  TT_ASSERT_EQ(rsd, FL_OK);
+  TT_ASSERT_EQ(rh, FL_ECORRUPT);
+  TT_ASSERT(corrompus > 0);
+  TT_ASSERT(ok > 0);
+  TT_ASSERT_EQ(autres, 0);
+  TT_ASSERT(rsh == FL_ENOENT || rsh == FL_ECORRUPT);
+  TT_ASSERT_EQ(bloc0, 0);
+}
+
+/* Blocs physiques notés par make_fixtures.sh dans ext4-trou-dossier.blocs. */
+typedef struct {
+  uint64_t h_feuille, h_etb, d_bloc0;
+} blocs_trou;
+
+static bool lire_blocs(blocs_trou *b) {
+  FILE *f = fopen(tt_fixture("ext4-trou-dossier.blocs"), "r");
+  if (!f) return false;
+  unsigned long long x, y, z;
+  int n = fscanf(f, "h_feuille %llu h_etb %llu d_bloc0 %llu", &x, &y, &z);
+  fclose(f);
+  *b = (blocs_trou){x, y, z};
+  return n == 3 && x && y && z;
+}
+
+typedef struct {
+  int chauffe;  /* stat /h et stat /d avant la panne */
+  int readdir;  /* readdir du dossier, panne active */
+  int stat;     /* stat d'un nom du dossier, panne active */
+  int eio, autres; /* /h : stat des 300 noms (FL_OK, FL_ECORRUPT pour la feuille trouée, FL_EIO) */
+} essai_es;
+
+/* Montage neuf, chemin chauffé, puis seul le bloc `panne` échoue en lecture. */
+static essai_es essai_panne(fl_bdev *d, uint64_t panne, const char *dossier) {
+  essai_es r = {FL_EIO, -1, -1, 0, 0};
+  compteur c = {d, 0, 0};
+  fl_bdev cd = {&cpt_ops, d->sector_size, d->sector_count, true, &c};
+  fl_fs *fs = NULL;
+  if (fl_fs_mount(&cd, FL_CONTENT_EXT4, false, &fs) != FL_OK) return r;
+  fl_stat st;
+  r.chauffe = fl_fs_stat(fs, "/h", &st);
+  if (r.chauffe == FL_OK) r.chauffe = fl_fs_stat(fs, "/d", &st);
+  c.panne = panne;
+  collecte cl = {0};
+  char p[128], dir[8];
+  snprintf(dir, sizeof dir, "/%s", dossier);
+  r.readdir = fl_fs_readdir(fs, dir, cb_collecte, &cl);
+  nom_trou(p, sizeof p, dossier, 1);
+  r.stat = fl_fs_stat(fs, p, &st);
+  for (int i = 1; dossier[0] == 'h' && i <= 300; i++) {
+    nom_trou(p, sizeof p, "h", i);
+    int x = fl_fs_stat(fs, p, &st);
+    if (x == FL_EIO) r.eio++;
+    else if (x != FL_OK && x != FL_ECORRUPT) r.autres++;
+  }
+  c.panne = 0;
+  fl_fs_unmount(fs);
+  return r;
+}
+
+/* Une vraie erreur de lecture du périphérique dans un bloc de dossier reste FL_EIO (pas
+ * FL_ECORRUPT, pas FL_ENOENT), en parcours comme en recherche : feuille htree de /h, bloc d'index
+ * d'extents de /h (erreur rendue par ext4_dir_get_dblk elle-même), bloc 0 du dossier linéaire /d. */
+static void test_ext4_erreur_es_dossier(void) {
+  blocs_trou b;
+  TT_ASSERT(lire_blocs(&b));
+  fl_bdev *d = ouvrir("ext4-trou-dossier.img");
+  TT_ASSERT(d != NULL);
+  essai_es feuille = essai_panne(d, b.h_feuille, "h");
+  essai_es etb = essai_panne(d, b.h_etb, "h");
+  essai_es lin = essai_panne(d, b.d_bloc0, "d");
+  fl_stat st;
+  compteur c = {d, 0, b.d_bloc0};
+  fl_bdev cd = {&cpt_ops, d->sector_size, d->sector_count, true, &c};
+  fl_fs *fs = NULL;
+  int rx = fl_fs_mount(&cd, FL_CONTENT_EXT4, false, &fs);
+  if (rx == FL_OK) rx = fl_fs_stat(fs, "/d/x", &st); /* absent : la recherche lit le bloc 0 */
+  fl_fs_unmount(fs);
+  fl_bdev_close(d);
+  TT_ASSERT_EQ(feuille.chauffe, FL_OK);
+  TT_ASSERT_EQ(feuille.readdir, FL_EIO);
+  TT_ASSERT(feuille.eio > 0); /* les noms de la feuille en panne */
+  TT_ASSERT_EQ(feuille.autres, 0);
+  TT_ASSERT_EQ(etb.chauffe, FL_OK);
+  TT_ASSERT_EQ(etb.readdir, FL_EIO);
+  TT_ASSERT_EQ(etb.stat, FL_EIO);
+  TT_ASSERT_EQ(etb.eio, 300);
+  TT_ASSERT_EQ(lin.chauffe, FL_OK);
+  TT_ASSERT_EQ(lin.readdir, FL_EIO);
+  TT_ASSERT_EQ(lin.stat, FL_EIO);
+  TT_ASSERT_EQ(rx, FL_EIO);
+}
+
+/* lwext4 monté en écriture sur une copie en mémoire d'une image (chemin d'écriture, pas encore
+ * branché sur l'API) ; le fichier n'est jamais écrit. */
+#ifndef EFSCORRUPTED
+#define EFSCORRUPTED EUCLEAN /* défini par le correctif 0002 */
+#endif
+
+typedef struct {
+  uint8_t *img;
+  uint64_t taille;
+  int bas; /* accès touchant [0, 4096) (bloc 0 du système), hors superbloc exact [1024, 2048) */
+  int sb;  /* accès au superbloc exact [1024, 2048) */
+} memoire;
+
+static memoire g_mem;
+
+static int mem_open(struct ext4_blockdev *bd) { (void)bd; return EOK; }
+static int mem_close(struct ext4_blockdev *bd) { (void)bd; return EOK; }
+
+static int mem_acces(uint64_t blk, uint32_t cnt, uint64_t *off, size_t *len) {
+  *off = blk * 512;
+  *len = (size_t)cnt * 512;
+  if (blk > g_mem.taille / 512 || cnt > g_mem.taille / 512 - blk) return EIO;
+  if (cnt && *off == 1024 && *len == 1024) g_mem.sb++;
+  else if (cnt && *off < 4096) g_mem.bas++;
+  return EOK;
+}
+
+static int mem_bread(struct ext4_blockdev *bd, void *buf, uint64_t blk, uint32_t cnt) {
+  (void)bd;
+  uint64_t off;
+  size_t len;
+  int r = mem_acces(blk, cnt, &off, &len);
+  if (r == EOK) memcpy(buf, g_mem.img + off, len);
+  return r;
+}
+
+static int mem_bwrite(struct ext4_blockdev *bd, const void *buf, uint64_t blk, uint32_t cnt) {
+  (void)bd;
+  uint64_t off;
+  size_t len;
+  int r = mem_acces(blk, cnt, &off, &len);
+  if (r == EOK) memcpy(g_mem.img + off, buf, len);
+  return r;
+}
+
+static uint8_t g_mem_ph[512];
+static struct ext4_blockdev_iface g_mem_if = {
+    .open = mem_open, .bread = mem_bread, .bwrite = mem_bwrite, .close = mem_close,
+    .ph_bsize = 512, .ph_bbuf = g_mem_ph};
+static struct ext4_blockdev g_mem_bd = {.bdif = &g_mem_if};
+
+static bool charger(const char *nom) {
+  FILE *f = fopen(tt_fixture(nom), "rb");
+  if (!f) return false;
+  fseek(f, 0, SEEK_END);
+  long t = ftell(f);
+  fseek(f, 0, SEEK_SET);
+  g_mem.img = t > 0 ? malloc((size_t)t) : NULL;
+  bool ok = g_mem.img && fread(g_mem.img, 1, (size_t)t, f) == (size_t)t;
+  fclose(f);
+  if (!ok) {
+    free(g_mem.img);
+    g_mem.img = NULL;
+  }
+  g_mem.taille = ok ? (uint64_t)t : 0;
+  return ok;
+}
+
+/* Charge `nom` en mémoire, l'enregistre ("tt-mem") et le monte en écriture sur "/tt/".
+ * *monte : à passer à demonter_mem, quel que soit le résultat. */
+static int monter_mem(const char *nom, struct ext4_fs **fs, bool *monte) {
+  *monte = false;
+  *fs = NULL;
+  if (!charger(nom)) return ENOENT;
+  g_mem.bas = g_mem.sb = 0;
+  g_mem_if.ph_bcnt = g_mem.taille / 512;
+  g_mem_bd.part_offset = 0;
+  g_mem_bd.part_size = g_mem.taille;
+  int r = ext4_device_register(&g_mem_bd, "tt-mem");
+  if (r != EOK) return r;
+  r = ext4_mount("tt-mem", "/tt/", false);
+  if (r != EOK) {
+    ext4_device_unregister("tt-mem");
+    return r;
+  }
+  *monte = true;
+  struct ext4_sblock *sb = NULL;
+  r = ext4_get_sblock("/tt/", &sb);
+  if (r == EOK) *fs = (struct ext4_fs *)((char *)sb - offsetof(struct ext4_fs, sb));
+  g_mem.bas = g_mem.sb = 0; /* le montage lit et écrit le superbloc */
+  return r;
+}
+
+static void demonter_mem(bool monte) {
+  if (monte) {
+    ext4_umount("/tt/");
+    ext4_device_unregister("tt-mem");
+  }
+  free(g_mem.img);
+  g_mem.img = NULL;
+}
+
+/* Références d'inode du dossier `chemin` et de la racine (à rendre par ext4_fs_put_inode_ref). */
+static int refs(struct ext4_fs *fs, const char *chemin, struct ext4_inode_ref *dir,
+                struct ext4_inode_ref *racine) {
+  uint32_t ino = 0;
+  struct ext4_inode in;
+  int r = ext4_raw_inode_fill(chemin, &ino, &in);
+  if (r != EOK) return r;
+  if ((r = ext4_fs_get_inode_ref(fs, ino, dir)) != EOK) return r;
+  if ((r = ext4_fs_get_inode_ref(fs, EXT4_INODE_ROOT_INDEX, racine)) != EOK)
+    ext4_fs_put_inode_ref(dir);
+  return r;
+}
+
+/* ext4_dir_add_entry dans le dossier `chemin` : rend le premier code différent de EOK, après au
+ * plus `essais` noms (nom_fmt avec le numéro d'essai). */
+static int ajouter(struct ext4_fs *fs, const char *chemin, const char *nom_fmt, int essais) {
+  struct ext4_inode_ref parent, enfant;
+  int r = refs(fs, chemin, &parent, &enfant);
+  if (r != EOK) return r;
+  for (int i = 0; i < essais && r == EOK; i++) {
+    char nom[256];
+    snprintf(nom, sizeof nom, nom_fmt, i);
+    r = ext4_dir_add_entry(&parent, nom, (uint32_t)strlen(nom), &enfant);
+  }
+  ext4_fs_put_inode_ref(&enfant);
+  ext4_fs_put_inode_ref(&parent);
+  return r;
+}
+
+static void test_ext4_trou_de_dossier_ajout(void) {
+  struct ext4_fs *fs;
+  bool monte;
+  int rm = monter_mem("ext4-trou-dossier.img", &fs, &monte);
+  int rd = -1, rh = -1, bas = -1, sb = -1;
+  if (rm == EOK) {
+    /* nom de 200 octets : ne tient pas dans la place libre du bloc 0 de /d, l'ajout va au bloc 1 */
+    char longs[256];
+    memset(longs, 'L', 200);
+    memcpy(longs + 200, "%d", 3);
+    rd = ajouter(fs, "/tt/d", longs, 1);
+    /* htree : le hachage choisit la feuille ; on essaie des noms jusqu'à tomber sur le trou */
+    rh = ajouter(fs, "/tt/h", "nouveau-%d", 200);
+    bas = g_mem.bas;
+    sb = g_mem.sb;
+  }
+  demonter_mem(monte);
+  TT_ASSERT_EQ(rm, EOK);
+  TT_ASSERT_EQ(rd, EFSCORRUPTED);
+  TT_ASSERT_EQ(rh, EFSCORRUPTED);
+  TT_ASSERT_EQ(bas, 0);
+  TT_ASSERT_EQ(sb, 0);
+}
+
+/* Dossiers adressés par blocs (sans extents) : ext4_dir_dx_init ne doit jamais prendre le bloc 0
+ * du disque pour un bloc de dossier, ni ext4_dir_rm (qui l'appelait via ext4_trunc_dir avant le
+ * correctif 0003, et supprime maintenant un dossier vide sans index). */
+static void test_ext4_dossier_indirect_bloc0(void) {
+  struct ext4_fs *fs;
+  bool monte;
+  int rm = monter_mem("ext4-indirect.img", &fs, &monte);
+  int rx = -1, rr = -1, rv = -1, bas = -1, sb = -1;
+  if (rm == EOK) {
+    struct ext4_inode_ref dir, racine;
+    rx = refs(fs, "/tt/r", &dir, &racine);
+    if (rx == EOK) {
+      rx = ext4_dir_dx_init(&dir, &racine); /* trou au bloc logique 1 de /r */
+      ext4_fs_put_inode_ref(&racine);
+      ext4_fs_put_inode_ref(&dir);
+    }
+    rr = ext4_dir_rm("/tt/r");    /* le parcours de /r bute sur le trou */
+    rv = ext4_dir_rm("/tt/vide"); /* un seul bloc : vidé puis libéré, sans dx_init */
+    bas = g_mem.bas;
+    sb = g_mem.sb;
+  }
+  demonter_mem(monte);
+  TT_ASSERT_EQ(rm, EOK);
+  TT_ASSERT_EQ(rx, EFSCORRUPTED);
+  TT_ASSERT_EQ(rr, EFSCORRUPTED);
+  TT_ASSERT_EQ(rv, EOK);
+  TT_ASSERT_EQ(bas, 0);
+  TT_ASSERT_EQ(sb, 0);
+}
+
+/* /hostile : inode hors bornes, « / », NUL, nom vide, puis e-valide.txt. */
+static void test_ext4_entree_hostile_ignoree(void) {
+  fl_bdev *d = ouvrir("ext4-entrees-hostiles.img");
+  TT_ASSERT(d != NULL);
+  fl_fs *fs = NULL;
+  if (fl_fs_mount(d, FL_CONTENT_EXT4, false, &fs) != FL_OK) fl_bdev_close(d);
+  TT_ASSERT(fs != NULL);
+  collecte c = {0};
+  int rd = fl_fs_readdir(fs, "/hostile", cb_collecte, &c);
+  fl_stat st;
+  int rh = fl_fs_stat(fs, "/hostile/a-hors-bornes", &st);
+  int rv = fl_fs_stat(fs, "/hostile/e-valide.txt", &st);
+  fl_file *f = NULL;
+  char buf[32] = {0};
+  int ro = fl_fs_open(fs, "/hostile/a-hors-bornes", FL_O_RDONLY, &f);
+  if (ro == FL_OK) fl_file_close(f);
+  f = NULL;
+  int rov = fl_fs_open(fs, "/hostile/e-valide.txt", FL_O_RDONLY, &f);
+  int64_t n = rov == FL_OK ? fl_file_pread(f, buf, sizeof buf, 0) : -1;
+  fl_file_close(f);
+  int rvide = fl_fs_stat(fs, "/hostile/d-vide", &st);
+  TT_ASSERT_EQ(fl_fs_unmount(fs), FL_OK);
+  fl_bdev_close(d);
+  TT_ASSERT_EQ(rd, FL_OK);
+  TT_ASSERT_EQ(c.n, 1);
+  TT_ASSERT_STR_EQ(c.noms[0], "e-valide.txt");
+  TT_ASSERT_EQ(c.e[0].st.size, 13);
+  TT_ASSERT_EQ(rh, FL_ENOENT);
+  TT_ASSERT_EQ(ro, FL_ENOENT);
+  TT_ASSERT_EQ(rv, FL_OK);
+  TT_ASSERT_EQ(rov, FL_OK);
+  TT_ASSERT_EQ(n, 13);
+  TT_ASSERT_MEM_EQ(buf, "e-valide.txt\n", 13);
+  TT_ASSERT_EQ(rvide, FL_ENOENT);
+}
+
 int main(void) {
   TT_RUN(test_ext4_racine);
   TT_RUN(test_ext4_stat);
@@ -832,5 +1280,11 @@ int main(void) {
   TT_RUN(test_ext4_superbloc_hostile);
   TT_RUN(test_ext4_needs_recovery);
   TT_RUN(test_ext4_superbloc_change);
+  TT_RUN(test_ext4_nom_255);
+  TT_RUN(test_ext4_trou_de_dossier);
+  TT_RUN(test_ext4_trou_de_dossier_ajout);
+  TT_RUN(test_ext4_erreur_es_dossier);
+  TT_RUN(test_ext4_dossier_indirect_bloc0);
+  TT_RUN(test_ext4_entree_hostile_ignoree);
   TT_MAIN_END();
 }

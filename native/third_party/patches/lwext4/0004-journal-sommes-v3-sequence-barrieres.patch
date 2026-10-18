@@ -1,0 +1,242 @@
+From 5f0f9a3ee20875ad8074dacacfc41d729909107c Mon Sep 17 00:00:00 2001
+From: mawena <gamligocharles@gmail.com>
+Date: Sun, 18 Oct 2026 08:50:13 +0000
+Subject: [PATCH] =?UTF-8?q?fix:=20journal=20jbd2=20v3=20correct,=20s=C3=A9?=
+ =?UTF-8?q?quence=20conserv=C3=A9e,=20barri=C3=A8res=20(FluLuks)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Rend le journal de lwext4 récupérable par le noyau et par e2fsck après
+une coupure (phase 3, T5). Constats de l'essai du 2026-10-18
+(docs/superpowers/research/2026-10-18-essai-lwext4-ecriture/RAPPORT.md,
+csum_fix.diff) ; tests : native/tests/test_ext4_coupure.c.
+
+- Sommes jbd2 v3 : jbd_block_csum hache la séquence dans sa forme
+  big-endian du disque, et jbd_commit_csum_set stocke la somme du bloc
+  de commit en big-endian. L'amont utilisait l'ordre de l'hôte : sur une
+  machine little-endian, le noyau, e2fsck et lwext4 lui-même rejetaient
+  les transactions (« Journal transaction N was corrupt »), d'où des
+  blocs utilisés marqués libres et des compteurs de liens faux.
+- Séquence : jbd_journal_stop ne remet plus la séquence à 0 ; s_sequence
+  garde la prochaine transaction, comme jbd2. L'amont faisait repartir
+  chaque session aux identifiants (et aux emplacements) de la
+  précédente : après une coupure, d'anciennes transactions étaient
+  rejouées (fichiers dans lost+found, dossier vidé).
+- jbd_journal_stop marque le journal vide (s_start = 0) avant d'effacer
+  needs_recovery, et non après : une coupure entre les deux laisse un
+  journal vide à « rejouer », jamais des données dans un journal dit
+  propre.
+- Barrières : struct ext4_blockdev_iface gagne bflush (NULL accepté :
+  écritures durables d'emblée), appelée par ext4_block_barrier. lwext4
+  l'appelle avant le bloc de commit (descripteurs, données du journal et
+  données des fichiers écrites avant), après le bloc de commit (avant
+  toute écriture en place), avant d'écrire le superbloc du journal
+  (s_start ne dépasse une transaction qu'une fois ses blocs sur le
+  support), et à la fin de ext4_cache_flush.
+- ext4_umount libère tout (point de montage, cache, référence au
+  périphérique) même si le superbloc ne peut pas être écrit (disque
+  débranché ou mort), et rend la première erreur. L'amont gardait le
+  point de montage et son pointeur vers le périphérique de l'appelant,
+  qui ne pouvait alors ni être libéré ni remonté.
+---
+ include/ext4_blockdev.h | 11 +++++++++
+ src/ext4.c              | 14 ++++++++---
+ src/ext4_blockdev.c     |  7 ++++++
+ src/ext4_journal.c      | 54 ++++++++++++++++++++++++++++++++---------
+ 4 files changed, 71 insertions(+), 15 deletions(-)
+
+diff --git a/include/ext4_blockdev.h b/include/ext4_blockdev.h
+index 668fb05..879e54e 100644
+--- a/include/ext4_blockdev.h
++++ b/include/ext4_blockdev.h
+@@ -80,6 +80,12 @@ struct ext4_blockdev_iface {
+ 	 * @param   bdev block device.*/
+ 	int (*unlock)(struct ext4_blockdev *bdev);
+ 
++	/**@brief   Write barrier: everything written before it is on stable
++	 *          storage when it returns (e.g. SYNCHRONIZE CACHE). Not
++	 *          mandatory field: NULL means writes are durable at once.
++	 * @param   bdev block device.*/
++	int (*bflush)(struct ext4_blockdev *bdev);
++
+ 	/**@brief   Block size (bytes): physical*/
+ 	uint32_t ph_bsize;
+ 
+@@ -168,6 +174,11 @@ int ext4_block_bind_bcache(struct ext4_blockdev *bdev, struct ext4_bcache *bc);
+  * @return  standard error code*/
+ int ext4_block_fini(struct ext4_blockdev *bdev);
+ 
++/**@brief   Write barrier (@ref ext4_blockdev_iface::bflush); EOK without one.
++ * @param   bdev block device descriptor
++ * @return  standard error code*/
++int ext4_block_barrier(struct ext4_blockdev *bdev);
++
+ /**@brief   Flush data in given buffer to disk.
+  * @param   bdev block device descriptor
+  * @param   buf buffer
+diff --git a/src/ext4.c b/src/ext4.c
+index 62a81a4..2d9e8f7 100644
+--- a/src/ext4.c
++++ b/src/ext4.c
+@@ -516,17 +516,20 @@ int ext4_umount(const char *mount_point)
+ 	if (!mp)
+ 		return ENODEV;
+ 
++	/* Everything is released even when the superblock cannot be written
++	 * (disk unplugged or dead): upstream kept the mount point, its cache
++	 * and its pointer to the caller's block device, which could then
++	 * neither be freed nor mounted again. The first error is returned. */
+ 	r = ext4_fs_fini(&mp->fs);
+-	if (r != EOK)
+-		goto Finish;
+ 
+ 	mp->mounted = 0;
+ 
+ 	ext4_bcache_cleanup(mp->fs.bdev->bc);
+ 	ext4_bcache_fini_dynamic(mp->fs.bdev->bc);
+ 
+-	r = ext4_block_fini(mp->fs.bdev);
+-Finish:
++	int r2 = ext4_block_fini(mp->fs.bdev);
++	if (r == EOK)
++		r = r2;
+ 	mp->fs.bdev->fs = NULL;
+ 	return r;
+ }
+@@ -1462,6 +1465,9 @@ int ext4_cache_flush(const char *path)
+ 
+ 	EXT4_MP_LOCK(mp);
+ 	ret = ext4_block_cache_flush(mp->fs.bdev);
++	/* Barrier 4: what the cache held is on stable storage */
++	if (ret == EOK)
++		ret = ext4_block_barrier(mp->fs.bdev);
+ 	EXT4_MP_UNLOCK(mp);
+ 	return ret;
+ }
+diff --git a/src/ext4_blockdev.c b/src/ext4_blockdev.c
+index c01093a..f355b57 100644
+--- a/src/ext4_blockdev.c
++++ b/src/ext4_blockdev.c
+@@ -141,6 +141,13 @@ int ext4_block_fini(struct ext4_blockdev *bdev)
+ 	return bdev->bdif->close(bdev);
+ }
+ 
++int ext4_block_barrier(struct ext4_blockdev *bdev)
++{
++	if (!bdev->bdif->bflush)
++		return EOK;
++	return bdev->bdif->bflush(bdev);
++}
++
+ int ext4_block_flush_buf(struct ext4_blockdev *bdev, struct ext4_buf *buf)
+ {
+ 	int r;
+diff --git a/src/ext4_journal.c b/src/ext4_journal.c
+index 7874f58..74a6928 100644
+--- a/src/ext4_journal.c
++++ b/src/ext4_journal.c
+@@ -300,7 +300,9 @@ static void jbd_commit_csum_set(struct jbd_fs *jbd_fs,
+ 
+ 	header->chksum_type = 0;
+ 	header->chksum_size = 0;
+-	header->chksum[0] = jbd_commit_csum(jbd_fs, header);
++	/* Stored big-endian, like every jbd2 field (upstream stored it in
++	 * host order: commit blocks rejected by the kernel and e2fsck) */
++	header->chksum[0] = to_be32(jbd_commit_csum(jbd_fs, header));
+ }
+ 
+ #if CONFIG_META_CSUM_ENABLE
+@@ -333,8 +335,11 @@ static uint32_t jbd_block_csum(struct jbd_fs *jbd_fs, const void *buf,
+ 		/* First calculate crc32c checksum against fs uuid */
+ 		checksum = ext4_crc32c(EXT4_CRC32_INIT, jbd_fs->sb.uuid,
+ 				       sizeof(jbd_fs->sb.uuid));
+-		/* Then calculate crc32c checksum against sequence no. */
+-		checksum = ext4_crc32c(checksum, &sequence,
++		/* Then calculate crc32c checksum against sequence no., in
++		 * its big-endian on-disk form (upstream hashed it in host
++		 * order: data blocks rejected by the kernel and e2fsck) */
++		uint32_t be_seq = to_be32(sequence);
++		checksum = ext4_crc32c(checksum, &be_seq,
+ 				sizeof(uint32_t));
+ 		/* Calculate crc32c checksum against tho whole block */
+ 		checksum = ext4_crc32c(checksum, buf,
+@@ -430,6 +435,11 @@ static int jbd_write_sb(struct jbd_fs *jbd_fs)
+ {
+ 	int rc = EOK;
+ 	if (jbd_fs->dirty) {
++		/* Barrier 3: the checkpointed blocks are on stable storage
++		 * before s_start moves past their transaction */
++		rc = ext4_block_barrier(jbd_fs->bdev);
++		if (rc != EOK)
++			return rc;
+ 		rc = jbd_sb_write(jbd_fs, &jbd_fs->sb);
+ 		if (rc != EOK)
+ 			return rc;
+@@ -1430,6 +1440,22 @@ int jbd_journal_stop(struct jbd_journal *journal)
+ 			 DBG_WARN "There are still block records "
+ 			 	  "in this journal session!\n");
+ 
++	/* The journal is marked empty (s_start = 0) before needs_recovery is
++	 * cleared: a cut in between leaves an empty journal to "recover",
++	 * never data in a journal said clean. s_sequence keeps the next
++	 * transaction ID, as jbd2 does: upstream reset it to 0, so the next
++	 * session wrote its transactions with the IDs (and at the places) of
++	 * the previous one, and a cut replayed stale ones. */
++	journal->start = 0;
++	jbd_journal_write_sb(journal);
++	r = jbd_write_sb(journal->jbd_fs);
++	if (r != EOK)
++		return r;
++
++	r = ext4_block_barrier(jbd_fs->bdev);
++	if (r != EOK)
++		return r;
++
+ 	features_incompatible =
+ 		ext4_get32(&jbd_fs->inode_ref.fs->sb,
+ 			   features_incompatible);
+@@ -1437,15 +1463,8 @@ int jbd_journal_stop(struct jbd_journal *journal)
+ 	ext4_set32(&jbd_fs->inode_ref.fs->sb,
+ 			features_incompatible,
+ 			features_incompatible);
+-	r = ext4_sb_write(jbd_fs->bdev,
++	return ext4_sb_write(jbd_fs->bdev,
+ 			&jbd_fs->inode_ref.fs->sb);
+-	if (r != EOK)
+-		return r;
+-
+-	journal->start = 0;
+-	journal->trans_id = 0;
+-	jbd_journal_write_sb(journal);
+-	return jbd_write_sb(journal->jbd_fs);
+ }
+ 
+ /**@brief  Allocate a block in the journal.
+@@ -2180,10 +2199,23 @@ static int __jbd_journal_commit_trans(struct jbd_journal *journal,
+ 		goto Finish;
+ 	}
+ 
++	/* Barrier 1: descriptor, data and revoke blocks of the transaction
++	 * (and the file data written before it) are on stable storage before
++	 * the commit block */
++	rc = ext4_block_barrier(journal->jbd_fs->bdev);
++	if (rc != EOK)
++		goto Finish;
++
+ 	rc = jbd_trans_write_commit_block(trans);
+ 	if (rc != EOK)
+ 		goto Finish;
+ 
++	/* Barrier 2: the commit block is on stable storage before any block
++	 * of the transaction is written in place */
++	rc = ext4_block_barrier(journal->jbd_fs->bdev);
++	if (rc != EOK)
++		goto Finish;
++
+ 	journal->alloc_trans_id++;
+ 
+ 	/* Complete the checkpoint of buffers which are revoked. */
+-- 
+2.43.0
+

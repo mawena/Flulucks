@@ -15,12 +15,16 @@ class UnlockDialog extends StatefulWidget {
     required this.diskId,
     required this.partIndex,
     required this.partitionName,
+    this.writable = true,
   });
 
   final AppState state;
   final String diskId;
   final int partIndex;
   final String partitionName;
+
+  /// Écriture demandée (faux si « Ouvrir les disques en lecture seule » est actif).
+  final bool writable;
 
   @override
   State<UnlockDialog> createState() => _UnlockDialogState();
@@ -50,7 +54,7 @@ class _UnlockDialogState extends State<UnlockDialog> {
     String? error;
     var ok = false;
     try {
-      await widget.state.unlock(widget.diskId, widget.partIndex, pass);
+      await widget.state.unlock(widget.diskId, widget.partIndex, pass, writable: widget.writable);
       ok = true;
     } on PlatformException catch (e) {
       error = e.message ?? Fr.genericError;

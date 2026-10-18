@@ -1,0 +1,244 @@
+From 636f68f90dd7c7cb363567c66bc90e74b543561e Mon Sep 17 00:00:00 2001
+From: mawena <gamligocharles@gmail.com>
+Date: Sun, 18 Oct 2026 09:18:44 +0000
+Subject: [PATCH] =?UTF-8?q?perf:=20crc32c=20par=20tranches=20et=20instruct?=
+ =?UTF-8?q?ions=20mat=C3=A9rielles=20(FluLuks)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+L'essai du 2026-10-18 a montré que 96 % du temps d'écriture partait dans
+le crc32c octet par octet de lwext4 (ext4_crc32.c) : il couvre chaque
+bitmap, descripteur, inode et bloc de dossier écrit (phase 3, T7).
+
+ext4_crc32c garde sa signature et son résultat, au bit près, pour toute
+longueur, tout alignement et toute valeur initiale. Le chemin est choisi
+une fois, au premier appel (pthread_once) :
+- x86_64 : instruction crc32 de SSE4.2 si __builtin_cpu_supports
+  (« sse4.2 ») ;
+- arm64 (Linux, Android) : instructions crc32cb/crc32cx d'ARMv8 si
+  getauxval(AT_HWCAP) a HWCAP_CRC32, dans une fonction compilée avec
+  l'attribut target crc ;
+- sinon : tranches de 8 (slicing-by-8, 8 tables de 256 entrées
+  construites une fois à partir de la table d'origine), mots de 8 octets
+  en petit-boutiste, octet par octet ailleurs.
+
+Nouvelles fonctions, pour les tests : ext4_crc32c_sw (le chemin portable,
+quel que soit le processeur) et ext4_crc32c_impl (nom du chemin choisi).
+Tests : native/tests/test_crc32c.c (vecteurs « 123456789 » et RFC 3720,
+10 000 tampons comparés à l'algorithme d'origine, débit).
+---
+ include/ext4_crc32.h |   8 +++
+ src/ext4_crc32.c     | 168 ++++++++++++++++++++++++++++++++++++++++++-
+ 2 files changed, 175 insertions(+), 1 deletion(-)
+
+diff --git a/include/ext4_crc32.h b/include/ext4_crc32.h
+index 5f701fb..07eb813 100644
+--- a/include/ext4_crc32.h
++++ b/include/ext4_crc32.h
+@@ -61,6 +61,14 @@ uint32_t ext4_crc32(uint32_t crc, const void *buf, uint32_t size);
+  * @return	updated crc32c value*/
+ uint32_t ext4_crc32c(uint32_t crc, const void *buf, uint32_t size);
+ 
++/**@brief	crc32c by the portable path (slicing-by-8), whatever the CPU;
++ *		same result as @ref ext4_crc32c. For tests.*/
++uint32_t ext4_crc32c_sw(uint32_t crc, const void *buf, uint32_t size);
++
++/**@brief	Path used by @ref ext4_crc32c: "sse4.2", "armv8-crc" or
++ *		"tranches de 8" (slicing-by-8).*/
++const char *ext4_crc32c_impl(void);
++
+ #ifdef __cplusplus
+ }
+ #endif
+diff --git a/src/ext4_crc32.c b/src/ext4_crc32.c
+index 17ae0d0..7692df1 100644
+--- a/src/ext4_crc32.c
++++ b/src/ext4_crc32.c
+@@ -44,6 +44,10 @@
+ 
+ #include "ext4_crc32.h"
+ 
++#include <pthread.h>
++#include <stdbool.h>
++#include <string.h>
++
+ static const uint32_t crc32_tab[] = {
+ 	0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,
+ 	0xe963a535, 0x9e6495a3,	0x0edb8832, 0x79dcb8a4, 0xe0d5e91e, 0x97d2d988,
+@@ -177,9 +181,171 @@ uint32_t ext4_crc32(uint32_t crc, const void *buf, uint32_t size)
+ 	return crc32(crc, buf, size, crc32_tab);
+ }
+ 
++/*
++ * Fast crc32c (FluLuks). Byte by byte, crc32c took 96 % of the write time
++ * (it covers every bitmap, descriptor, inode and directory block written).
++ * Same results, bit for bit, as the byte-by-byte algorithm above, for any
++ * length, alignment and initial value:
++ * - slicing-by-8 (8 tables of 256 entries, built once), portable;
++ * - x86_64: SSE4.2 crc32 instruction, if the CPU has it;
++ * - arm64: ARMv8 crc32c instructions, if the CPU has them (HWCAP_CRC32).
++ * The path is chosen once, at the first call.
++ */
++
++static uint32_t crc32c_tab8[8][256];
++
++static void crc32c_tab8_init(void)
++{
++	for (int i = 0; i < 256; i++)
++		crc32c_tab8[0][i] = crc32c_tab[i];
++	for (int k = 1; k < 8; k++)
++		for (int i = 0; i < 256; i++) {
++			uint32_t c = crc32c_tab8[k - 1][i];
++			crc32c_tab8[k][i] = (c >> 8) ^ crc32c_tab[c & 0xFF];
++		}
++}
++
++static uint32_t crc32c_slice8(uint32_t crc, const void *buf, uint32_t size)
++{
++	const uint8_t *p = (const uint8_t *)buf;
++
++	while (size && ((uintptr_t)p & 7)) {
++		crc = crc32c_tab[(crc ^ *p++) & 0xFF] ^ (crc >> 8);
++		size--;
++	}
++#if defined(__BYTE_ORDER__) && __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
++	while (size >= 8) {
++		uint64_t w;
++		memcpy(&w, p, 8);
++		w ^= crc;
++		crc = crc32c_tab8[7][w & 0xFF] ^
++		      crc32c_tab8[6][(w >> 8) & 0xFF] ^
++		      crc32c_tab8[5][(w >> 16) & 0xFF] ^
++		      crc32c_tab8[4][(w >> 24) & 0xFF] ^
++		      crc32c_tab8[3][(w >> 32) & 0xFF] ^
++		      crc32c_tab8[2][(w >> 40) & 0xFF] ^
++		      crc32c_tab8[1][(w >> 48) & 0xFF] ^
++		      crc32c_tab8[0][w >> 56];
++		p += 8;
++		size -= 8;
++	}
++#endif
++	while (size--)
++		crc = crc32c_tab[(crc ^ *p++) & 0xFF] ^ (crc >> 8);
++
++	return crc;
++}
++
++#if defined(__x86_64__) && defined(__GNUC__)
++#include <nmmintrin.h>
++#define CRC32C_HW_NAME "sse4.2"
++
++__attribute__((target("sse4.2")))
++static uint32_t crc32c_hw(uint32_t crc, const void *buf, uint32_t size)
++{
++	const uint8_t *p = (const uint8_t *)buf;
++
++	while (size && ((uintptr_t)p & 7)) {
++		crc = _mm_crc32_u8(crc, *p++);
++		size--;
++	}
++	uint64_t c = crc;
++	while (size >= 8) {
++		uint64_t w;
++		memcpy(&w, p, 8);
++		c = _mm_crc32_u64(c, w);
++		p += 8;
++		size -= 8;
++	}
++	crc = (uint32_t)c;
++	while (size--)
++		crc = _mm_crc32_u8(crc, *p++);
++
++	return crc;
++}
++
++static bool crc32c_hw_ok(void)
++{
++	return __builtin_cpu_supports("sse4.2");
++}
++
++#elif defined(__aarch64__) && defined(__linux__) && defined(__GNUC__)
++#include <sys/auxv.h>
++#define CRC32C_HW_NAME "armv8-crc"
++#ifndef HWCAP_CRC32
++#define HWCAP_CRC32 (1 << 7)
++#endif
++#if defined(__clang__)
++#define CRC32C_TARGET __attribute__((target("crc")))
++#define crc32c_u8(c, v) __builtin_arm_crc32cb(c, v)
++#define crc32c_u64(c, v) __builtin_arm_crc32cd(c, v)
++#else
++#define CRC32C_TARGET __attribute__((target("+crc")))
++#define crc32c_u8(c, v) __builtin_aarch64_crc32cb(c, v)
++#define crc32c_u64(c, v) __builtin_aarch64_crc32cx(c, v)
++#endif
++
++CRC32C_TARGET
++static uint32_t crc32c_hw(uint32_t crc, const void *buf, uint32_t size)
++{
++	const uint8_t *p = (const uint8_t *)buf;
++
++	while (size && ((uintptr_t)p & 7)) {
++		crc = crc32c_u8(crc, *p++);
++		size--;
++	}
++	while (size >= 8) {
++		uint64_t w;
++		memcpy(&w, p, 8);
++		crc = crc32c_u64(crc, w);
++		p += 8;
++		size -= 8;
++	}
++	while (size--)
++		crc = crc32c_u8(crc, *p++);
++
++	return crc;
++}
++
++static bool crc32c_hw_ok(void)
++{
++	return (getauxval(AT_HWCAP) & HWCAP_CRC32) != 0;
++}
++#endif
++
++static uint32_t (*crc32c_impl)(uint32_t, const void *, uint32_t);
++static const char *crc32c_impl_name;
++static pthread_once_t crc32c_once = PTHREAD_ONCE_INIT;
++
++static void crc32c_init(void)
++{
++	crc32c_tab8_init();
++	crc32c_impl = crc32c_slice8;
++	crc32c_impl_name = "tranches de 8";
++#ifdef CRC32C_HW_NAME
++	if (crc32c_hw_ok()) {
++		crc32c_impl = crc32c_hw;
++		crc32c_impl_name = CRC32C_HW_NAME;
++	}
++#endif
++}
++
+ uint32_t ext4_crc32c(uint32_t crc, const void *buf, uint32_t size)
+ {
+-	return crc32(crc, buf, size, crc32c_tab);
++	pthread_once(&crc32c_once, crc32c_init);
++	return crc32c_impl(crc, buf, size);
++}
++
++uint32_t ext4_crc32c_sw(uint32_t crc, const void *buf, uint32_t size)
++{
++	pthread_once(&crc32c_once, crc32c_init);
++	return crc32c_slice8(crc, buf, size);
++}
++
++const char *ext4_crc32c_impl(void)
++{
++	pthread_once(&crc32c_once, crc32c_init);
++	return crc32c_impl_name;
+ }
+ 
+ /**
+-- 
+2.43.0
+

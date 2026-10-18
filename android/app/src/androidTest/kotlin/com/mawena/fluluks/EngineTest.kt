@@ -1,15 +1,20 @@
 package com.mawena.fluluks
 
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.platform.app.InstrumentationRegistry
 import com.mawena.fluluks.engine.DirEntry
 import com.mawena.fluluks.engine.EngineError
 import com.mawena.fluluks.engine.EngineError.Companion.FL_EBADPASS
 import com.mawena.fluluks.engine.EngineError.Companion.FL_EBUSY
 import com.mawena.fluluks.engine.EngineError.Companion.FL_EINVAL
+import com.mawena.fluluks.engine.EngineError.Companion.FL_EEXIST
 import com.mawena.fluluks.engine.EngineError.Companion.FL_ENOENT
+import com.mawena.fluluks.engine.EngineError.Companion.FL_ENOTEMPTY
+import com.mawena.fluluks.engine.EngineError.Companion.FL_EROFS
 import com.mawena.fluluks.engine.FileType
 import com.mawena.fluluks.engine.FsStat
 import com.mawena.fluluks.engine.NativeEngine
+import com.mawena.fluluks.engine.OpenFlags
 import com.mawena.fluluks.engine.ScanResult
 import com.mawena.fluluks.engine.VolumeStat
 import java.io.File
@@ -301,6 +306,71 @@ class EngineTest {
         assertTrue(threads.none { it.isAlive })
         assertNull(bad.get())
         assertEquals(FL_EINVAL, NativeEngine.unmount(vol, true))
+    }
+
+    /**
+     * Écriture sur une copie de ext4-rw-reel.img dans le cache de l'application, laissée en place pour
+     * tools/android/check_image.sh (e2fsck -fn sur le PC).
+     */
+    @Test
+    fun writeThenReadBack() {
+        val ctx = InstrumentationRegistry.getInstrumentation().targetContext
+        val img = File(ctx.cacheDir, "engine-ecriture.img")
+        Fixtures.file("ext4-rw-reel.img").copyTo(img, overwrite = true)
+        val size = 5 shl 20
+        val emoji = "/écrit ☀ 🚀.txt"
+        var disk = EngineError.check(NativeEngine.openImage(utf8(img.absolutePath), false))
+        try {
+            val vol = EngineError.check(NativeEngine.mount(disk, 0, null, true))
+            assertFalse(VolumeStat.parse(NativeEngine.statfs(vol)).readOnly)
+            assertEquals(0, NativeEngine.mkdir(vol, utf8("/dossier")))
+            assertEquals(FL_EEXIST, NativeEngine.mkdir(vol, utf8("/dossier")))
+
+            val f = EngineError.check(
+                NativeEngine.openFile(vol, utf8("/dossier/gros.bin"), OpenFlags.RDWR or OpenFlags.CREAT))
+            var off = 0
+            while (off < size) {
+                val len = minOf(1 shl 20, size - off)
+                assertEquals(len, NativeEngine.pwrite(f, off.toLong(), pattern(off.toLong(), len), len))
+                off += len
+            }
+            assertArrayEquals(pattern(0, size), readAll(f, 0, size))
+            assertEquals(0, NativeEngine.closeFile(f))
+
+            val e = EngineError.check(NativeEngine.openFile(vol, utf8(emoji), OpenFlags.RDWR or OpenFlags.CREAT))
+            assertEquals(5, NativeEngine.pwrite(e, 0, utf8("soleil"), 5))
+            assertEquals(0, NativeEngine.truncate(e, 4))
+            assertEquals(0, NativeEngine.closeFile(e))
+
+            assertEquals(0, NativeEngine.rename(vol, utf8("/dossier/gros.bin"), utf8("/dossier/renommé.bin")))
+            assertEquals(FL_ENOTEMPTY, NativeEngine.rmdir(vol, utf8("/dossier")))
+            val tmp = EngineError.check(NativeEngine.openFile(vol, utf8("/à-supprimer"), OpenFlags.RDWR or OpenFlags.CREAT))
+            assertEquals(0, NativeEngine.closeFile(tmp))
+            assertEquals(0, NativeEngine.unlink(vol, utf8("/à-supprimer")))
+            assertEquals(0, NativeEngine.sync(vol))
+            assertEquals(0, NativeEngine.unmount(vol, false))
+        } finally {
+            NativeEngine.closeDisk(disk)
+        }
+
+        // relecture après réouverture, en lecture seule
+        disk = open(img)
+        try {
+            val vol = EngineError.check(NativeEngine.mount(disk, 0, null))
+            assertTrue(VolumeStat.parse(NativeEngine.statfs(vol)).readOnly)
+            val names = DirEntry.parseList(NativeEngine.list(vol, utf8("/"))).map { it.name }
+            assertTrue(names.toString(), emoji.substring(1) in names)
+            assertFalse(names.toString(), "à-supprimer" in names)
+            assertEquals(4L, FsStat.parse(NativeEngine.stat(vol, utf8(emoji))).size)
+            assertEquals(size.toLong(), FsStat.parse(NativeEngine.stat(vol, utf8("/dossier/renommé.bin"))).size)
+            val f = EngineError.check(NativeEngine.openFile(vol, utf8("/dossier/renommé.bin")))
+            assertArrayEquals(pattern(0, size), readAll(f, 0, size))
+            assertEquals(FL_EROFS, NativeEngine.pwrite(f, 0, ByteArray(1), 1))
+            assertEquals(0, NativeEngine.closeFile(f))
+            assertEquals(FL_EROFS, NativeEngine.mkdir(vol, utf8("/non")))
+        } finally {
+            NativeEngine.closeDisk(disk)
+        }
     }
 
     private fun compareUtf8(a: String, b: String): Int {

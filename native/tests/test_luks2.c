@@ -1,9 +1,11 @@
 #define _DEFAULT_SOURCE
+#define _FILE_OFFSET_BITS 64
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #include "crypto/fl_crypto.h"
 #include "fluluks/blockdev.h"
 #include "fluluks/error.h"
@@ -12,6 +14,7 @@
 #include "luks/luks_internal.h"
 #include "cJSON.h"
 #include "tt.h"
+#include "luks_rt.h"
 
 #define CHUNK (1u << 20)
 
@@ -435,6 +438,38 @@ static void test_luks2_choix_entete(void) {
   mem_free(&mi);
 }
 
+/* Un en-tête avec label et sous-système (champs de l'en-tête binaire : label à 24, sous-système à 208)
+ * se déverrouille comme n'importe quel autre ; les deux copies sont re-signées. */
+static void test_luks2_label(void) {
+  memimg mi;
+  TT_ASSERT_EQ(mem_load(&mi, "whole-luks2-4k.img"), 0);
+  for (int c = 0; c < 2; c++) {
+    uint8_t *h = mi.m + (c ? HDR : 0);
+    memset(h + 24, 0, 48);
+    memcpy(h + 24, "Étiquette FluLuks", strlen("Étiquette FluLuks"));
+    memset(h + 208, 0, 48);
+    memcpy(h + 208, "sous-systeme", strlen("sous-systeme"));
+    resigner(h);
+  }
+  unlock_attendu(&mi, "pass.txt", FL_OK);
+  /* label et sous-système remplissant les 48 octets sans NUL final : aucune lecture hors champ */
+  for (int c = 0; c < 2; c++) {
+    uint8_t *h = mi.m + (c ? HDR : 0);
+    memset(h + 24, 'L', 48);
+    memset(h + 208, 'S', 48);
+    resigner(h);
+  }
+  unlock_attendu(&mi, "pass.txt", FL_OK);
+  mem_free(&mi);
+}
+
+static void test_luks2_ecriture_aller_retour(void) {
+  char copie[4096];
+  snprintf(copie, sizeof copie, "%s", tt_fixture("tmp-ecriture-aller-retour.img"));
+  aller_retour("whole-luks2-4k.img", copie);
+  unlink(copie); /* même en cas d'échec : TT_ASSERT ne fait que quitter aller_retour */
+}
+
 /* Plus grande mémoire Argon2 parmi les slots utilisables, en Kio ; 0 pour PBKDF2 ou LUKS1. */
 static void kdf_attendu(const char *nom, int partitionne, uint32_t attendu) {
   fl_bdev *d = ouvrir(nom), *s = NULL;
@@ -472,6 +507,7 @@ int main(void) {
   TT_RUN(test_luks2_priorite_et_digest);
   TT_RUN(test_luks2_slot_non_supporte_ignore);
   TT_RUN(test_luks2_magie_abimee);
+  TT_RUN(test_luks2_label);
   TT_RUN(test_luks2_choix_entete);
   TT_RUN(test_luks2_gpt_argon2id);
   TT_RUN(test_luks2_4k_argon2i);
@@ -481,5 +517,6 @@ int main(void) {
   TT_RUN(test_luks2_tronque);
   TT_RUN(test_luks_max_kdf_memory);
   TT_RUN(test_luks2_taille_dynamique_impaire);
+  TT_RUN(test_luks2_ecriture_aller_retour);
   TT_MAIN_END();
 }

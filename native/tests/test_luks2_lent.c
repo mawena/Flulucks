@@ -4,10 +4,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 #include "fluluks/blockdev.h"
 #include "fluluks/error.h"
 #include "fluluks/luks.h"
+#include "luks/luks_internal.h"
 #include "tt.h"
+#include "luks_rt.h"
 
 /* Disque aux paramètres exacts du disque réel : argon2id t=7 m=1 Gio p=4. */
 static void test_luks2_parametres_exacts(void) {
@@ -36,7 +39,16 @@ static void test_luks2_parametres_exacts(void) {
   fl_bdev_close(d);
 }
 
+/* Aller-retour d'écriture aux paramètres Argon2 exacts du vrai disque (copie sous le dossier des fixtures). */
+static void test_luks2_ecriture_aller_retour_exact(void) {
+  char copie[4096];
+  snprintf(copie, sizeof copie, "%s", tt_fixture("tmp-ecriture-exact.img"));
+  aller_retour("whole-luks2-exact.img", copie);
+  unlink(copie); /* même en cas d'échec */
+}
+
 int main(void) {
+  TT_RUN(test_luks2_ecriture_aller_retour_exact);
   TT_RUN(test_luks2_parametres_exacts);
   TT_MAIN_END();
 }

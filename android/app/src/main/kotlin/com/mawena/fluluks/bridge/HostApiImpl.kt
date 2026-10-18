@@ -35,6 +35,10 @@ class HostApiImpl(
             combine(VolumeManager.disks, VolumeManager.volumes) { d, v -> toMsgs(d, v) }
                 .collect { (d, v) -> events.onStateChanged(d, v) { /* réponse ignorée */ } }
         }
+        scope.launch {
+            combine(VolumeManager.ejecting, VolumeManager.ejectError) { e, err -> e to err }
+                .collect { (e, err) -> events.onEjectStateChanged(e, err) { /* réponse ignorée */ } }
+        }
     }
 
     fun detach(messenger: BinaryMessenger) {
@@ -52,11 +56,12 @@ class HostApiImpl(
         diskId: String,
         partIndex: Long,
         passphrase: ByteArray,
+        writable: Boolean,
         callback: (Result<VolumeMsg>) -> Unit,
     ) {
         scope.launch {
             val result = try {
-                Result.success(volumeMsg(VolumeManager.unlock(diskId, partIndex.toInt(), passphrase)))
+                Result.success(volumeMsg(VolumeManager.unlock(diskId, partIndex.toInt(), passphrase, writable)))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -68,10 +73,10 @@ class HostApiImpl(
         }
     }
 
-    override fun mountPlain(diskId: String, partIndex: Long, callback: (Result<VolumeMsg>) -> Unit) {
+    override fun mountPlain(diskId: String, partIndex: Long, writable: Boolean, callback: (Result<VolumeMsg>) -> Unit) {
         scope.launch {
             val result = try {
-                Result.success(volumeMsg(VolumeManager.mountPlain(diskId, partIndex.toInt())))
+                Result.success(volumeMsg(VolumeManager.mountPlain(diskId, partIndex.toInt(), writable)))
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
@@ -101,6 +106,15 @@ class HostApiImpl(
         }
     }
 
+    private val prefs get() = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    /** « Ouvrir les disques en lecture seule » : faux par défaut. */
+    override fun getReadOnlyPreference(): Boolean = prefs.getBoolean(PREF_READ_ONLY, false)
+
+    override fun setReadOnlyPreference(value: Boolean) = guarded {
+        prefs.edit().putBoolean(PREF_READ_ONLY, value).apply()
+    }
+
     /** Toute exception d'une méthode synchrone devient une FlutterError française (jamais de trace). */
     private inline fun guarded(block: () -> Unit) {
         try {
@@ -118,6 +132,8 @@ class HostApiImpl(
 
     companion object {
         const val MSG_NO_PARTITION = "Aucune partition reconnue"
+        private const val PREFS = "fluluks"
+        private const val PREF_READ_ONLY = "lecture_seule"
 
         internal fun toMsgs(disks: List<DiskState>, volumes: List<VolumeState>) =
             disks.map { diskMsg(it, volumes) } to volumes.map(::volumeMsg)
@@ -145,7 +161,7 @@ class HostApiImpl(
         private fun volumeMsg(v: VolumeState) = VolumeMsg(
             id = v.id, diskId = v.diskId, partIndex = v.partIndex.toLong(), title = v.title,
             totalBytes = v.totalBytes, freeBytes = v.freeBytes,
-            needsRecovery = v.needsRecovery, roReason = v.roReason,
+            needsRecovery = v.needsRecovery, roReason = v.roReason, readOnly = v.readOnly,
         )
     }
 }

@@ -1,0 +1,782 @@
+From 8d932b0932410a4a1de5202600a69b2bea1a1f3f Mon Sep 17 00:00:00 2001
+From: mawena <gamligocharles@gmail.com>
+Date: Sun, 18 Oct 2026 08:58:32 +0000
+Subject: [PATCH] =?UTF-8?q?fix:=20montage=20sobre,=20=C3=A9tat=20propre,?=
+ =?UTF-8?q?=20sommes=20bloquantes,=20csum=5Fseed=20(FluLuks)?=
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+Ce que les règles de lecture seule du § 4.2 de FluLuks demandent à
+lwext4 (phase 3, T6). Constats de l'essai du 2026-10-18
+(docs/superpowers/research/2026-10-18-essai-lwext4-ecriture/RAPPORT.md) ;
+tests : native/tests/test_ext4_politique.c.
+
+- État du superbloc : pendant un montage en écriture avec journal,
+  s_state reste « propre » (needs_recovery, posé au démarrage du journal,
+  dit que le volume est en service), comme le noyau ; sans journal, le
+  bit « propre » est retiré. L'amont posait « erreurs » (ERROR_FS) pour
+  tout montage en écriture : après une coupure, Ubuntu voyait « not clean
+  with errors ». Le démontage remet le bit « propre » sans effacer les
+  autres.
+- s_mtime et s_wtime (montage, démontage) et s_kbytes_written (octets
+  écrits pendant la session) sont tenus, comme le noyau ; l'amont ne les
+  touchait jamais.
+- Tables d'inodes : ext4_fs_get_block_group_ref ne remet plus jamais à
+  zéro la table d'un groupe INODE_UNINIT (l'amont le faisait pour chaque
+  groupe atteint, même pour y chercher un inode libre : environ 15 Go
+  d'écritures pour un disque de 1 To au premier montage). Comme le noyau
+  avec lazy_itable_init, bg_itable_unused dit quels inodes n'ont jamais
+  servi (tenu par ext4_ialloc_alloc_inode), et un inode est initialisé à
+  son allocation.
+- metadata_csum_seed : pris en charge en lecture et en écriture
+  (EXT4_FINCOM_CSUM_SEED, s_checksum_seed) ; ext4_sb_csum_seed donne la
+  graine de toutes les sommes (inodes, dossiers, index, extents, bitmaps,
+  descripteurs, attributs étendus). L'amont refusait le montage, même en
+  lecture seule (options par défaut d'e2fsprogs 1.47).
+- Sommes fausses : un inode, un bloc d'extents, un bloc de dossier ou
+  d'index, un bitmap ou un descripteur de groupe à la somme fausse rend
+  EBADMSG, sans rien modifier ; l'amont la journalisait seulement, puis
+  s'en servait (et réécrivait le bloc avec une somme juste). Un bloc
+  d'extents mal formé rend EFSCORRUPTED et non plus EIO.
+- ext4_block_get_noread ne pose lb_id qu'une fois le bloc obtenu : sur
+  une erreur d'E/S pendant le vidage du cache (écriture différée), les
+  appelants qui libèrent si lb_id est posé ne libèrent plus un tampon
+  qu'ils n'ont pas (NULL déréférencé dans read_extent_tree_block).
+- ext4_ialloc_alloc_inode passe au groupe suivant quand le compteur d'un
+  groupe dit des inodes libres et que son bitmap est plein (l'amont
+  bouclait sans fin sur le même groupe) ; ext4_ialloc_free_inode rend la
+  référence du groupe quand le bitmap ne peut pas être lu.
+---
+ include/ext4_blockdev.h |   4 ++
+ include/ext4_super.h    |   6 +++
+ include/ext4_types.h    |   8 ++-
+ src/ext4.c              |  19 ++++++++
+ src/ext4_balloc.c       |  48 +++++++++---------
+ src/ext4_blockdev.c     |  17 +++++--
+ src/ext4_dir.c          |  20 +++-----
+ src/ext4_dir_idx.c      |  66 +++++++++----------------
+ src/ext4_extent.c       |   8 ++-
+ src/ext4_fs.c           | 105 +++++++++++++---------------------------
+ src/ext4_ialloc.c       |  28 +++++++----
+ src/ext4_super.c        |   7 +++
+ src/ext4_xattr.c        |   2 +-
+ 13 files changed, 169 insertions(+), 169 deletions(-)
+
+diff --git a/include/ext4_blockdev.h b/include/ext4_blockdev.h
+index 879e54e..d62c081 100644
+--- a/include/ext4_blockdev.h
++++ b/include/ext4_blockdev.h
+@@ -135,6 +135,10 @@ struct ext4_blockdev {
+ 	struct ext4_fs *fs;
+ 
+ 	void *journal;
++
++	/**@brief   Bytes written to the device since the mount (for
++	 *          s_kbytes_written).*/
++	uint64_t written_bytes;
+ };
+ 
+ /**@brief   Static initialization of the block device.*/
+diff --git a/include/ext4_super.h b/include/ext4_super.h
+index 1b563da..442b436 100644
+--- a/include/ext4_super.h
++++ b/include/ext4_super.h
+@@ -211,6 +211,12 @@ int ext4_sb_read(struct ext4_blockdev *bdev, struct ext4_sblock *s);
+  * @return  true if OK*/
+ bool ext4_sb_check(struct ext4_sblock *s);
+ 
++/**@brief   Seed of the metadata checksums: s_checksum_seed with the
++ *          csum_seed feature, crc32c(~0, uuid) otherwise.
++ * @param   s superblock descriptor
++ * @return  seed*/
++uint32_t ext4_sb_csum_seed(struct ext4_sblock *s);
++
+ /**@brief   Superblock presence in block group.
+  * @param   s superblock descriptor
+  * @param   block_group block group id
+diff --git a/include/ext4_types.h b/include/ext4_types.h
+index c7f7694..ebbf9e5 100644
+--- a/include/ext4_types.h
++++ b/include/ext4_types.h
+@@ -174,7 +174,9 @@ struct ext4_sblock {
+ 	uint8_t  encrypt_algos[4];	/* Encryption algorithms in use  */
+ 	uint8_t  encrypt_pw_salt[16];	/* Salt used for string2key algorithm */
+ 	uint32_t lpf_ino;		/* Location of the lost+found inode */
+-	uint32_t padding[100];	/* Padding to the end of the block */
++	uint32_t prj_quota_inum;	/* inode for tracking project quota */
++	uint32_t checksum_seed;	/* crc32c(uuid) if csum_seed set */
++	uint32_t padding[98];	/* Padding to the end of the block */
+ 	uint32_t checksum;		/* crc32c(superblock) */
+ };
+ 
+@@ -247,6 +249,8 @@ struct ext4_sblock {
+ #define EXT4_FINCOM_EA_INODE 0x0400	 /* EA in inode */
+ #define EXT4_FINCOM_DIRDATA 0x1000	  /* data in dirent */
+ #define EXT4_FINCOM_BG_USE_META_CSUM 0x2000 /* use crc32c for bg */
++/* The kernel name of 0x2000: metadata checksum seed in s_checksum_seed */
++#define EXT4_FINCOM_CSUM_SEED 0x2000
+ #define EXT4_FINCOM_LARGEDIR 0x4000	 /* >2GB or 3-lvl htree */
+ #define EXT4_FINCOM_INLINE_DATA 0x8000      /* data in inode */
+ 
+@@ -281,7 +285,7 @@ struct ext4_sblock {
+ #define EXT4_SUPPORTED_FINCOM                              \
+ 	(EXT4_FINCOM_FILETYPE | EXT4_FINCOM_META_BG |      \
+ 	 EXT4_FINCOM_EXTENTS | EXT4_FINCOM_FLEX_BG |       \
+-	 EXT4_FINCOM_64BIT)
++	 EXT4_FINCOM_64BIT | EXT4_FINCOM_CSUM_SEED)
+ 
+ #define EXT4_SUPPORTED_FRO_COM                             \
+ 	(EXT4_FRO_COM_SPARSE_SUPER |                       \
+diff --git a/src/ext4.c b/src/ext4.c
+index 2d9e8f7..5eb6633 100644
+--- a/src/ext4.c
++++ b/src/ext4.c
+@@ -466,12 +466,22 @@ int ext4_mount(const char *dev_name, const char *mount_point,
+ 	if (r != EOK)
+ 		return r;
+ 
++	bd->written_bytes = 0;
+ 	r = ext4_fs_init(&mp->fs, bd, read_only);
+ 	if (r != EOK) {
+ 		ext4_block_fini(bd);
+ 		return r;
+ 	}
+ 
++	/* s_mtime and s_wtime, like the kernel (upstream never set them):
++	 * written with the superblock by ext4_journal_start, and again at
++	 * ext4_umount. */
++	if (!mp->fs.read_only && s_policy_set) {
++		uint32_t now = (uint32_t)s_policy.now();
++		ext4_set32(&mp->fs.sb, mount_time, now);
++		ext4_set32(&mp->fs.sb, write_time, now);
++	}
++
+ 	bsize = ext4_sb_get_block_size(&mp->fs.sb);
+ 	ext4_block_set_lb_size(bd, bsize);
+ 	bc = &mp->bc;
+@@ -520,6 +530,15 @@ int ext4_umount(const char *mount_point)
+ 	 * (disk unplugged or dead): upstream kept the mount point, its cache
+ 	 * and its pointer to the caller's block device, which could then
+ 	 * neither be freed nor mounted again. The first error is returned. */
++	/* s_wtime and s_kbytes_written, like the kernel */
++	if (!mp->fs.read_only) {
++		if (s_policy_set)
++			ext4_set32(&mp->fs.sb, write_time,
++				   (uint32_t)s_policy.now());
++		mp->fs.sb.kbytes_written = to_le64(
++			to_le64(mp->fs.sb.kbytes_written) +
++			mp->fs.bdev->written_bytes / 1024);
++	}
+ 	r = ext4_fs_fini(&mp->fs);
+ 
+ 	mp->mounted = 0;
+diff --git a/src/ext4_balloc.c b/src/ext4_balloc.c
+index 7984e7c..b09bc3d 100644
+--- a/src/ext4_balloc.c
++++ b/src/ext4_balloc.c
+@@ -92,8 +92,7 @@ static uint32_t ext4_balloc_bitmap_csum(struct ext4_sblock *sb,
+ 		uint32_t blocks_per_group = ext4_get32(sb, blocks_per_group);
+ 
+ 		/* First calculate crc32 checksum against fs uuid */
+-		checksum = ext4_crc32c(EXT4_CRC32_INIT, sb->uuid,
+-				sizeof(sb->uuid));
++		checksum = ext4_sb_csum_seed(sb);
+ 		/* Then calculate crc32 checksum against block_group_desc */
+ 		checksum = ext4_crc32c(checksum, bitmap, blocks_per_group / 8);
+ 	}
+@@ -178,10 +177,11 @@ int ext4_balloc_free_block(struct ext4_inode_ref *inode_ref, ext4_fsblk_t baddr)
+ 	}
+ 
+ 	if (!ext4_balloc_verify_bitmap_csum(sb, bg, bitmap_block.data)) {
+-		ext4_dbg(DEBUG_BALLOC,
+-			DBG_WARN "Bitmap checksum failed."
+-			"Group: %" PRIu32"\n",
+-			bg_ref.index);
++		/* A bad checksum is a corruption: the bitmap is never
++		 * modified (upstream only logged it) */
++		ext4_block_set(bg_ref.fs->bdev, &bitmap_block);
++		ext4_fs_put_block_group_ref(&bg_ref);
++		return EBADMSG;
+ 	}
+ 
+ 	/* Modify bitmap */
+@@ -279,10 +279,11 @@ int ext4_balloc_free_blocks(struct ext4_inode_ref *inode_ref,
+ 		}
+ 
+ 		if (!ext4_balloc_verify_bitmap_csum(sb, bg, blk.data)) {
+-			ext4_dbg(DEBUG_BALLOC,
+-				DBG_WARN "Bitmap checksum failed."
+-				"Group: %" PRIu32"\n",
+-				bg_ref.index);
++			/* A bad checksum is a corruption: the bitmap is never
++			 * modified (upstream only logged it) */
++			ext4_block_set(bg_ref.fs->bdev, &blk);
++			ext4_fs_put_block_group_ref(&bg_ref);
++			return EBADMSG;
+ 		}
+ 		uint32_t free_cnt;
+ 		free_cnt = ext4_sb_get_block_size(sb) * 8 - idx_in_bg_first;
+@@ -400,10 +401,11 @@ int ext4_balloc_alloc_block(struct ext4_inode_ref *inode_ref,
+ 	}
+ 
+ 	if (!ext4_balloc_verify_bitmap_csum(sb, bg, b.data)) {
+-		ext4_dbg(DEBUG_BALLOC,
+-			DBG_WARN "Bitmap checksum failed."
+-			"Group: %" PRIu32"\n",
+-			bg_ref.index);
++		/* A bad checksum is a corruption: the bitmap is never
++		 * modified (upstream only logged it) */
++		ext4_block_set(bg_ref.fs->bdev, &b);
++		ext4_fs_put_block_group_ref(&bg_ref);
++		return EBADMSG;
+ 	}
+ 
+ 	/* Check if goal is free */
+@@ -502,10 +504,11 @@ goal_failed:
+ 		}
+ 
+ 		if (!ext4_balloc_verify_bitmap_csum(sb, bg, b.data)) {
+-			ext4_dbg(DEBUG_BALLOC,
+-				DBG_WARN "Bitmap checksum failed."
+-				"Group: %" PRIu32"\n",
+-				bg_ref.index);
++			/* A bad checksum is a corruption: the bitmap is never
++			 * modified (upstream only logged it) */
++			ext4_block_set(bg_ref.fs->bdev, &b);
++			ext4_fs_put_block_group_ref(&bg_ref);
++			return EBADMSG;
+ 		}
+ 
+ 		/* Compute indexes */
+@@ -612,10 +615,11 @@ int ext4_balloc_try_alloc_block(struct ext4_inode_ref *inode_ref,
+ 	}
+ 
+ 	if (!ext4_balloc_verify_bitmap_csum(sb, bg_ref.block_group, b.data)) {
+-		ext4_dbg(DEBUG_BALLOC,
+-			DBG_WARN "Bitmap checksum failed."
+-			"Group: %" PRIu32"\n",
+-			bg_ref.index);
++		/* A bad checksum is a corruption: the bitmap is never
++		 * modified (upstream only logged it) */
++		ext4_block_set(bg_ref.fs->bdev, &b);
++		ext4_fs_put_block_group_ref(&bg_ref);
++		return EBADMSG;
+ 	}
+ 
+ 	/* Check if block is free */
+diff --git a/src/ext4_blockdev.c b/src/ext4_blockdev.c
+index f355b57..aebf8a5 100644
+--- a/src/ext4_blockdev.c
++++ b/src/ext4_blockdev.c
+@@ -81,6 +81,8 @@ static int ext4_bdif_bwrite(struct ext4_blockdev *bdev, const void *buf,
+ 	ext4_bdif_lock(bdev);
+ 	int r = bdev->bdif->bwrite(bdev, buf, blk_id, blk_cnt);
+ 	bdev->bdif->bwrite_ctr++;
++	if (r == EOK)
++		bdev->written_bytes += (uint64_t)blk_cnt * bdev->bdif->ph_bsize;
+ 	ext4_bdif_unlock(bdev);
+ 	return r;
+ }
+@@ -231,16 +233,23 @@ int ext4_block_get_noread(struct ext4_blockdev *bdev, struct ext4_block *b,
+ 	if (!(lba < bdev->lg_bcnt))
+ 		return ENXIO;
+ 
+-	b->lb_id = lba;
+-
+ 	/*If cache is full we have to (flush and) drop it anyway :(*/
+ 	r = ext4_block_cache_shake(bdev);
+-	if (r != EOK)
++	if (r != EOK) {
++		/* No block is held: lb_id stays 0, so that callers releasing
++		 * on error (if (b->lb_id) ext4_block_set) do not free a
++		 * buffer they never got (upstream set lb_id first: NULL
++		 * dereference on an I/O error with the write-back cache) */
++		b->lb_id = 0;
+ 		return r;
++	}
+ 
++	b->lb_id = lba;
+ 	r = ext4_bcache_alloc(bdev->bc, b, &is_new);
+-	if (r != EOK)
++	if (r != EOK) {
++		b->lb_id = 0;
+ 		return r;
++	}
+ 
+ 	if (!b->data)
+ 		return ENOMEM;
+diff --git a/src/ext4_dir.c b/src/ext4_dir.c
+index 994bac8..f8c62ee 100644
+--- a/src/ext4_dir.c
++++ b/src/ext4_dir.c
+@@ -86,7 +86,7 @@ static uint32_t ext4_dir_csum(struct ext4_inode_ref *inode_ref,
+ 	uint32_t ino_gen = to_le32(ext4_inode_get_generation(inode_ref->inode));
+ 
+ 	/* First calculate crc32 checksum against fs uuid */
+-	csum = ext4_crc32c(EXT4_CRC32_INIT, sb->uuid, sizeof(sb->uuid));
++	csum = ext4_sb_csum_seed(sb);
+ 	/* Then calculate crc32 checksum against inode number
+ 	 * and inode generation */
+ 	csum = ext4_crc32c(csum, &ino_index, sizeof(ino_index));
+@@ -394,12 +394,9 @@ int ext4_dir_add_entry(struct ext4_inode_ref *parent, const char *name,
+ 			return r;
+ 
+ 		if (!ext4_dir_csum_verify(parent, (void *)block.data)) {
+-			ext4_dbg(DEBUG_DIR,
+-				 DBG_WARN "Leaf block checksum failed."
+-				 "Inode: %" PRIu32", "
+-				 "Block: %" PRIu32"\n",
+-				 parent->index,
+-				 iblock);
++			/* A bad checksum is a corruption (upstream only logged it) */
++			ext4_block_set(fs->bdev, &block);
++			return EBADMSG;
+ 		}
+ 
+ 		/* If adding is successful, function can finish */
+@@ -498,12 +495,9 @@ int ext4_dir_find_entry(struct ext4_dir_search_result *result,
+ 			return r;
+ 
+ 		if (!ext4_dir_csum_verify(parent, (void *)b.data)) {
+-			ext4_dbg(DEBUG_DIR,
+-				 DBG_WARN "Leaf block checksum failed."
+-				 "Inode: %" PRIu32", "
+-				 "Block: %" PRIu32"\n",
+-				 parent->index,
+-				 iblock);
++			/* A bad checksum is a corruption (upstream only logged it) */
++			ext4_block_set(parent->fs->bdev, &b);
++			return EBADMSG;
+ 		}
+ 
+ 		/* Try to find entry in block */
+diff --git a/src/ext4_dir_idx.c b/src/ext4_dir_idx.c
+index 1d022d3..e905f74 100644
+--- a/src/ext4_dir_idx.c
++++ b/src/ext4_dir_idx.c
+@@ -227,7 +227,7 @@ static uint32_t ext4_dir_dx_checksum(struct ext4_inode_ref *inode_ref, void *de,
+ 		orig_cum = t->checksum;
+ 		t->checksum = 0;
+ 		/* First calculate crc32 checksum against fs uuid */
+-		csum = ext4_crc32c(EXT4_CRC32_INIT, sb->uuid, sizeof(sb->uuid));
++		csum = ext4_sb_csum_seed(sb);
+ 		/* Then calculate crc32 checksum against inode number
+ 		 * and inode generation */
+ 		csum = ext4_crc32c(csum, &ino_index, sizeof(ino_index));
+@@ -666,12 +666,9 @@ static int ext4_dir_dx_get_leaf(struct ext4_hash_info *hinfo,
+ 		}
+ 
+ 		if (!ext4_dir_dx_csum_verify(inode_ref, (void *)tmp_blk->data)) {
+-			ext4_dbg(DEBUG_DIR_IDX,
+-					DBG_WARN "HTree checksum failed."
+-					"Inode: %" PRIu32", "
+-					"Block: %" PRIu32"\n",
+-					inode_ref->index,
+-					n_blk);
++			/* A bad checksum is a corruption (upstream only logged it) */
++			ext4_block_set(inode_ref->fs->bdev, tmp_blk);
++			return EBADMSG;
+ 		}
+ 
+ 		++tmp_dx_blk;
+@@ -734,12 +731,9 @@ static int ext4_dir_dx_next_block(struct ext4_inode_ref *inode_ref,
+ 			return r;
+ 
+ 		if (!ext4_dir_dx_csum_verify(inode_ref, (void *)b.data)) {
+-			ext4_dbg(DEBUG_DIR_IDX,
+-					DBG_WARN "HTree checksum failed."
+-					"Inode: %" PRIu32", "
+-					"Block: %" PRIu32"\n",
+-					inode_ref->index,
+-					blk);
++			/* A bad checksum is a corruption (upstream only logged it) */
++			ext4_block_set(inode_ref->fs->bdev, &b);
++			return EBADMSG;
+ 		}
+ 
+ 		p++;
+@@ -777,12 +771,9 @@ int ext4_dir_dx_find_entry(struct ext4_dir_search_result *result,
+ 		return rc;
+ 
+ 	if (!ext4_dir_dx_csum_verify(inode_ref, (void *)root_block.data)) {
+-		ext4_dbg(DEBUG_DIR_IDX,
+-			 DBG_WARN "HTree root checksum failed."
+-			 "Inode: %" PRIu32", "
+-			 "Block: %" PRIu32"\n",
+-			 inode_ref->index,
+-			 (uint32_t)0);
++		/* A bad checksum is a corruption (upstream only logged it) */
++		ext4_block_set(fs->bdev, &root_block);
++		return EBADMSG;
+ 	}
+ 
+ 	/* Initialize hash info (compute hash value) */
+@@ -826,12 +817,10 @@ int ext4_dir_dx_find_entry(struct ext4_dir_search_result *result,
+ 			goto cleanup;
+ 
+ 		if (!ext4_dir_csum_verify(inode_ref, (void *)b.data)) {
+-			ext4_dbg(DEBUG_DIR_IDX,
+-				 DBG_WARN "HTree leaf block checksum failed."
+-				 "Inode: %" PRIu32", "
+-				 "Block: %" PRIu32"\n",
+-				 inode_ref->index,
+-				 leaf_blk_idx);
++			/* A bad checksum is a corruption (upstream only logged it) */
++			ext4_block_set(fs->bdev, &b);
++			rc = EBADMSG;
++			goto cleanup;
+ 		}
+ 
+ 		/* Linear search inside block */
+@@ -1323,12 +1312,9 @@ int ext4_dir_dx_add_entry(struct ext4_inode_ref *parent,
+ 		return r;
+ 
+ 	if (!ext4_dir_dx_csum_verify(parent, (void*)root_blk.data)) {
+-		ext4_dbg(DEBUG_DIR_IDX,
+-			 DBG_WARN "HTree root checksum failed."
+-			 "Inode: %" PRIu32", "
+-			 "Block: %" PRIu32"\n",
+-			 parent->index,
+-			 (uint32_t)0);
++		/* A bad checksum is a corruption (upstream only logged it) */
++		ext4_block_set(fs->bdev, &root_blk);
++		return EBADMSG;
+ 	}
+ 
+ 	/* Initialize hinfo structure (mainly compute hash) */
+@@ -1376,12 +1362,9 @@ int ext4_dir_dx_add_entry(struct ext4_inode_ref *parent,
+ 		goto release_index;
+ 
+ 	if (!ext4_dir_csum_verify(parent,(void *)target_block.data)) {
+-		ext4_dbg(DEBUG_DIR_IDX,
+-				DBG_WARN "HTree leaf block checksum failed."
+-				"Inode: %" PRIu32", "
+-				"Block: %" PRIu32"\n",
+-				parent->index,
+-				leaf_block_idx);
++		/* A bad checksum is a corruption (upstream only logged it) */
++		r = EBADMSG;
++		goto release_target_index;
+ 	}
+ 
+ 	/* Check if insert operation passed */
+@@ -1455,12 +1438,9 @@ int ext4_dir_dx_reset_parent_inode(struct ext4_inode_ref *dir,
+ 		return rc;
+ 
+ 	if (!ext4_dir_dx_csum_verify(dir, (void *)block.data)) {
+-		ext4_dbg(DEBUG_DIR_IDX,
+-			 DBG_WARN "HTree root checksum failed."
+-			 "Inode: %" PRIu32", "
+-			 "Block: %" PRIu32"\n",
+-			 dir->index,
+-			 (uint32_t)0);
++		/* A bad checksum is a corruption (upstream only logged it) */
++		ext4_block_set(dir->fs->bdev, &block);
++		return EBADMSG;
+ 	}
+ 
+ 	/* Initialize pointers to data structures */
+diff --git a/src/ext4_extent.c b/src/ext4_extent.c
+index 130961d..dd09f9f 100644
+--- a/src/ext4_extent.c
++++ b/src/ext4_extent.c
+@@ -663,7 +663,7 @@ static uint32_t ext4_ext_block_csum(struct ext4_inode_ref *inode_ref,
+ 		    to_le32(ext4_inode_get_generation(inode_ref->inode));
+ 		/* First calculate crc32 checksum against fs uuid */
+ 		checksum =
+-		    ext4_crc32c(EXT4_CRC32_INIT, sb->uuid, sizeof(sb->uuid));
++		    ext4_sb_csum_seed(sb);
+ 		/* Then calculate crc32 checksum against inode number
+ 		 * and inode generation */
+ 		checksum = ext4_crc32c(checksum, &ino_index, sizeof(ino_index));
+@@ -757,10 +757,13 @@ static int ext4_ext_check(struct ext4_inode_ref *inode_ref,
+ 	if (ext4_sb_feature_ro_com(sb, EXT4_FRO_COM_METADATA_CSUM)) {
+ 		if (tail->et_checksum !=
+ 		    to_le32(ext4_ext_block_csum(inode_ref, eh))) {
++			/* A bad checksum is a corruption (upstream only
++			 * logged it) */
+ 			ext4_dbg(DEBUG_EXTENT,
+ 				 DBG_WARN "Extent block checksum failed."
+ 					  "Blocknr: %" PRIu64 "\n",
+ 				 pblk);
++			return EBADMSG;
+ 		}
+ 	}
+ 
+@@ -770,7 +773,8 @@ corrupted:
+ 	ext4_dbg(DEBUG_EXTENT, "Bad extents B+ tree block: %s. "
+ 			       "Blocknr: %" PRId64 "\n",
+ 		 error_msg, pblk);
+-	return EIO;
++	/* A malformed block is a corruption, not a device error */
++	return EFSCORRUPTED;
+ }
+ 
+ static int read_extent_tree_block(struct ext4_inode_ref *inode_ref,
+diff --git a/src/ext4_fs.c b/src/ext4_fs.c
+index cd9cf98..88346f7 100644
+--- a/src/ext4_fs.c
++++ b/src/ext4_fs.c
+@@ -110,14 +110,21 @@ int ext4_fs_init(struct ext4_fs *fs, struct ext4_blockdev *bdev,
+ 
+ 
+ 	if (!fs->read_only) {
+-		/* Mark system as mounted */
+-		ext4_set16(&fs->sb, state, EXT4_SUPERBLOCK_STATE_ERROR_FS);
+-		r = ext4_sb_write(fs->bdev, &fs->sb);
+-		if (r != EOK)
+-			return r;
++		/* Mark system as mounted, as the kernel does: with a journal,
++		 * the state stays "clean" (needs_recovery, set when the journal
++		 * starts, tells that the volume is in use); without one, it is
++		 * "not clean". Upstream set "errors" (ERROR_FS) for every
++		 * read-write mount: after a cut, Ubuntu saw "not clean with
++		 * errors". */
++		if (!ext4_sb_feature_com(&fs->sb, EXT4_FCOM_HAS_JOURNAL))
++			ext4_set16(&fs->sb, state, ext4_get16(&fs->sb, state) &
++				   ~EXT4_SUPERBLOCK_STATE_VALID_FS);
+ 
+ 		/*Update mount count*/
+ 		ext4_set16(&fs->sb, mount_count, ext4_get16(&fs->sb, mount_count) + 1);
++		r = ext4_sb_write(fs->bdev, &fs->sb);
++		if (r != EOK)
++			return r;
+ 	}
+ 
+ 	return r;
+@@ -127,11 +134,12 @@ int ext4_fs_fini(struct ext4_fs *fs)
+ {
+ 	ext4_assert(fs);
+ 
+-	/*Set superblock state*/
+-	ext4_set16(&fs->sb, state, EXT4_SUPERBLOCK_STATE_VALID_FS);
+-
+-	if (!fs->read_only)
++	if (!fs->read_only) {
++		/*Set superblock state*/
++		ext4_set16(&fs->sb, state, ext4_get16(&fs->sb, state) |
++			   EXT4_SUPERBLOCK_STATE_VALID_FS);
+ 		return ext4_sb_write(fs->bdev, &fs->sb);
++	}
+ 
+ 	return EOK;
+ }
+@@ -422,48 +430,6 @@ static int ext4_fs_init_inode_bitmap(struct ext4_block_group_ref *bg_ref)
+ 	return ext4_block_set(bg_ref->fs->bdev, &b);
+ }
+ 
+-/**@brief Initialize i-node table in block group.
+- * @param bg_ref Reference to block group
+- * @return Error code
+- */
+-static int ext4_fs_init_inode_table(struct ext4_block_group_ref *bg_ref)
+-{
+-	struct ext4_sblock *sb = &bg_ref->fs->sb;
+-	struct ext4_bgroup *bg = bg_ref->block_group;
+-
+-	uint32_t inode_size = ext4_get16(sb, inode_size);
+-	uint32_t block_size = ext4_sb_get_block_size(sb);
+-	uint32_t inodes_per_block = block_size / inode_size;
+-	uint32_t inodes_in_group = ext4_inodes_in_group_cnt(sb, bg_ref->index);
+-	uint32_t table_blocks = inodes_in_group / inodes_per_block;
+-	ext4_fsblk_t fblock;
+-
+-	if (inodes_in_group % inodes_per_block)
+-		table_blocks++;
+-
+-	/* Compute initialization bounds */
+-	ext4_fsblk_t first_block = ext4_bg_get_inode_table_first_block(bg, sb);
+-
+-	ext4_fsblk_t last_block = first_block + table_blocks - 1;
+-
+-	/* Initialization of all itable blocks */
+-	for (fblock = first_block; fblock <= last_block; ++fblock) {
+-		struct ext4_block b;
+-		int rc = ext4_trans_block_get_noread(bg_ref->fs->bdev, &b, fblock);
+-		if (rc != EOK)
+-			return rc;
+-
+-		memset(b.data, 0, block_size);
+-		ext4_trans_set_block_dirty(b.buf);
+-
+-		rc = ext4_block_set(bg_ref->fs->bdev, &b);
+-		if (rc != EOK)
+-			return rc;
+-	}
+-
+-	return EOK;
+-}
+-
+ static ext4_fsblk_t ext4_fs_get_descriptor_block(struct ext4_sblock *s,
+ 					     uint32_t bgid,
+ 					     uint32_t dsc_per_block)
+@@ -507,8 +473,7 @@ static uint16_t ext4_fs_bg_checksum(struct ext4_sblock *sb, uint32_t bgid,
+ 		bg->checksum = 0;
+ 
+ 		/* First calculate crc32 checksum against fs uuid */
+-		checksum = ext4_crc32c(EXT4_CRC32_INIT, sb->uuid,
+-				sizeof(sb->uuid));
++		checksum = ext4_sb_csum_seed(sb);
+ 		/* Then calculate crc32 checksum against bgid */
+ 		checksum = ext4_crc32c(checksum, &le32_bgid, sizeof(bgid));
+ 		/* Finally calculate crc32 checksum against block_group_desc */
+@@ -595,10 +560,10 @@ int ext4_fs_get_block_group_ref(struct ext4_fs *fs, uint32_t bgid,
+ 	struct ext4_bgroup *bg = ref->block_group;
+ 
+ 	if (!ext4_fs_verify_bg_csum(&fs->sb, bgid, bg)) {
+-		ext4_dbg(DEBUG_FS,
+-			 DBG_WARN "Block group descriptor checksum failed."
+-			 "Block group index: %" PRIu32"\n",
+-			 bgid);
++		/* A bad checksum is a corruption (upstream only logged it,
++		 * then trusted the descriptor) */
++		ext4_block_set(fs->bdev, &ref->block);
++		return EBADMSG;
+ 	}
+ 
+ 	if (ext4_bg_has_flag(bg, EXT4_BLOCK_GROUP_BLOCK_UNINIT)) {
+@@ -620,15 +585,13 @@ int ext4_fs_get_block_group_ref(struct ext4_fs *fs, uint32_t bgid,
+ 
+ 		ext4_bg_clear_flag(bg, EXT4_BLOCK_GROUP_INODE_UNINIT);
+ 
+-		if (!ext4_bg_has_flag(bg, EXT4_BLOCK_GROUP_ITABLE_ZEROED)) {
+-			rc = ext4_fs_init_inode_table(ref);
+-			if (rc != EOK) {
+-				ext4_block_set(fs->bdev, &ref->block);
+-				return rc;
+-			}
+-
+-			ext4_bg_set_flag(bg, EXT4_BLOCK_GROUP_ITABLE_ZEROED);
+-		}
++		/* The inode table is never zeroed here (upstream did, for
++		 * every such group reached, even just to look for a free inode:
++		 * about 15 GB of writes for a 1 TB disk at the first mount).
++		 * As the kernel does with lazy_itable_init, bg_itable_unused
++		 * tells which inodes were never used (kept by
++		 * ext4_ialloc_alloc_inode), and a new inode is initialized on
++		 * allocation (ext4_fs_alloc_inode). */
+ 
+ 		ref->dirty = true;
+ 	}
+@@ -673,8 +636,7 @@ static uint32_t ext4_fs_inode_checksum(struct ext4_inode_ref *inode_ref)
+ 		ext4_inode_set_csum(sb, inode_ref->inode, 0);
+ 
+ 		/* First calculate crc32 checksum against fs uuid */
+-		checksum = ext4_crc32c(EXT4_CRC32_INIT, sb->uuid,
+-				       sizeof(sb->uuid));
++		checksum = ext4_sb_csum_seed(sb);
+ 		/* Then calculate crc32 checksum against inode number
+ 		 * and inode generation */
+ 		checksum = ext4_crc32c(checksum, &ino_index, sizeof(ino_index));
+@@ -782,10 +744,9 @@ __ext4_fs_get_inode_ref(struct ext4_fs *fs, uint32_t index,
+ 	ref->dirty = false;
+ 
+ 	if (initialized && !ext4_fs_verify_inode_csum(ref)) {
+-		ext4_dbg(DEBUG_FS,
+-			DBG_WARN "Inode checksum failed."
+-			"Inode: %" PRIu32"\n",
+-			ref->index);
++		/* A bad checksum is a corruption (upstream only logged it) */
++		ext4_block_set(fs->bdev, &ref->block);
++		return EBADMSG;
+ 	}
+ 
+ 	return EOK;
+diff --git a/src/ext4_ialloc.c b/src/ext4_ialloc.c
+index f2c796f..b478437 100644
+--- a/src/ext4_ialloc.c
++++ b/src/ext4_ialloc.c
+@@ -100,7 +100,7 @@ static uint32_t ext4_ialloc_bitmap_csum(struct ext4_sblock *sb,	void *bitmap)
+ 			ext4_get32(sb, inodes_per_group);
+ 
+ 		/* First calculate crc32 checksum against fs uuid */
+-		csum = ext4_crc32c(EXT4_CRC32_INIT, sb->uuid, sizeof(sb->uuid));
++		csum = ext4_sb_csum_seed(sb);
+ 		/* Then calculate crc32 checksum against inode bitmap */
+ 		csum = ext4_crc32c(csum, bitmap, (inodes_per_group + 7) / 8);
+ 	}
+@@ -175,14 +175,17 @@ int ext4_ialloc_free_inode(struct ext4_fs *fs, uint32_t index, bool is_dir)
+ 
+ 	struct ext4_block b;
+ 	rc = ext4_trans_block_get(fs->bdev, &b, bitmap_block_addr);
+-	if (rc != EOK)
++	if (rc != EOK) {
++		ext4_fs_put_block_group_ref(&bg_ref);
+ 		return rc;
++	}
+ 
+ 	if (!ext4_ialloc_verify_bitmap_csum(sb, bg, b.data)) {
+-		ext4_dbg(DEBUG_IALLOC,
+-			DBG_WARN "Bitmap checksum failed."
+-			"Group: %" PRIu32"\n",
+-			bg_ref.index);
++		/* A bad checksum is a corruption: the bitmap is never
++		 * modified (upstream only logged it) */
++		ext4_block_set(bg_ref.fs->bdev, &b);
++		ext4_fs_put_block_group_ref(&bg_ref);
++		return EBADMSG;
+ 	}
+ 
+ 	/* Free i-node in the bitmap */
+@@ -272,10 +275,11 @@ int ext4_ialloc_alloc_inode(struct ext4_fs *fs, uint32_t *idx, bool is_dir)
+ 			}
+ 
+ 			if (!ext4_ialloc_verify_bitmap_csum(sb, bg, b.data)) {
+-				ext4_dbg(DEBUG_IALLOC,
+-					DBG_WARN "Bitmap checksum failed."
+-					"Group: %" PRIu32"\n",
+-					bg_ref.index);
++				/* A bad checksum is a corruption: the bitmap is never
++				 * modified (upstream only logged it) */
++				ext4_block_set(bg_ref.fs->bdev, &b);
++				ext4_fs_put_block_group_ref(&bg_ref);
++				return EBADMSG;
+ 			}
+ 
+ 			/* Try to allocate i-node in the bitmap */
+@@ -297,6 +301,10 @@ int ext4_ialloc_alloc_inode(struct ext4_fs *fs, uint32_t *idx, bool is_dir)
+ 				if (rc != EOK)
+ 					return rc;
+ 
++				/* Next group (upstream retried the same one
++				 * forever when its free count disagreed with
++				 * a full bitmap) */
++				++bgid;
+ 				continue;
+ 			}
+ 
+diff --git a/src/ext4_super.c b/src/ext4_super.c
+index 092c38b..5f91d3a 100644
+--- a/src/ext4_super.c
++++ b/src/ext4_super.c
+@@ -128,6 +128,13 @@ int ext4_sb_read(struct ext4_blockdev *bdev, struct ext4_sblock *s)
+ 				    EXT4_SUPERBLOCK_SIZE);
+ }
+ 
++uint32_t ext4_sb_csum_seed(struct ext4_sblock *s)
++{
++	if (ext4_sb_feature_incom(s, EXT4_FINCOM_CSUM_SEED))
++		return to_le32(s->checksum_seed);
++	return ext4_crc32c(EXT4_CRC32_INIT, s->uuid, sizeof(s->uuid));
++}
++
+ bool ext4_sb_check(struct ext4_sblock *s)
+ {
+ 	if (ext4_get16(s, magic) != EXT4_SUPERBLOCK_MAGIC)
+diff --git a/src/ext4_xattr.c b/src/ext4_xattr.c
+index f8a5778..29d4eff 100644
+--- a/src/ext4_xattr.c
++++ b/src/ext4_xattr.c
+@@ -190,7 +190,7 @@ static uint32_t ext4_xattr_block_checksum(struct ext4_inode_ref *inode_ref,
+ 		header->h_checksum = 0;
+ 		/* First calculate crc32 checksum against fs uuid */
+ 		checksum =
+-		    ext4_crc32c(EXT4_CRC32_INIT, sb->uuid, sizeof(sb->uuid));
++		    ext4_sb_csum_seed(sb);
+ 		/* Then calculate crc32 checksum block number */
+ 		checksum =
+ 		    ext4_crc32c(checksum, &le64_blocknr, sizeof(le64_blocknr));
+-- 
+2.43.0
+

@@ -18,11 +18,32 @@ class DisksScreen extends StatelessWidget {
         listenable: state,
         builder: (context, _) {
           final err = state.lastError;
+          final ejectErr = state.ejectError;
+          final theme = Theme.of(context);
           return Column(children: [
             if (err != null)
               MaterialBanner(
                 content: Text(err),
                 actions: [TextButton(onPressed: state.clearError, child: const Text('OK'))],
+              ),
+            SwitchListTile(
+              title: const Text(Fr.readOnlySwitch),
+              value: state.readOnlyPreference,
+              onChanged: state.setReadOnlyPreference,
+            ),
+            if (state.ejecting)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Row(children: [
+                  SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+                  SizedBox(width: 12),
+                  Expanded(child: Text(Fr.ejecting)),
+                ]),
+              ),
+            if (ejectErr != null && !state.ejecting)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                child: Text(ejectErr, style: TextStyle(color: theme.colorScheme.error)),
               ),
             Expanded(
               child: state.disks.isEmpty

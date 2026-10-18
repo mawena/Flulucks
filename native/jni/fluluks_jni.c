@@ -88,12 +88,12 @@ JNIEXPORT jbyteArray JNICALL JNI_FN(strerror)(JNIEnv *env, jobject thiz, jint co
   return to_bytes(env, m, strlen(m));
 }
 
-JNIEXPORT jlong JNICALL JNI_FN(openImage)(JNIEnv *env, jobject thiz, jbyteArray path) {
+JNIEXPORT jlong JNICALL JNI_FN(openImage)(JNIEnv *env, jobject thiz, jbyteArray path, jboolean read_only) {
   (void)thiz;
   int err = FL_OK;
   char *p = cstr_from(env, path, &err);
   if (!p) return err;
-  jlong h = fj_open_image(p);
+  jlong h = fj_open_image(p, read_only == JNI_TRUE);
   free(p);
   return h;
 }
@@ -118,7 +118,8 @@ JNIEXPORT jbyteArray JNICALL JNI_FN(scan)(JNIEnv *env, jobject thiz, jlong disk)
   return json_result(env, rc, &j);
 }
 
-JNIEXPORT jlong JNICALL JNI_FN(mount)(JNIEnv *env, jobject thiz, jlong disk, jint part, jbyteArray pass) {
+JNIEXPORT jlong JNICALL JNI_FN(mount)(JNIEnv *env, jobject thiz, jlong disk, jint part, jbyteArray pass,
+                                      jboolean writable) {
   (void)thiz;
   uint8_t *p = NULL;
   size_t plen = 0, alloc = 0;
@@ -140,7 +141,7 @@ JNIEXPORT jlong JNICALL JNI_FN(mount)(JNIEnv *env, jobject thiz, jlong disk, jin
     zero_array(env, pass, n); /* avant toute validation : aussi sur les chemins d'erreur */
   }
   jlong r = err;
-  if (err == FL_OK) r = part < 0 ? FL_EINVAL : fj_mount(disk, (uint32_t)part, p, plen);
+  if (err == FL_OK) r = part < 0 ? FL_EINVAL : fj_mount(disk, (uint32_t)part, p, plen, writable == JNI_TRUE);
   fl_secure_free(p, alloc);
   return r;
 }
@@ -181,12 +182,12 @@ JNIEXPORT jbyteArray JNICALL JNI_FN(list)(JNIEnv *env, jobject thiz, jlong vol, 
   return json_result(env, rc, &j);
 }
 
-JNIEXPORT jlong JNICALL JNI_FN(openFile)(JNIEnv *env, jobject thiz, jlong vol, jbyteArray path) {
+JNIEXPORT jlong JNICALL JNI_FN(openFile)(JNIEnv *env, jobject thiz, jlong vol, jbyteArray path, jint flags) {
   (void)thiz;
   int err = FL_OK;
   char *p = cstr_from(env, path, &err);
   if (!p) return err;
-  jlong h = fj_open_file(vol, p);
+  jlong h = fj_open_file(vol, p, flags);
   free(p);
   return h;
 }
@@ -209,4 +210,71 @@ JNIEXPORT jint JNICALL JNI_FN(closeFile)(JNIEnv *env, jobject thiz, jlong file) 
   (void)env;
   (void)thiz;
   return fj_close_file(file);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(pwrite)(JNIEnv *env, jobject thiz, jlong file, jlong offset, jbyteArray buf, jint len) {
+  (void)thiz;
+  if (!buf || len < 0 || offset < 0) return FL_EINVAL;
+  if (len > (*env)->GetArrayLength(env, buf) || (size_t)len > FJ_PREAD_MAX) return FL_EINVAL;
+  uint8_t one;
+  uint8_t *tmp = len ? malloc((size_t)len) : &one; /* len 0 : valide quand même la poignée */
+  if (!tmp) return FL_ENOMEM;
+  if (len) (*env)->GetByteArrayRegion(env, buf, 0, len, (jbyte *)tmp);
+  int64_t r = fj_pwrite(file, tmp, (size_t)len, (uint64_t)offset);
+  if (len) free(tmp);
+  return (jint)r; /* r <= FJ_PREAD_MAX ou fl_err */
+}
+
+JNIEXPORT jint JNICALL JNI_FN(truncate)(JNIEnv *env, jobject thiz, jlong file, jlong size) {
+  (void)env;
+  (void)thiz;
+  if (size < 0) return FL_EINVAL;
+  return fj_truncate(file, (uint64_t)size);
+}
+
+/* Opération d'un chemin. */
+static jint path_op(JNIEnv *env, jlong vol, jbyteArray path, int (*op)(int64_t, const char *)) {
+  int err = FL_OK;
+  char *p = cstr_from(env, path, &err);
+  if (!p) return err;
+  int rc = op(vol, p);
+  free(p);
+  return rc;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(mkdir)(JNIEnv *env, jobject thiz, jlong vol, jbyteArray path) {
+  (void)thiz;
+  return path_op(env, vol, path, fj_mkdir);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(unlink)(JNIEnv *env, jobject thiz, jlong vol, jbyteArray path) {
+  (void)thiz;
+  return path_op(env, vol, path, fj_unlink);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(rmdir)(JNIEnv *env, jobject thiz, jlong vol, jbyteArray path) {
+  (void)thiz;
+  return path_op(env, vol, path, fj_rmdir);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(rename)(JNIEnv *env, jobject thiz, jlong vol, jbyteArray from, jbyteArray to) {
+  (void)thiz;
+  int err = FL_OK;
+  char *f = cstr_from(env, from, &err);
+  if (!f) return err;
+  char *t = cstr_from(env, to, &err);
+  if (!t) {
+    free(f);
+    return err;
+  }
+  int rc = fj_rename(vol, f, t);
+  free(f);
+  free(t);
+  return rc;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(sync)(JNIEnv *env, jobject thiz, jlong vol) {
+  (void)env;
+  (void)thiz;
+  return fj_sync(vol);
 }
