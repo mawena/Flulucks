@@ -25,6 +25,7 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
     var label = "MonDisque"
     var readOnly = true
     var syncResult = 0
+    var unmountResult = 0
     var syncs = 0
     var lastWritable: Boolean? = null
     private var next = 100L
@@ -48,7 +49,7 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
     override fun unmount(vol: Long, force: Boolean): Int {
         unmounts += vol to force
         events += if (force) "unmount(force)" else "unmount"
-        return if (!force && openFiles > 0) EngineError.FL_EBUSY else 0
+        return if (!force && openFiles > 0) EngineError.FL_EBUSY else if (!force) unmountResult else 0
     }
     override fun statfs(vol: Long) = if (statfsFails) """{"total":""".toByteArray() else
         """{"total":1000,"free":400,"label":"$label","read_only":$readOnly,"ro_reason":"${if (readOnly) "lecture seule" else ""}","needs_recovery":false}""".toByteArray()
@@ -223,6 +224,30 @@ class VolumeManagerTest {
         VolumeManager.eject(v.id)
         assertEquals(listOf(v), VolumeManager.volumes.value)
         assertEquals(0, engine.closedDisks.size)
+    }
+
+    @Test fun ejectUnmountErrorForgetsDeadVolume() = runBlocking {
+        val v = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
+        val handle = VolumeManager.nativeVolume(v.id)
+        engine.unmountResult = EngineError.FL_EIO
+        VolumeManager.eject(v.id)
+        // le moteur a déjà détruit le volume : oublié, disque libéré
+        assertEquals(listOf("sync", "unmount", "closeDisk"), engine.events)
+        assertTrue(VolumeManager.volumes.value.isEmpty())
+        assertEquals(0L, VolumeManager.nativeVolume(v.id))
+        assertEquals(1, engine.closedDisks.size)
+        val detail = EngineError(EngineError.FL_EIO).message!!
+        assertEquals(
+            VolumeManager.msgEjectFailed(detail) + " Éjection incomplète : des données ont pu ne pas être écrites ($detail). " +
+                "Vérifiez le disque sous Ubuntu.",
+            VolumeManager.ejectError.value,
+        )
+        // seconde éjection : rien, le moteur n'est plus appelé pour ce handle
+        val before = engine.events.toList()
+        VolumeManager.eject(v.id)
+        VolumeManager.ejectAll()
+        assertEquals(before, engine.events)
+        assertEquals(listOf(handle to false), engine.unmounts)
     }
 
     @Test fun writeSchedulesSyncAfter3s() = runBlocking {

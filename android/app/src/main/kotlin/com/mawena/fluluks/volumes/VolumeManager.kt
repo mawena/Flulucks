@@ -63,6 +63,8 @@ object VolumeManager {
     const val MSG_DETACH_DURING_WRITE =
         "Disque débranché pendant une écriture : vérifiez-le sous Ubuntu avant de le réutiliser"
     fun msgEjectFailed(detail: String) = "Éjection impossible : $detail"
+    fun msgEjectIncomplete(detail: String) =
+        "Éjection incomplète : des données ont pu ne pas être écrites ($detail). Vérifiez le disque sous Ubuntu."
 
     /** Délai entre la dernière écriture et la synchronisation du volume. */
     const val SYNC_DELAY_MS = 3000L
@@ -421,7 +423,9 @@ object VolumeManager {
     /**
      * Éjection (exécuteur) : synchronisation, démontage normal (journal arrêté, SYNCHRONIZE CACHE, clé
      * effacée), puis libération du disque s'il n'a plus de volume. Un échec (fichier encore ouvert,
-     * disque qui refuse l'écriture) garde le volume ouvert et publie « Éjection impossible : … ».
+     * disque qui refuse la synchronisation) garde le volume ouvert et publie « Éjection impossible : … ». Si le
+     * démontage échoue autrement (EIO…), le moteur a déjà détruit le volume : il est oublié, le disque libéré,
+     * et l'erreur s'accompagne d'un avertissement de perte possible de données.
      */
     private fun ejectVolumes(ids: List<String>) {
         _ejectError.value = null
@@ -430,13 +434,23 @@ object VolumeManager {
             for (id in ids) {
                 val m = mounts[id] ?: continue
                 pendingSync.remove(id)?.invoke()
-                var rc = engine.sync(m.handle)
-                if (rc >= 0) rc = engine.unmount(m.handle, false)
-                if (rc < 0) {
+                val rcSync = engine.sync(m.handle)
+                if (rcSync < 0) { // volume intact côté natif : gardé
+                    _ejectError.value = msgEjectFailed(EngineError(rcSync).message ?: "erreur $rcSync")
+                    continue
+                }
+                val rc = engine.unmount(m.handle, false)
+                if (rc == EngineError.FL_EBUSY) { // fichier ouvert : volume intact, gardé
                     _ejectError.value = msgEjectFailed(EngineError(rc).message ?: "erreur $rc")
                     continue
                 }
+                // Toute autre erreur : le moteur a déjà détruit le volume (clé effacée, poignée invalide).
+                // On l'oublie et on libère le disque comme après une éjection réussie.
                 forget(id)
+                if (rc < 0) {
+                    val detail = EngineError(rc).message ?: "erreur $rc"
+                    _ejectError.value = msgEjectFailed(detail) + " " + msgEjectIncomplete(detail)
+                }
                 val entry = diskEntries[m.state.diskId]
                 if (entry != null && mounts.values.none { it.state.diskId == m.state.diskId }) release(entry)
             }
