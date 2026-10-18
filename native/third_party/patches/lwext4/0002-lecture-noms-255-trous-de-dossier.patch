@@ -1,4 +1,4 @@
-From dfd50090adb6f7fd2e64f0cc6e6022889943ddb1 Mon Sep 17 00:00:00 2001
+From 8c8fbf6763a3a49ee80eaf52620dac1383062cfe Mon Sep 17 00:00:00 2001
 From: mawena <gamligocharles@gmail.com>
 Date: Sun, 18 Oct 2026 06:10:10 +0000
 Subject: [PATCH] =?UTF-8?q?fix:=20noms=20de=20255=20octets,=20trous=20de?=
@@ -27,6 +27,17 @@ EFSCORRUPTED en FL_ECORRUPT et EIO en FL_EIO.
   ext4_dir_add_entry (linéaires), ext4_dir_dx_get_leaf,
   ext4_dir_dx_next_block, ext4_dir_dx_find_entry, ext4_dir_dx_add_entry,
   ext4_dir_dx_reset_parent_inode (htree).
+- ext4_dir_get_dblk passe support_unwritten = true : elle refuse elle-même
+  le bloc 0, et ext4_assert ne peut donc pas se déclencher si
+  CONFIG_DEBUG_ASSERT est activé.
+- ext4_dir_dx_init (ext4_trunc_dir, donc ext4_dir_rm) : sans extents,
+  ext4_fs_init_inode_dblk_idx n'alloue rien et rend 0 pour un bloc absent ;
+  dx_init écrivait alors une racine d'index dans le bloc 0 du disque
+  (superbloc primaire), même pour un simple rmdir d'un dossier vide d'un
+  seul bloc. Les blocs logiques 0 et 1 sont désormais vérifiés avant toute
+  modification : EFSCORRUPTED pour un trou dans le dossier, ENOTSUP pour un
+  bloc au-delà de sa fin (il faudrait l'allouer). Un bloc 0 rendu par
+  ext4_fs_append_inode_dblk est aussi refusé.
 - ext4_dir_dx_find_entry / ext4_dir_dx_add_entry : une erreur de
   ext4_dir_dx_get_leaf autre que EXT4_ERR_BAD_DX_DIR (E/S, trou) est
   rendue telle quelle, au lieu d'être changée en EXT4_ERR_BAD_DX_DIR (qui
@@ -56,10 +67,10 @@ EFSCORRUPTED en FL_ECORRUPT et EIO en FL_EIO.
  include/ext4_dir.h   | 15 +++++++-
  include/ext4_errno.h | 10 +++++
  src/ext4.c           | 20 +++++-----
- src/ext4_dir.c       | 87 ++++++++++++++++++++++++++------------------
- src/ext4_dir_idx.c   | 30 ++++++++-------
+ src/ext4_dir.c       | 88 ++++++++++++++++++++++++++------------------
+ src/ext4_dir_idx.c   | 75 +++++++++++++++++++++++++++----------
  src/ext4_fs.c        |  8 ++++
- 6 files changed, 110 insertions(+), 60 deletions(-)
+ 6 files changed, 150 insertions(+), 66 deletions(-)
 
 diff --git a/include/ext4_dir.h b/include/ext4_dir.h
 index d0d13a2..1433276 100644
@@ -157,7 +168,7 @@ index 32d199a..df41e8e 100644
  	dir->de.name_length = (uint8_t)name_length;
  	dir->de.inode_type = ext4_dir_en_get_inode_type(&dir->f.mp->fs.sb,
 diff --git a/src/ext4_dir.c b/src/ext4_dir.c
-index 29a51c5..4558005 100644
+index 29a51c5..82ef7c4 100644
 --- a/src/ext4_dir.c
 +++ b/src/ext4_dir.c
 @@ -166,11 +166,11 @@ static int ext4_dir_iterator_set(struct ext4_dir_iter *it,
@@ -174,7 +185,7 @@ index 29a51c5..4558005 100644
  
  	struct ext4_dir_en *en;
  	en = (void *)(it->curr_blk.data + off_in_block);
-@@ -178,17 +178,31 @@ static int ext4_dir_iterator_set(struct ext4_dir_iter *it,
+@@ -178,17 +178,32 @@ static int ext4_dir_iterator_set(struct ext4_dir_iter *it,
  	/* Ensure that the whole entry does not overflow the block */
  	uint16_t length = ext4_dir_en_get_entry_len(en);
  	if (off_in_block + length > block_size)
@@ -194,7 +205,8 @@ index 29a51c5..4558005 100644
 +int ext4_dir_get_dblk(struct ext4_inode_ref *dir, ext4_lblk_t iblock,
 +		      ext4_fsblk_t *fblock)
 +{
-+	int r = ext4_fs_get_inode_dblk_idx(dir, iblock, fblock, false);
++	/* support_unwritten: an unwritten extent gives 0, refused below */
++	int r = ext4_fs_get_inode_dblk_idx(dir, iblock, fblock, true);
 +	if (r != EOK)
 +		return r;
 +
@@ -208,7 +220,7 @@ index 29a51c5..4558005 100644
  /**@brief Seek to next valid directory entry.
   *        Here can be jumped to the next data block.
   * @param it  Initialized iterator
-@@ -240,8 +254,7 @@ static int ext4_dir_iterator_seek(struct ext4_dir_iter *it, uint64_t pos)
+@@ -240,8 +255,7 @@ static int ext4_dir_iterator_seek(struct ext4_dir_iter *it, uint64_t pos)
  		}
  
  		ext4_fsblk_t next_blk;
@@ -218,7 +230,7 @@ index 29a51c5..4558005 100644
  		if (r != EOK)
  			return r;
  
-@@ -377,7 +390,7 @@ int ext4_dir_add_entry(struct ext4_inode_ref *parent, const char *name,
+@@ -377,7 +391,7 @@ int ext4_dir_add_entry(struct ext4_inode_ref *parent, const char *name,
  	/* Find block, where is space for new entry and try to add */
  	bool success = false;
  	for (iblock = 0; iblock < total_blocks; ++iblock) {
@@ -227,7 +239,7 @@ index 29a51c5..4558005 100644
  		if (r != EOK)
  			return r;
  
-@@ -486,7 +499,7 @@ int ext4_dir_find_entry(struct ext4_dir_search_result *result,
+@@ -486,7 +500,7 @@ int ext4_dir_find_entry(struct ext4_dir_search_result *result,
  	/* Walk through all data blocks */
  	for (iblock = 0; iblock < total_blocks; ++iblock) {
  		/* Load block address */
@@ -236,7 +248,7 @@ index 29a51c5..4558005 100644
  		if (r != EOK)
  			return r;
  
-@@ -516,9 +529,11 @@ int ext4_dir_find_entry(struct ext4_dir_search_result *result,
+@@ -516,9 +530,11 @@ int ext4_dir_find_entry(struct ext4_dir_search_result *result,
  
  		/* Entry not found - put block and continue to the next block */
  
@@ -251,7 +263,7 @@ index 29a51c5..4558005 100644
  	}
  
  	return ENOENT;
-@@ -655,39 +670,39 @@ int ext4_dir_find_in_block(struct ext4_block *block, struct ext4_sblock *sb,
+@@ -655,39 +671,39 @@ int ext4_dir_find_in_block(struct ext4_block *block, struct ext4_sblock *sb,
  			   size_t name_len, const char *name,
  			   struct ext4_dir_en **res_entry)
  {
@@ -317,10 +329,78 @@ index 29a51c5..4558005 100644
  
  	/* Entry not found */
 diff --git a/src/ext4_dir_idx.c b/src/ext4_dir_idx.c
-index f916cc6..a3cfa8f 100644
+index f916cc6..1e9254d 100644
 --- a/src/ext4_dir_idx.c
 +++ b/src/ext4_dir_idx.c
-@@ -597,7 +597,7 @@ static int ext4_dir_dx_get_leaf(struct ext4_hash_info *hinfo,
+@@ -346,6 +346,29 @@ static void ext4_dir_set_dx_csum(struct ext4_inode_ref *inode_ref,
+ 
+ /****************************************************************************/
+ 
++/**@brief Physical block of an existing directory block, for dx_init.
++ *        ext4_fs_init_inode_dblk_idx allocates a missing block only for
++ *        extent-mapped inodes: with indirect mapping it gives 0, which must
++ *        never be used (block 0 of the device: boot area and superblock).
++ * @return EFSCORRUPTED for a hole inside the directory, ENOTSUP for a block
++ *         beyond its end that would have to be allocated */
++static int ext4_dir_dx_init_dblk(struct ext4_inode_ref *dir,
++				 ext4_lblk_t iblock, ext4_fsblk_t *fblock)
++{
++	int rc = ext4_fs_init_inode_dblk_idx(dir, iblock, fblock);
++	if (rc != EOK)
++		return rc;
++
++	if (*fblock == 0) {
++		uint64_t size = ext4_inode_get_size(&dir->fs->sb, dir->inode);
++		uint32_t block_size = ext4_sb_get_block_size(&dir->fs->sb);
++		return (uint64_t)iblock * block_size < size ? EFSCORRUPTED
++							    : ENOTSUP;
++	}
++
++	return EOK;
++}
++
+ int ext4_dir_dx_init(struct ext4_inode_ref *dir, struct ext4_inode_ref *parent)
+ {
+ 	/* Load block 0, where will be index root located */
+@@ -361,10 +384,17 @@ int ext4_dir_dx_init(struct ext4_inode_ref *dir, struct ext4_inode_ref *parent)
+ 
+ 	int rc;
+ 
+-	if (!need_append)
+-		rc = ext4_fs_init_inode_dblk_idx(dir, iblock, &fblock);
+-	else
++	if (!need_append) {
++		/* Both blocks are checked before anything is modified */
++		ext4_fsblk_t fblock1;
++		rc = ext4_dir_dx_init_dblk(dir, iblock + 1, &fblock1);
++		if (rc == EOK)
++			rc = ext4_dir_dx_init_dblk(dir, iblock, &fblock);
++	} else {
+ 		rc = ext4_fs_append_inode_dblk(dir, &fblock, &iblock);
++		if (rc == EOK && fblock == 0)
++			rc = EFSCORRUPTED;
++	}
+ 
+ 	if (rc != EOK)
+ 		return rc;
+@@ -413,10 +443,13 @@ int ext4_dir_dx_init(struct ext4_inode_ref *dir, struct ext4_inode_ref *parent)
+ 
+ 	/* Append new block, where will be new entries inserted in the future */
+ 	iblock++;
+-	if (!need_append)
+-		rc = ext4_fs_init_inode_dblk_idx(dir, iblock, &fblock);
+-	else
++	if (!need_append) {
++		rc = ext4_dir_dx_init_dblk(dir, iblock, &fblock);
++	} else {
+ 		rc = ext4_fs_append_inode_dblk(dir, &fblock, &iblock);
++		if (rc == EOK && fblock == 0)
++			rc = EFSCORRUPTED;
++	}
+ 
+ 	if (rc != EOK) {
+ 		ext4_block_set(dir->fs->bdev, &block);
+@@ -597,7 +630,7 @@ static int ext4_dir_dx_get_leaf(struct ext4_hash_info *hinfo,
  
  		ind_level--;
  
@@ -329,7 +409,7 @@ index f916cc6..a3cfa8f 100644
  		if (r != EOK)
  			return r;
  
-@@ -678,7 +678,7 @@ static int ext4_dir_dx_next_block(struct ext4_inode_ref *inode_ref,
+@@ -678,7 +711,7 @@ static int ext4_dir_dx_next_block(struct ext4_inode_ref *inode_ref,
  	/* Fill new path */
  	while (num_handles--) {
  		uint32_t blk = ext4_dir_dx_entry_get_block(p->position);
@@ -338,7 +418,7 @@ index f916cc6..a3cfa8f 100644
  		if (r != EOK)
  			return r;
  
-@@ -719,7 +719,7 @@ int ext4_dir_dx_find_entry(struct ext4_dir_search_result *result,
+@@ -719,7 +752,7 @@ int ext4_dir_dx_find_entry(struct ext4_dir_search_result *result,
  	ext4_fsblk_t root_block_addr;
  	int rc2;
  	int rc;
@@ -347,7 +427,7 @@ index f916cc6..a3cfa8f 100644
  	if (rc != EOK)
  		return rc;
  
-@@ -759,7 +759,8 @@ int ext4_dir_dx_find_entry(struct ext4_dir_search_result *result,
+@@ -759,7 +792,8 @@ int ext4_dir_dx_find_entry(struct ext4_dir_search_result *result,
  				  dx_blocks);
  	if (rc != EOK) {
  		ext4_block_set(fs->bdev, &root_block);
@@ -357,7 +437,7 @@ index f916cc6..a3cfa8f 100644
  	}
  
  	do {
-@@ -769,8 +770,8 @@ int ext4_dir_dx_find_entry(struct ext4_dir_search_result *result,
+@@ -769,8 +803,8 @@ int ext4_dir_dx_find_entry(struct ext4_dir_search_result *result,
  		struct ext4_block b;
  
  		leaf_blk_idx = ext4_dir_dx_entry_get_block(dx_block->position);
@@ -368,7 +448,7 @@ index f916cc6..a3cfa8f 100644
  		if (rc != EOK)
  			goto cleanup;
  
-@@ -809,7 +810,7 @@ int ext4_dir_dx_find_entry(struct ext4_dir_search_result *result,
+@@ -809,7 +843,7 @@ int ext4_dir_dx_find_entry(struct ext4_dir_search_result *result,
  		/* check if the next block could be checked */
  		rc = ext4_dir_dx_next_block(inode_ref, hinfo.hash, dx_block,
  					    &dx_blocks[0]);
@@ -377,7 +457,7 @@ index f916cc6..a3cfa8f 100644
  			goto cleanup;
  	} while (rc == ENOENT);
  
-@@ -1235,7 +1236,7 @@ int ext4_dir_dx_add_entry(struct ext4_inode_ref *parent,
+@@ -1235,7 +1269,7 @@ int ext4_dir_dx_add_entry(struct ext4_inode_ref *parent,
  	int r;
  	/* Get direct block 0 (index root) */
  	ext4_fsblk_t rblock_addr;
@@ -386,7 +466,7 @@ index f916cc6..a3cfa8f 100644
  	if (r != EOK)
  		return r;
  
-@@ -1273,15 +1274,16 @@ int ext4_dir_dx_add_entry(struct ext4_inode_ref *parent,
+@@ -1273,15 +1307,16 @@ int ext4_dir_dx_add_entry(struct ext4_inode_ref *parent,
  
  	r = ext4_dir_dx_get_leaf(&hinfo, parent, &root_blk, &dx_blk, dx_blks);
  	if (r != EOK) {
@@ -407,7 +487,7 @@ index f916cc6..a3cfa8f 100644
  	if (r != EOK)
  		goto release_index;
  
-@@ -1291,7 +1293,7 @@ int ext4_dir_dx_add_entry(struct ext4_inode_ref *parent,
+@@ -1291,7 +1326,7 @@ int ext4_dir_dx_add_entry(struct ext4_inode_ref *parent,
  	 */
  	r = ext4_dir_dx_split_index(parent, dx_blks, dx_blk, &dx_blk);
  	if (r != EOK)
@@ -416,7 +496,7 @@ index f916cc6..a3cfa8f 100644
  
  	struct ext4_block target_block;
  	r = ext4_trans_block_get(fs->bdev, &target_block, leaf_block_addr);
-@@ -1367,7 +1369,7 @@ int ext4_dir_dx_reset_parent_inode(struct ext4_inode_ref *dir,
+@@ -1367,7 +1402,7 @@ int ext4_dir_dx_reset_parent_inode(struct ext4_inode_ref *dir,
  {
  	/* Load block 0, where will be index root located */
  	ext4_fsblk_t fblock;

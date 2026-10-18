@@ -80,10 +80,25 @@ Au passage, dans les dossiers htree : une erreur d'E/S ou un trou rencontré dan
 erreur de `ext4_dir_dx_next_block` n'est plus changée en `ENOENT`, et `ext4_dir_dx_add_entry` ne libère
 plus de bloc non chargé sur ses chemins d'erreur.
 
-Tests : `test_ext4_trou_de_dossier` (parcours et recherche, aucune lecture des octets [0, 4096) après le
-montage), `test_ext4_trou_de_dossier_ajout` (`ext4_dir_add_entry` sur une copie en mémoire montée en
-écriture), `test_ext4_erreur_es_dossier` (une panne de lecture reste `FL_EIO`), sur
-`ext4-trou-dossier.img`.
+`ext4_dir_dx_init` (appelé par `ext4_trunc_dir`, donc par `ext4_dir_rm`) obtient les blocs logiques 0 et 1
+par `ext4_fs_init_inode_dblk_idx`, qui n'alloue un bloc absent que pour un inode à extents : pour un dossier
+adressé par blocs (sans extents), il rendait 0, et `dx_init` écrivait une racine d'index dans le **bloc 0 du
+disque** (superbloc primaire), y compris pour un simple `rmdir` d'un dossier vide d'un seul bloc. Les deux
+blocs sont maintenant vérifiés avant toute modification : `EFSCORRUPTED` pour un trou dans le dossier,
+`ENOTSUP` pour un bloc au-delà de sa fin (il faudrait l'allouer, ce que lwext4 ne fait pas sans extents).
+`ext4_dir_get_dblk` passe `support_unwritten = true` (elle refuse le 0 elle-même), si bien que
+`ext4_assert` ne peut pas se déclencher avec `CONFIG_DEBUG_ASSERT`.
+
+Tests :
+- `test_ext4_trou_de_dossier` : parcours et recherche, aucune lecture des octets [0, 4096) après le montage
+  (`ext4-trou-dossier.img`).
+- `test_ext4_trou_de_dossier_ajout` : `ext4_dir_add_entry` sur une copie en mémoire montée en écriture,
+  aucun accès aux octets [0, 4096).
+- `test_ext4_dossier_indirect_bloc0` : `ext4_dir_dx_init` et `ext4_dir_rm` sur `ext4-indirect.img` (sans
+  extents ; trou dans `/r`, `/vide` d'un bloc), aucun accès aux octets [0, 4096).
+- `test_ext4_erreur_es_dossier` : seule la lecture d'un bloc de dossier échoue (feuille htree de `/h`, bloc
+  d'index d'extents de `/h`, bloc 0 du dossier linéaire `/d`, numéros notés dans
+  `ext4-trou-dossier.blocs`) : parcours et recherche rendent `FL_EIO`.
 
 ### 6. Entrées de dossier hostiles
 
@@ -117,6 +132,15 @@ superbloc avec `s_log_block_size = 30` provoque un comportement indéfini dans l
   hachage inconnue, limite fausse…), puis repassent en linéaire. À revoir avant d'écrire.
 - `ext4_dir_try_insert_entry` et `ext4_dir_dx_split_data` (ajout d'entrée) parcourent un bloc de dossier sans
   valider les longueurs d'entrée. À revoir avant d'écrire.
+- Blocs de 64 Kio sans `metadata_csum` : une entrée qui couvre tout le bloc a une longueur codée 0 ou 65535
+  (65536 pour le noyau) ; `ext4_dir_find_in_block` (comme déjà `ext4_dir_iterator_set` en amont) la traite
+  comme une corruption. Le vrai disque a des blocs de 4 Kio et `metadata_csum`.
+- `ext4_fwrite` : pour un fichier adressé par blocs (sans extents), `ext4_fs_init_inode_dblk_idx` rend 0 sur
+  un trou, et l'écriture d'un bloc non aligné vise alors le bloc 0 du disque. À revoir avant d'écrire (ou
+  refuser l'écriture sans `extent`).
+- `ext4_dir_rm` délie l'entrée du dossier parent avant `ext4_trunc_dir` : quand ce dernier échoue (dossier
+  sans extents d'un seul bloc → `ENOTSUP`), le dossier reste délié mais non libéré (récupérable par
+  `e2fsck`, sans corruption du bloc 0).
 - `ext4_dir_dx_get_leaf` lit le nœud fils d'un index à deux niveaux dans la structure `ext4_block` de la
   racine fournie par l'appelant : sur une erreur à ce niveau, la racine n'est pas libérée et le fils l'est
   deux fois (compteur de références du cache). À revoir avant d'écrire.

@@ -43,7 +43,9 @@ e2fsck -fn ext4-plain.img >/dev/null
 
 # --- ext4 : dettes de lecture de lwext4 (phase 3, T1) ---------------------
 # Mêmes options que le vrai disque. Arborescences de travail dans work/, supprimées à la fin.
+# UUID et graine de hachage fixes : même disposition (et mêmes feuilles htree) à chaque génération.
 MKFS_DISQUE=(mkfs.ext4 -q -F -T default -b 4096 -I 256 -O ^orphan_file,^metadata_csum_seed)
+fixe() { echo "-U 5eed0000-0000-4000-8000-00000000000$1 -E hash_seed=5eed0000-0000-4000-8000-0000000000a$1"; }
 DBG() { debugfs "$@" 2>/dev/null; }
 
 # ext4-nom255.img : composants de exactement 255 octets, posés par mkfs -d (comme le noyau).
@@ -56,7 +58,7 @@ mkdir -p "work/t255/$D255"
 printf 'nom de 255 octets\n' > "work/t255/$N255"
 printf 'profond\n' > "work/t255/$D255/f.txt"
 truncate -s 8M ext4-nom255.img
-"${MKFS_DISQUE[@]}" -L FLU255 -d work/t255 ext4-nom255.img
+"${MKFS_DISQUE[@]}" $(fixe 1) -L FLU255 -d work/t255 ext4-nom255.img
 e2fsck -fn ext4-nom255.img >/dev/null
 
 # ext4-trou-dossier.img : dossiers dont un bloc logique n'a pas de bloc physique.
@@ -71,7 +73,7 @@ NOMS=()
 for i in $(seq -w 1 300); do NOMS+=("fichier-$i-abcdefghijklmnopqrstuvwxyz"); done
 for n in "${NOMS[@]}"; do printf '%s\n' "$n" > "work/trou/h/$n"; done
 truncate -s 8M ext4-trou-dossier.img
-"${MKFS_DISQUE[@]}" -N 1024 -L FLUTROU -d work/trou ext4-trou-dossier.img
+"${MKFS_DISQUE[@]}" $(fixe 2) -N 1024 -L FLUTROU -d work/trou ext4-trou-dossier.img
 e2fsck -fyD ext4-trou-dossier.img >/dev/null 2>&1 || [ $? -eq 1 ]  # 1 = optimisé, rien d'autre
 DBG -R "htree /h" ext4-trou-dossier.img | grep -q "Indirect levels: 0" || { echo "/h n'est pas un htree" >&2; exit 1; }
 printf 'contenu\n' > work/trou/src.txt
@@ -84,6 +86,30 @@ for t in "/d 1" "/h 3"; do
   [ "$(DBG -R "bmap $t" ext4-trou-dossier.img)" = 0 ] || { echo "pas de trou en $t" >&2; exit 1; }
 done
 DBG -R "stat /d" ext4-trou-dossier.img | grep -q "Size: 16384" || { echo "taille de /d changée" >&2; exit 1; }
+# ext4-trou-dossier.blocs : blocs physiques que test_ext4_erreur_es_dossier fait échouer en lecture
+#   h_feuille = feuille htree de /h (bloc logique 2), h_etb = bloc d'index d'extents de /h (l'inode a
+#   plus de 4 extents), d_bloc0 = bloc logique 0 de /d.
+h_etb=$(DBG -R "stat /h" ext4-trou-dossier.img | grep -o '(ETB0):[0-9]*' | cut -d: -f2)
+[ -n "$h_etb" ] || { echo "/h sans bloc d'index d'extents" >&2; exit 1; }
+printf 'h_feuille %s\nh_etb %s\nd_bloc0 %s\n' "$(DBG -R "bmap /h 2" ext4-trou-dossier.img)" "$h_etb" \
+  "$(DBG -R "bmap /d 0" ext4-trou-dossier.img)" > ext4-trou-dossier.blocs
+
+# ext4-indirect.img : sans extents (blocs adressés par l'inode, comme ext2/ext3), dir_index actif.
+#   /r : 300 fichiers (4 blocs), puis « punch /r 1 1 » : un trou au bloc logique 1.
+#   /vide : dossier vide d'un seul bloc.
+#   ext4_dir_dx_init (appelé par ext4_dir_rm via ext4_trunc_dir) demande les blocs logiques 0 et 1 :
+#   sans extents, ext4_fs_init_inode_dblk_idx n'alloue rien et rendait 0, puis lwext4 écrivait une
+#   racine d'index dans le bloc 0 du disque (superbloc primaire).
+mkdir -p work/indirect/r work/indirect/vide
+for n in "${NOMS[@]}"; do printf '%s\n' "$n" > "work/indirect/r/$n"; done
+truncate -s 8M ext4-indirect.img
+mkfs.ext4 -q -F -T default -b 4096 -I 256 -O ^extent,^64bit,^orphan_file,^metadata_csum_seed $(fixe 4) \
+  -N 1024 -L FLUIND -d work/indirect ext4-indirect.img
+e2fsck -fn ext4-indirect.img >/dev/null
+DBG -R "stat /r" ext4-indirect.img | grep -q "^BLOCKS:" || { echo "/r n'est pas en blocs adressés" >&2; exit 1; }
+DBG -w -R "punch /r 1 1" ext4-indirect.img
+[ "$(DBG -R "bmap /r 1" ext4-indirect.img)" = 0 ] || { echo "pas de trou en /r 1" >&2; exit 1; }
+DBG -R "stat /vide" ext4-indirect.img | grep -q "Size: 4096" || { echo "/vide : un bloc attendu" >&2; exit 1; }
 
 # ext4-entrees-hostiles.img : /hostile, un bloc de dossier dont craft.py abîme les entrées (inode
 # hors bornes, « / » dans le nom, NUL dans le nom, nom vide), puis e-valide.txt intacte ; la somme
@@ -91,7 +117,7 @@ DBG -R "stat /d" ext4-trou-dossier.img | grep -q "Size: 16384" || { echo "taille
 mkdir -p work/hostile/hostile
 for n in a-hors-bornes b-barre c-nul d-vide e-valide.txt; do printf '%s\n' "$n" > "work/hostile/hostile/$n"; done
 truncate -s 8M ext4-entrees-hostiles.img
-"${MKFS_DISQUE[@]}" -L FLUHOST -d work/hostile ext4-entrees-hostiles.img
+"${MKFS_DISQUE[@]}" $(fixe 3) -L FLUHOST -d work/hostile ext4-entrees-hostiles.img
 h_ino=$(DBG -R "stat /hostile" ext4-entrees-hostiles.img | awk '/^Inode:/ {print $2}')
 h_gen=$(DBG -R "stat /hostile" ext4-entrees-hostiles.img | awk '/^Generation:/ {print $2}')
 h_blk=$(DBG -R "bmap /hostile 0" ext4-entrees-hostiles.img)
@@ -102,6 +128,15 @@ if ! grep -Eq "(^| )$h_hors  \([0-9]+\) a-hors-bornes " <<<"$h_ls" || grep -Eq '
    || ! grep -q 'e-valide.txt' <<<"$h_ls"; then
   echo "entrées hostiles non posées" >&2; exit 1
 fi
+# e2fsck voit exactement ces défauts, et aucune somme de contrôle fausse (craft.py la recalcule).
+h_fsck="$(LC_ALL=C e2fsck -fn ext4-entrees-hostiles.img 2>&1 || true)"
+for motif in "Entry 'a-hors-bornes' in /hostile ([0-9]*) has invalid inode #: $h_hors" \
+             "Entry 'b/barre' in /hostile ([0-9]*) has illegal characters in its name" \
+             "Entry 'c^@nul' in /hostile ([0-9]*) has illegal characters in its name" \
+             "Entry '' in /hostile ([0-9]*) has a zero-length name"; do
+  grep -q "$motif" <<<"$h_fsck" || { echo "e2fsck ne signale pas : $motif" >&2; exit 1; }
+done
+if grep -qi checksum <<<"$h_fsck"; then echo "somme de contrôle fausse dans /hostile" >&2; exit 1; fi
 
 # --- LUKS ----------------------------------------------------------------
 # luks_offset <fichier> : décalage des données en octets
