@@ -1,4 +1,6 @@
+#include <stdatomic.h>
 #include <string.h>
+#include <time.h>
 
 #include "fluluks/error.h"
 #include "fluluks/fs.h"
@@ -15,6 +17,17 @@ static const struct {
 } k_backends[] = {
     {FL_CONTENT_EXT4, fl_ext4_mount},
 };
+
+/* Horloge des horodatages : lue par les systèmes de fichiers sous leur propre verrou, posée par les
+ * tests depuis n'importe quel fil. */
+static _Atomic(int64_t (*)(void)) g_clock;
+
+void fl_fs_set_clock(int64_t (*now)(void)) { atomic_store(&g_clock, now); }
+
+int64_t fl_fs_now(void) {
+  int64_t (*now)(void) = atomic_load(&g_clock);
+  return now ? now() : (int64_t)time(NULL);
+}
 
 /* Chemin absolu, "/" ou "/a/b" : ni composant vide, ni ".", ni "..", ni "/" final. */
 static bool path_ok(const char *p) {

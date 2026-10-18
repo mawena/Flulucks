@@ -53,4 +53,7 @@ typedef int (*fl_fs_mount_fn)(fl_bdev *dev, bool want_rw, fl_fs **out);
 
 int fl_ext4_mount(fl_bdev *dev, bool want_rw, fl_fs **out);
 
+/* Heure des horodatages (secondes Unix) : l'horloge de fl_fs_set_clock, sinon time(). */
+int64_t fl_fs_now(void);
+
 #endif
