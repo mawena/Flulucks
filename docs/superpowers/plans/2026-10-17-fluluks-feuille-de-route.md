@@ -190,7 +190,7 @@ dans le même commit que le travail.
 - [x] T9 — JNI, Kotlin, Flutter *(EFBIG, « Nom non autorisé sur ce disque », renommage de casse ; JVM 55/55,
       Flutter 21/21, APK construit ; tests natifs sur le Pixel, test_fat_hostile compris : tous OK)*
 - [ ] *(utilisateur)* T10 — Essais sur le Pixel avec une clé FAT32 puis exFAT sauvegardée
-- [ ] T11 — Documentation
+- [x] T11 — Documentation *(README : FAT/exFAT, limites, FatFs ; PATCHES.md : section FatFs, en T8)*
 - [ ] Fusion `feature/fat-exfat` → `develop`
 - [ ] Version `v0.3.0`
 

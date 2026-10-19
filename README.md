@@ -1,7 +1,7 @@
 # FluLuks
 
 FluLuks est une application Android qui ouvre les **disques externes chiffrés avec LUKS** et branchés en
-USB-C, **sans root**. Le contenu du disque apparaît dans l'application **Fichiers** d'Android : on ouvre
+USB-C, **sans root**, ainsi que les clés et disques en clair formatés en ext4, FAT ou exFAT. Le contenu du disque apparaît dans l'application **Fichiers** d'Android : on ouvre
 une vidéo dans VLC, un PDF ou une photo dans les applications habituelles.
 
 Elle est née d'un besoin simple : utiliser sur un téléphone non rooté (un Pixel 4 XL) le disque
@@ -32,10 +32,17 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
   - Les données sont synchronisées à la fermeture de chaque fichier et 3 s après la dernière écriture.
   - Les écritures successives d'un fichier sont regroupées par 4 Mio (0.2.1) : une copie n'attend plus
     le disque à chaque bloc.
+- **Lit et écrit FAT12, FAT16, FAT32 et exFAT** (nouveau en 0.3.0), en clair ou dans LUKS : clés USB,
+  cartes SD, disques formatés sous Windows ou macOS.
+  - FAT n'a ni propriétaire ni droits ; les noms y sont insensibles à la casse, comme sous Windows.
+  - Un fichier ne peut pas dépasser 4 Gio en FAT12/16/32 : la copie s'arrête avec « Fichier trop gros
+    pour ce disque ». exFAT n'a pas cette limite.
+  - Pendant les écritures, le volume est marqué « en cours d'utilisation » ; une clé arrachée sans
+    « Éjecter » est reconnue à l'ouverture suivante.
 - **Lecture seule quand il le faut**, avec la raison affichée : interrupteur « Ouvrir les disques en
   lecture seule », disque protégé en écriture, journal à rejouer, système de fichiers marqué en erreur,
-  somme de contrôle fausse, option ext4 non prise en charge en écriture, ou erreur d'écriture en cours
-  de session.
+  somme de contrôle fausse, option ext4 non prise en charge en écriture, disque FAT ou exFAT mal
+  éjecté, ou erreur d'écriture en cours de session.
 - **Expose chaque volume ouvert** dans l'application Fichiers, avec accès aléatoire : l'avance rapide
   marche dans VLC.
 - **Éjecte proprement** depuis l'application ou depuis la notification : écriture des données en
@@ -55,7 +62,13 @@ Mesures sur un Pixel 4 XL avec le vrai disque (LUKS2, Argon2id à 1 Gio de mémo
 - **Écriture refusée** (le volume s'ouvre en lecture seule, avec la raison) sur un ext4 sans journal,
   sans extents (ancien ext3 converti), à journal externe, avec un journal à sommes v1 ou v2, ou avec
   une option inconnue de FluLuks. Le journal doit avoir été rejoué (disque bien démonté sous Ubuntu).
-- **FAT16/32, exFAT et NTFS** sont détectés mais pas encore pris en charge (phases 4 et 5).
+- **Écriture FAT et exFAT non essayée sur une vraie clé USB** : elle est vérifiée sur PC (`fsck.fat`,
+  `fsck.exfat`, un lecteur indépendant, coupures simulées, images hostiles) et sur le téléphone avec des
+  images.
+- **FAT ou exFAT mal éjecté** : une clé débranchée sans « Éjecter » (ou retirée d'un ordinateur sans
+  éjection) s'ouvre en lecture seule, jusqu'à sa vérification sur un ordinateur (chkdsk sous Windows,
+  `fsck.fat` ou `fsck.exfat` sous Linux). FluLuks ne répare pas un système de fichiers FAT abîmé.
+- **NTFS** est détecté mais pas encore pris en charge (phase 5).
 - **LVM, BitLocker, btrfs, XFS…** sont signalés comme « non pris en charge ».
 - **Boîtiers USB** : seuls ceux qui proposent le protocole *Bulk-Only Transport* fonctionnent, ce qui est
   le cas de la plupart. Un boîtier en UAS seul est refusé avec un message clair.
@@ -118,7 +131,7 @@ refait donc toute la chaîne dans l'espace utilisateur :
 Interface Flutter (Dart)       écrans Disques et Déverrouillage, liés par Pigeon
 Couche Kotlin                  UsbManager, service au premier plan, DocumentsProvider
 Moteur natif C11 (JNI)         USB (Bulk-Only Transport + SCSI) → cache de blocs → GPT/MBR
-                               → LUKS1/LUKS2 → ext4 (lwext4) → API fichiers unifiée
+                               → LUKS1/LUKS2 → ext4 (lwext4) · FAT/exFAT (FatFs) → API fichiers unifiée
 ```
 
 Le moteur natif ne dépend pas de Flutter. Le DocumentsProvider fonctionne même quand l'interface est
@@ -130,6 +143,9 @@ Bibliothèques utilisées :
 - [cJSON](https://github.com/DaveGamble/cJSON) : métadonnées LUKS2 ;
 - [lwext4](https://github.com/gkostka/lwext4) : ext4. Il est corrigé par les patchs de
   `native/third_party/patches/lwext4/` ; le sous-module reste sur le commit amont.
+- [FatFs](https://elm-chan.org/fsw/ff/) R0.16 : FAT12/16/32 et exFAT. Il est copié tel quel dans
+  `native/third_party/fatfs/` et corrigé par `native/third_party/patches/fatfs/` (voir
+  `native/third_party/PATCHES.md`).
 
 ## Développement
 
@@ -138,7 +154,7 @@ Bibliothèques utilisées :
 - Flutter 3.41.4 (Dart 3.11.1) et JDK 17 ou plus ;
 - SDK Android dans `~/Android` : plateforme 36, NDK 28.2.13676358 et CMake 3.22.1 ;
 - pour le moteur natif et ses tests sur PC (Linux) : cmake ≥ 3.20, ninja, gcc ou clang, python3 avec
-  `cryptography`, cryptsetup, e2fsprogs ≥ 1.47, dosfstools et ntfs-3g.
+  `cryptography`, cryptsetup, e2fsprogs ≥ 1.47, dosfstools, exfatprogs, mtools et ntfs-3g.
 
 ### Tests
 
@@ -147,7 +163,7 @@ Bibliothèques utilisées :
 cmake -S native -B build/native -G Ninja -DCMAKE_BUILD_TYPE=Debug -DFL_TESTS=ON -DFL_SANITIZE=ON
 cmake --build build/native
 ctest --test-dir build/native --output-on-failure -LE lent    # environ 10 min
-ctest --test-dir build/native --output-on-failure -L lent     # batterie longue, environ 1 h 30
+ctest --test-dir build/native --output-on-failure -L lent     # batteries longues, environ 1 h 40
 sudo tools/fixtures/verify_rw_with_kernel.sh build/native/batterie   # images écrites, jugées par le noyau
 
 # moteur natif sur le téléphone (écrit seulement dans /data/local/tmp/fluluks/)
@@ -201,4 +217,4 @@ Conception : [docs/superpowers/specs/2026-10-17-fluluks-design.md](docs/superpow
 ## Licence
 
 Aucune licence n'est encore choisie. Une partie de lwext4 est sous GPL, de même que libntfs-3g, prévue
-pour la phase 5. L'application dans son ensemble devra donc être distribuée sous GPL si elle est publiée.
+pour la phase 5. FatFs est sous une licence de type BSD à une clause, compatible avec la GPL. L'application dans son ensemble devra donc être distribuée sous GPL si elle est publiée.
