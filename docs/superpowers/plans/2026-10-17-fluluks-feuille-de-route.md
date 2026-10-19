@@ -196,8 +196,20 @@ dans le même commit que le travail.
       corrigé ; suite rapide 27/27)*
 - [x] Version `v0.3.0` *(2026-10-19, branche `release/0.3.0` → `main` et `develop`)*
 
-### Phase 5 — NTFS (lecture puis écriture)
-- [ ] Plan de la phase 5 écrit
+### Phase 5 — NTFS (lecture puis écriture) ([plan](2026-10-19-phase5-ntfs.md))
+- [x] Plan de la phase 5 écrit *(2026-10-19 ; libntfs-3g 2022.10.3, juge indépendant `ntfsjuge.py`)*
+- [ ] T1 — libntfs-3g dans l'arbre, images NTFS et juge indépendant
+- [ ] T2 — Colle NTFS : montage, statfs, politique de lecture seule
+- [ ] T3 — Lecture : stat, readdir, pread
+- [ ] T4 — Écriture des fichiers et drapeau sale
+- [ ] T5 — Dossiers et noms
+- [ ] T6 — Débit : cache d'écriture différée
+- [ ] T7 — Coupures et pannes
+- [ ] T8 — Batterie aléatoire, images hostiles, vérification par le noyau
+- [ ] T9 — JNI, Kotlin, Flutter
+- [ ] *(utilisateur)* T10 — Essais sur le Pixel avec un disque NTFS sauvegardé
+- [ ] T11 — Documentation
+- [ ] Fusion `feature/ntfs` → `develop`
 - [ ] Version `v0.4.0`
 
 ### Phase 6 — Finitions et robustesse
