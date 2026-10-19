@@ -164,6 +164,7 @@ dans le même commit que le travail.
         `e2fsck` et `debugfs` : 9 cas, dont l'erreur différée, la panne et le disque plein ; PC 21/21 sous
         ASan/UBSan, arm64 compilé)*
   - [x] Version `v0.2.1` *(2026-10-18, branche `hotfix/0.2.1` → `main` et `develop`)*
+  - [x] Essai sur le Pixel *(2026-10-19, par l'utilisateur : copie nettement plus rapide qu'en 0.2.0)*
 
 ### Phase 4 — FAT16 / FAT32 / exFAT (lecture puis écriture)
 - [ ] Plan de la phase 4 écrit
