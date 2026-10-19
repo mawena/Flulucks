@@ -491,6 +491,240 @@ static void test_fat_lecture_seule_tient(void) {
   }
 }
 
+/* --- dossiers et noms (T5) --------------------------------------------------------------------- */
+
+typedef struct {
+  char noms[64][256];
+  size_t n;
+} liste;
+
+static int lister(void *ctx, const fl_dirent *e) {
+  liste *l = ctx;
+  if (l->n < 64) snprintf(l->noms[l->n++], 256, "%s", e->name);
+  return 0;
+}
+
+static int contient(const liste *l, const char *nom) {
+  for (size_t i = 0; i < l->n; i++)
+    if (!strcmp(l->noms[i], nom)) return 1;
+  return 0;
+}
+
+static void test_fat_dossiers(void) {
+  for (size_t i = 0; i < 2; i++) {
+    vol v;
+    int rc = ouvrir(IMGS[i][0], IMGS[i][1], &v);
+    int r[12];
+    for (int k = 0; k < 12; k++) r[k] = -99;
+    if (rc == FL_OK) {
+      r[0] = fl_fs_mkdir(v.fs, "/d");
+      r[1] = fl_fs_mkdir(v.fs, "/d/e");
+      r[2] = ecrire_fichier(v.fs, "/d/e/f.txt", "f", 1);
+      r[3] = fl_fs_rmdir(v.fs, "/d");
+      r[4] = fl_fs_unlink(v.fs, "/d");
+      r[5] = fl_fs_rmdir(v.fs, "/d/e/f.txt");
+      r[6] = fl_fs_mkdir(v.fs, "/d");
+      r[7] = fl_fs_mkdir(v.fs, "/x/y");
+      r[8] = fl_fs_rmdir(v.fs, "/");
+      r[9] = fl_fs_unlink(v.fs, "/d/e/f.txt");
+      r[10] = fl_fs_rmdir(v.fs, "/d/e");
+      r[11] = fl_fs_rmdir(v.fs, "/d");
+      fl_fs_mkdir(v.fs, "/garde");
+      ecrire_fichier(v.fs, "/garde/g.txt", "garde", 5);
+    }
+    tm_apply_mkdir(v.m, "/garde", 0, 0, 0755);
+    tm_apply_file(v.m, "/garde/g.txt", "garde", 5, 0, 0, 0644);
+    tm_set_fat_attrs(v.m);
+    int j = rc == FL_OK ? juger(&v) : -1;
+    liberer(&v);
+    TT_ASSERT_EQ(rc, FL_OK);
+    static const int attendu[12] = {FL_OK, FL_OK, FL_OK, FL_ENOTEMPTY, FL_EISDIR, FL_ENOTDIR,
+                                    FL_EEXIST, FL_ENOENT, FL_EINVAL, FL_OK, FL_OK, FL_OK};
+    for (int k = 0; k < 12; k++) {
+      if (r[k] != attendu[k]) fprintf(stderr, "%s : opération %d = %d, attendu %d\n", IMGS[i][0], k, r[k], attendu[k]);
+      TT_ASSERT_EQ(r[k], attendu[k]);
+    }
+    TT_ASSERT_EQ(j, 0);
+  }
+}
+
+static void test_fat_noms_interdits(void) {
+  static const char *const noms[] = {"/a:b", "/a*b", "/a?b", "/a\"b", "/a<b", "/a>b", "/a|b", "/a\\b", "/fin.",
+                                     "/fin ", "/ctl\x01"};
+  for (size_t i = 0; i < 2; i++) {
+    vol v;
+    int rc = ouvrir(IMGS[i][0], IMGS[i][1], &v);
+    if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/ok.txt", "ok", 2);
+    for (size_t k = 0; rc == FL_OK && k < sizeof noms / sizeof noms[0]; k++) {
+      fl_file *f = NULL;
+      int c = fl_fs_open(v.fs, noms[k], FL_O_RDWR | FL_O_CREAT, &f);
+      fl_file_close(f);
+      int m = fl_fs_mkdir(v.fs, noms[k]);
+      int n = fl_fs_rename(v.fs, "/ok.txt", noms[k]);
+      if (c != FL_EINVAL || m != FL_EINVAL || n != FL_EINVAL) {
+        fprintf(stderr, "« %s » : création %d, mkdir %d, rename %d\n", noms[k], c, m, n);
+        rc = FL_EIO;
+      }
+    }
+    tm_apply_file(v.m, "/ok.txt", "ok", 2, 0, 0, 0644);
+    int j = rc == FL_OK ? juger(&v) : -1;
+    liberer(&v);
+    TT_ASSERT_EQ(rc, FL_OK);
+    TT_ASSERT_EQ(j, 0);
+  }
+}
+
+static void test_fat_noms_unicode(void) {
+  char n255[300] = "/";
+  for (int i = 0; i < 125; i++) strcat(n255, "é");
+  strcat(n255, "n.txt");
+  const char *noms[] = {"/été ☀.txt", "/😀.bin", n255, "/日本語のファイル名.txt"};
+  for (size_t i = 0; i < 2; i++) {
+    vol v;
+    int rc = ouvrir(IMGS[i][0], IMGS[i][1], &v);
+    for (size_t k = 0; rc == FL_OK && k < 4; k++) {
+      rc = ecrire_fichier(v.fs, noms[k], noms[k], strlen(noms[k]));
+      tm_apply_file(v.m, noms[k], noms[k], strlen(noms[k]), 0, 0, 0644);
+    }
+    int j = rc == FL_OK ? juger(&v) : -1;
+    liberer(&v);
+    TT_ASSERT_EQ(rc, FL_OK);
+    TT_ASSERT_EQ(j, 0);
+  }
+}
+
+static void test_fat_noms_casse(void) {
+  for (size_t i = 0; i < 2; i++) {
+    vol v;
+    int rc = ouvrir(IMGS[i][0], IMGS[i][1], &v);
+    if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/Photo.jpg", "abc", 3);
+    fl_file *f = NULL;
+    fl_stat st = {0};
+    int o = rc == FL_OK ? fl_fs_open(v.fs, "/photo.jpg", FL_O_RDWR | FL_O_CREAT, &f) : rc;
+    fl_file_close(f);
+    int s = fl_fs_stat(v.fs, "/photo.jpg", &st);
+    int r1 = fl_fs_rename(v.fs, "/Photo.jpg", "/PHOTO.jpg");
+    liste *l = calloc(1, sizeof *l);
+    int d = l ? fl_fs_readdir(v.fs, "/", lister, l) : FL_ENOMEM;
+    int vu = l && contient(l, "PHOTO.jpg") && !contient(l, "Photo.jpg");
+    free(l);
+    if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/autre.jpg", "z", 1);
+    int r2 = fl_fs_rename(v.fs, "/PHOTO.jpg", "/AUTRE.JPG");
+    tm_apply_file(v.m, "/PHOTO.jpg", "abc", 3, 0, 0, 0644);
+    tm_apply_file(v.m, "/autre.jpg", "z", 1, 0, 0, 0644);
+    int j = rc == FL_OK ? juger(&v) : -1;
+    liberer(&v);
+    TT_ASSERT_EQ(rc, FL_OK);
+    TT_ASSERT_EQ(o, FL_OK);
+    TT_ASSERT_EQ(s, FL_OK);
+    TT_ASSERT_EQ(st.size, 3);
+    TT_ASSERT_EQ(r1, FL_OK);
+    TT_ASSERT_EQ(d, FL_OK);
+    TT_ASSERT(vu);
+    TT_ASSERT_EQ(r2, FL_EEXIST);
+    TT_ASSERT_EQ(j, 0);
+  }
+}
+
+static void test_fat_renommer_deplacer(void) {
+  uint8_t *data = motif(20000, 4);
+  for (size_t i = 0; i < 2; i++) {
+    vol v;
+    int rc = ouvrir(IMGS[i][0], IMGS[i][1], &v);
+    if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/a");
+    if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/b");
+    if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/a/sous");
+    if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/a/x", data, 20000);
+    if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/a/sous/y", data, 100);
+    if (rc == FL_OK) rc = fl_fs_rename(v.fs, "/a/x", "/b/x");
+    if (rc == FL_OK) rc = fl_fs_rename(v.fs, "/a", "/b/a2");
+    int boucle = rc == FL_OK ? fl_fs_rename(v.fs, "/b", "/B/a2/c") : rc;
+    int boucle2 = rc == FL_OK ? fl_fs_rename(v.fs, "/b/a2", "/B/A2/sous/z") : rc;
+    int racine = fl_fs_rename(v.fs, "/", "/r");
+    int absent = fl_fs_rename(v.fs, "/rien", "/r");
+    int sans_parent = fl_fs_rename(v.fs, "/b/x", "/nulle/part");
+    tm_apply_mkdir(v.m, "/b", 0, 0, 0755);
+    tm_apply_mkdir(v.m, "/b/a2", 0, 0, 0755);
+    tm_apply_mkdir(v.m, "/b/a2/sous", 0, 0, 0755);
+    tm_apply_file(v.m, "/b/x", data, 20000, 0, 0, 0644);
+    tm_apply_file(v.m, "/b/a2/sous/y", data, 100, 0, 0, 0644);
+    tm_set_fat_attrs(v.m);
+    int j = rc == FL_OK ? juger(&v) : -1;
+    liberer(&v);
+    TT_ASSERT_EQ(rc, FL_OK);
+    TT_ASSERT_EQ(boucle, FL_EINVAL);
+    TT_ASSERT_EQ(boucle2, FL_EINVAL);
+    TT_ASSERT_EQ(racine, FL_EINVAL);
+    TT_ASSERT_EQ(absent, FL_ENOENT);
+    TT_ASSERT_EQ(sans_parent, FL_ENOENT);
+    TT_ASSERT_EQ(j, 0);
+  }
+  free(data);
+}
+
+static void test_fat_ouvert_occupe(void) {
+  for (size_t i = 0; i < 2; i++) {
+    vol v;
+    int rc = ouvrir(IMGS[i][0], IMGS[i][1], &v);
+    fl_file *f = NULL, *g = NULL;
+    if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/o.txt", "o", 1);
+    if (rc == FL_OK) rc = fl_fs_open(v.fs, "/o.txt", FL_O_RDONLY, &f);
+    int u = rc == FL_OK ? fl_fs_unlink(v.fs, "/O.TXT") : rc;
+    int r = rc == FL_OK ? fl_fs_rename(v.fs, "/o.txt", "/p.txt") : rc;
+    fl_file_close(f);
+    if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/dd");
+    if (rc == FL_OK) rc = fl_fs_open(v.fs, "/dd/f", FL_O_RDWR | FL_O_CREAT, &g);
+    if (rc == FL_OK && fl_file_pwrite(g, "12345", 5, 0) != 5) rc = FL_EIO;
+    int rd = rc == FL_OK ? fl_fs_rename(v.fs, "/dd", "/ee") : rc;
+    char b[8] = {0};
+    if (rc == FL_OK && (fl_file_pread(g, b, 5, 0) != 5 || memcmp(b, "12345", 5))) rc = FL_EIO;
+    if (rc == FL_OK && fl_file_pwrite(g, "678", 3, 5) != 3) rc = FL_EIO;
+    if (g && fl_file_close(g) != FL_OK && rc == FL_OK) rc = FL_EIO;
+    tm_apply_file(v.m, "/o.txt", "o", 1, 0, 0, 0644);
+    tm_apply_mkdir(v.m, "/ee", 0, 0, 0755);
+    tm_apply_file(v.m, "/ee/f", "12345678", 8, 0, 0, 0644);
+    tm_set_fat_attrs(v.m);
+    int j = rc == FL_OK ? juger(&v) : -1;
+    liberer(&v);
+    TT_ASSERT_EQ(rc, FL_OK);
+    TT_ASSERT_EQ(u, FL_EBUSY);
+    TT_ASSERT_EQ(r, FL_EBUSY);
+    TT_ASSERT_EQ(rd, FL_OK);
+    TT_ASSERT_EQ(j, 0);
+  }
+}
+
+/* 2000 fichiers créés, un sur deux supprimé, puis 500 de plus : noms longs et noms courts « ~N » uniques. */
+static void test_fat_nombreux(void) {
+  for (size_t i = 0; i < 2; i++) {
+    vol v;
+    int rc = ouvrir(IMGS[i][0], IMGS[i][1], &v);
+    if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/n");
+    tm_apply_mkdir(v.m, "/n", 0, 0, 0755);
+    char p[128];
+    for (int k = 0; rc == FL_OK && k < 2000; k++) {
+      snprintf(p, sizeof p, "/n/fichier numéro %04d.txt", k);
+      rc = ecrire_fichier(v.fs, p, p, strlen(p));
+      tm_apply_file(v.m, p, p, strlen(p), 0, 0, 0644);
+    }
+    for (int k = 0; rc == FL_OK && k < 2000; k += 2) {
+      snprintf(p, sizeof p, "/n/fichier numéro %04d.txt", k);
+      rc = fl_fs_unlink(v.fs, p);
+      tm_apply_unlink(v.m, p);
+    }
+    for (int k = 0; rc == FL_OK && k < 500; k++) {
+      snprintf(p, sizeof p, "/n/fichier numéro %04d.txt", 5000 + k);
+      rc = ecrire_fichier(v.fs, p, p, strlen(p));
+      tm_apply_file(v.m, p, p, strlen(p), 0, 0, 0644);
+    }
+    tm_set_fat_attrs(v.m);
+    int j = rc == FL_OK ? juger(&v) : -1;
+    liberer(&v);
+    TT_ASSERT_EQ(rc, FL_OK);
+    TT_ASSERT_EQ(j, 0);
+  }
+}
+
 int main(int argc, char **argv) {
   if (!fu_fat_tools_available()) {
     printf("SAUTÉ : outils FAT/exFAT absents ou plateforme Android (banc réservé au PC)\n");
@@ -512,5 +746,12 @@ int main(int argc, char **argv) {
   TT_RUN(test_fat_attribut_lecture_seule);
   TT_RUN(test_fat_disque_plein);
   TT_RUN(test_fat_lecture_seule_tient);
+  TT_RUN(test_fat_dossiers);
+  TT_RUN(test_fat_noms_interdits);
+  TT_RUN(test_fat_noms_unicode);
+  TT_RUN(test_fat_noms_casse);
+  TT_RUN(test_fat_renommer_deplacer);
+  TT_RUN(test_fat_ouvert_occupe);
+  TT_RUN(test_fat_nombreux);
   TT_MAIN_END();
 }

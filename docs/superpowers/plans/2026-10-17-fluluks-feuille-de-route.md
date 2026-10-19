@@ -177,7 +177,8 @@ dans le même commit que le travail.
 - [x] T4 — Écriture des fichiers : zéros des trous, limite 4 Gio (`FL_EFBIG`), drapeau sale *(FSInfo et
       PercentInUse justes grâce à un f_getfree avant la première écriture ; test_fat_ecriture 10/10, plus de 4 Gio
       en exFAT en 20 s ; suite rapide 24/24)*
-- [ ] T5 — Dossiers et noms : renommage de casse, sous lui-même, noms refusés
+- [x] T5 — Dossiers et noms : renommage de casse, sous lui-même, noms refusés *(« \\ » refusé sur tout le
+      chemin : FatFs le prend pour un séparateur ; test_fat_ecriture 17/17)*
 - [ ] T6 — Débit : regroupement des écritures contiguës
 - [ ] T7 — Coupures et pannes
 - [ ] T8 — Batterie aléatoire, images hostiles, vérification par le noyau

@@ -246,6 +246,7 @@ static int nopath_err(const fat_vol *v, const char *path) {
 /* f_stat d'un chemin validé, racine comprise (sous g_fat_lock). */
 static int stat_locked(const fat_vol *v, const char *path, FILINFO *fi, bool *root) {
   *root = !strcmp(path, "/");
+  if (strchr(path, '\\')) return FL_ENOENT; /* séparateur pour FatFs, interdit dans un nom FAT */
   if (*root) {
     memset(fi, 0, sizeof *fi);
     fi->fattrib = AM_DIR;
@@ -397,6 +398,8 @@ static int node_put(fat_vol *v, fat_node *n) {
 
 /* --- écriture -------------------------------------------------------------------------------- */
 
+static int name_ok(const char *path);
+
 /* Lecture seule collante (sous g_fat_lock). */
 static void go_ro(fat_vol *v, const char *why) {
   fat_disk_set_writable(v->disk, false);
@@ -510,6 +513,7 @@ static int f_open_op(fl_fs *fs, const char *path, int flags, fl_file **out) {
   pthread_mutex_lock(&g_fat_lock);
   fat_node *n = NULL;
   int rc = node_get(v, path, &n);
+  if (rc == FL_ENOENT && (flags & FL_O_CREAT)) rc = name_ok(path) == FL_OK ? FL_ENOENT : FL_EINVAL;
   if (rc == FL_ENOENT && (flags & FL_O_CREAT)) {
     char p[FULL_CAP];
     full_path(v, path, p);
@@ -595,6 +599,144 @@ static int f_truncate_op(fl_file *f, uint64_t size) {
       rc = wr_err(v, f_lseek(&n->fil, (FSIZE_t)size));
       if (rc == FL_OK) rc = wr_err(v, f_truncate(&n->fil));
     }
+  }
+  pthread_mutex_unlock(&g_fat_lock);
+  return rc;
+}
+
+/* --- dossiers et noms (T5) --------------------------------------------------------------------- */
+
+/* Dernier composant créable sur FAT : FatFs retirerait en silence un « . » ou une espace finale, et refuse
+ * : * ? " < > | \ et les caractères de contrôle (vérifié ici, indépendamment de sa version). */
+static int name_ok(const char *path) {
+  if (strchr(path, '\\')) return FL_EINVAL; /* séparateur pour FatFs, sur tout le chemin */
+  const char *n = strrchr(path, '/');
+  n = n ? n + 1 : path;
+  size_t len = strlen(n);
+  if (len == 0 || n[len - 1] == '.' || n[len - 1] == ' ') return FL_EINVAL;
+  for (const unsigned char *c = (const unsigned char *)n; *c; c++)
+    if (*c < 0x20 || strchr(":*?\"<>|\\", *c)) return FL_EINVAL;
+  return FL_OK;
+}
+
+/* Vrai si le fichier ordinaire `path` est ouvert (sous g_fat_lock). */
+static bool is_open(fat_vol *v, const char *path) {
+  if (!v->nodes) return false;
+  char p[FULL_CAP];
+  full_path(v, path, p);
+  FIL tmp;
+  if (f_open(&tmp, p, FA_READ) != FR_OK) return false;
+  uint64_t a, b;
+  node_key(v, &tmp, &a, &b);
+  f_close(&tmp);
+  return find_node(v, a, b) != NULL;
+}
+
+/* Cluster de départ du dossier `path` (0 pour la racine ; sous g_fat_lock). */
+static int dir_cluster(const fat_vol *v, const char *path, DWORD *out) {
+  char p[FULL_CAP];
+  full_path(v, path, p);
+  DIR d;
+  FRESULT r = f_opendir(&d, p);
+  if (r != FR_OK) return fr_err(r);
+  *out = d.obj.sclust;
+  f_closedir(&d);
+  return FL_OK;
+}
+
+static int f_mkdir_op(fl_fs *fs, const char *path) {
+  fat_vol *v = fs->priv;
+  int rc = name_ok(path);
+  if (rc != FL_OK) return rc;
+  char p[FULL_CAP];
+  full_path(v, path, p);
+  pthread_mutex_lock(&g_fat_lock);
+  rc = mark_dirty(v);
+  if (rc == FL_OK) {
+    FRESULT r = f_mkdir(p);
+    rc = r == FR_NO_PATH ? nopath_err(v, path) : wr_err(v, r);
+  }
+  pthread_mutex_unlock(&g_fat_lock);
+  return rc;
+}
+
+static int f_unlink_op(fl_fs *fs, const char *path) {
+  fat_vol *v = fs->priv;
+  char p[FULL_CAP];
+  full_path(v, path, p);
+  pthread_mutex_lock(&g_fat_lock);
+  FILINFO fi;
+  bool root;
+  int rc = stat_locked(v, path, &fi, &root);
+  if (rc == FL_OK && (root || (fi.fattrib & AM_DIR))) rc = FL_EISDIR; /* f_unlink supprimerait un dossier vide */
+  if (rc == FL_OK && is_open(v, path)) rc = FL_EBUSY;
+  if (rc == FL_OK) rc = mark_dirty(v);
+  if (rc == FL_OK) rc = wr_err(v, f_unlink(p));
+  pthread_mutex_unlock(&g_fat_lock);
+  return rc;
+}
+
+static int f_rmdir_op(fl_fs *fs, const char *path) {
+  fat_vol *v = fs->priv;
+  if (!strcmp(path, "/")) return FL_EINVAL;
+  char p[FULL_CAP];
+  full_path(v, path, p);
+  pthread_mutex_lock(&g_fat_lock);
+  FILINFO fi;
+  bool root;
+  int rc = stat_locked(v, path, &fi, &root);
+  if (rc == FL_OK && !(fi.fattrib & AM_DIR)) rc = FL_ENOTDIR;
+  if (rc == FL_OK) {
+    DIR d;
+    FRESULT r = f_opendir(&d, p);
+    while (r == FR_OK) {
+      r = f_readdir(&d, &fi);
+      if (r != FR_OK || !fi.fname[0]) break;
+      if (strcmp(fi.fname, ".") && strcmp(fi.fname, "..")) {
+        rc = FL_ENOTEMPTY;
+        break;
+      }
+    }
+    if (r == FR_OK) f_closedir(&d);
+    else if (rc == FL_OK) rc = fr_err(r);
+  }
+  if (rc == FL_OK) rc = mark_dirty(v);
+  if (rc == FL_OK) rc = wr_err(v, f_unlink(p));
+  pthread_mutex_unlock(&g_fat_lock);
+  return rc;
+}
+
+static int f_rename_op(fl_fs *fs, const char *from, const char *to) {
+  fat_vol *v = fs->priv;
+  if (!strcmp(from, "/") || !strcmp(to, "/")) return FL_EINVAL;
+  int rc = name_ok(to);
+  if (rc != FL_OK) return rc;
+  char pf[FULL_CAP], pt[FULL_CAP];
+  full_path(v, from, pf);
+  full_path(v, to, pt);
+  pthread_mutex_lock(&g_fat_lock);
+  FILINFO fi;
+  bool root;
+  rc = stat_locked(v, from, &fi, &root);
+  if (rc == FL_OK && !(fi.fattrib & AM_DIR) && is_open(v, from)) rc = FL_EBUSY;
+  if (rc == FL_OK && (fi.fattrib & AM_DIR)) {
+    /* `to` sous `from` : comparaison des clusters de départ des ancêtres de `to` (la casse peut différer),
+     * FatFs ne le vérifie pas */
+    DWORD cf = 0;
+    rc = dir_cluster(v, from, &cf);
+    char anc[4096];
+    snprintf(anc, sizeof anc, "%s", to);
+    for (char *c = strrchr(anc, '/'); rc == FL_OK && c && c > anc; c = strrchr(anc, '/')) {
+      *c = 0;
+      DWORD ca = 0;
+      if (dir_cluster(v, anc, &ca) != FL_OK) break; /* parent absent : f_rename le dira */
+      if (ca == cf) rc = FL_EINVAL;
+    }
+  }
+  if (rc == FL_OK) rc = mark_dirty(v);
+  if (rc == FL_OK) {
+    FRESULT r = f_rename(pf, pt);
+    rc = r == FR_NO_PATH ? nopath_err(v, to) : wr_err(v, r);
   }
   pthread_mutex_unlock(&g_fat_lock);
   return rc;
@@ -700,6 +842,10 @@ static const fl_fs_ops k_fat_ops = {
     .pwrite = f_pwrite_op,
     .truncate = f_truncate_op,
     .sync = f_sync_op,
+    .mkdir = f_mkdir_op,
+    .unlink = f_unlink_op,
+    .rmdir = f_rmdir_op,
+    .rename = f_rename_op,
     .unmount = f_unmount_op,
 };
 
