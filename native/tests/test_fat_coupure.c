@@ -265,6 +265,9 @@ static void debranche(const char *fixture) {
     int rc = fl_file_bdev_open(c, 512, false, &img);
     if (rc == FL_OK) rc = fl_fault_bdev_new(img, 4, FL_ENODEV, &fd);
     if (rc == FL_OK) rc = monter(fd, true, &fs);
+    fl_statfs st = {0};
+    if (fs) fl_fs_statfs(fs, &st);
+    bool rw = fs && !st.read_only; /* après le premier tour, l'image est sale : lecture seule */
     int64_t w = FL_OK;
     if (rc == FL_OK) rc = fl_fs_open(fs, "/x.bin", FL_O_RDWR | FL_O_CREAT, &f);
     for (size_t o = 0; f && w >= 0 && o < 2048 * KIB; o += 128 * KIB) w = fl_file_pwrite(f, data + o, 128 * KIB, o);
@@ -275,10 +278,38 @@ static void debranche(const char *fixture) {
     fl_bdev_close(img);
     TT_ASSERT(rc != FL_OK || w < 0 || cl != FL_OK);
     TT_ASSERT(mk != FL_OK);
-    TT_ASSERT_EQ(um, FL_OK);
+    TT_ASSERT_EQ(um, rw ? FL_EIO : FL_OK); /* tout est libéré, mais l'éjection ne doit pas se dire réussie */
   }
   free(data);
   unlink(c);
+}
+
+/* La dernière écriture de la session (drapeau effacé au démontage) échoue : le démontage le dit. */
+static void demontage_en_echec(const char *fixture) {
+  uint64_t total = 0;
+  for (int passe = 0; passe < 2; passe++) {
+    char c[4096];
+    TT_ASSERT(fu_copy_image(tt_fixture(fixture), c, sizeof c) == 0);
+    fl_bdev *img = NULL, *fd = NULL;
+    fl_fs *fs = NULL;
+    int rc = fl_file_bdev_open(c, 512, false, &img);
+    if (rc == FL_OK) rc = fl_fault_bdev_new(img, passe ? total - 1 : UINT64_MAX, FL_EIO, &fd);
+    if (rc == FL_OK) rc = monter(fd, true, &fs);
+    if (rc == FL_OK) rc = fl_fs_mkdir(fs, "/d");
+    int um = fs ? fl_fs_unmount(fs) : FL_EIO;
+    if (fd && !passe) total = fl_fault_bdev_writes(fd);
+    fl_bdev_close(fd);
+    fl_bdev_close(img);
+    unlink(c);
+    TT_ASSERT_EQ(rc, FL_OK);
+    TT_ASSERT_EQ(um, passe ? FL_EIO : FL_OK);
+    TT_ASSERT(total > 1);
+  }
+}
+
+static void test_fat_demontage_en_echec(void) {
+  demontage_en_echec("fat32-vide.img");
+  demontage_en_echec("exfat-vide.img");
 }
 
 static void test_fat_debranche(void) {
@@ -295,5 +326,6 @@ int main(void) {
   TT_RUN(test_fat_coupure_points_exfat);
   TT_RUN(test_fat_panne_lecture);
   TT_RUN(test_fat_debranche);
+  TT_RUN(test_fat_demontage_en_echec);
   TT_MAIN_END();
 }

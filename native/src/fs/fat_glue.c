@@ -829,12 +829,14 @@ static int f_unmount_op(fl_fs *fs) {
     pthread_mutex_unlock(&g_fat_lock);
     return FL_EINVAL;
   }
-  if (!fs->read_only) sync_locked(v); /* drapeau effacé si tout est écrit */
+  /* Comme ext4 : tout est libéré, et l'éjection ne se dit pas réussie si des données ont pu être perdues
+   * (sync final en échec, ou lecture seule prise en cours de session). */
+  int rc = !fs->read_only ? sync_locked(v) : atomic_load(&fs->went_ro) ? FL_EIO : FL_OK;
   release(v);
   pthread_mutex_unlock(&g_fat_lock);
   free(v);
   free(fs);
-  return FL_OK;
+  return rc;
 }
 
 static const fl_fs_ops k_fat_ops = {
