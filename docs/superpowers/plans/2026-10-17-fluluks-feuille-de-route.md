@@ -191,7 +191,8 @@ dans le même commit que le travail.
       Flutter 21/21, APK construit ; tests natifs sur le Pixel, test_fat_hostile compris : tous OK)*
 - [ ] *(utilisateur)* T10 — Essais sur le Pixel avec une clé FAT32 puis exFAT sauvegardée
 - [x] T11 — Documentation *(README : FAT/exFAT, limites, FatFs ; PATCHES.md : section FatFs, en T8)*
-- [ ] Fusion `feature/fat-exfat` → `develop`
+- [x] Fusion `feature/fat-exfat` → `develop` *(après relecture finale : démontage qui rendait toujours FL_OK,
+      corrigé ; suite rapide 27/27)*
 - [ ] Version `v0.3.0`
 
 ### Phase 5 — NTFS (lecture puis écriture)
