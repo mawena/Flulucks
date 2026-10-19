@@ -183,7 +183,10 @@ dans le même commit que le travail.
       de données : exFAT 8 196 → 13, FAT32 → 130 ; après une panne d'écriture le volume reste lisible)*
 - [x] T7 — Coupures et pannes *(coupure à chaque écriture : 54 points en FAT32, 15 en exFAT ; jamais un volume
       incohérent marqué propre — sans le drapeau sale, le test échoue —, fichiers sûrs intacts après fsck)*
-- [ ] T8 — Batterie aléatoire, images hostiles, vérification par le noyau
+- [x] T8 — Batterie aléatoire, images hostiles, vérification par le noyau *(300 images abîmées + 9 cas
+      fabriqués : 2 défauts trouvés — f_lseek(CREATE_LINKMAP) sans fin sur une chaîne en boucle, corrigé par
+      `patches/fatfs/0001` ; décalage indéfini sur un exFAT hostile, borné par la colle ; batterie 3 × 400 et
+      3 × 5 000 opérations ; script noyau `verify_fat_with_kernel.sh` à lancer par l'utilisateur)*
 - [ ] T9 — JNI, Kotlin, Flutter
 - [ ] *(utilisateur)* T10 — Essais sur le Pixel avec une clé FAT32 puis exFAT sauvegardée
 - [ ] T11 — Documentation

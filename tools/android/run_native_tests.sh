@@ -41,7 +41,7 @@ fi
 
 # Tests, dans l'ordre ; test_luks2_lent est le plus long (Argon2 aux paramètres exacts du disque).
 # Une entrée peut porter un argument après le nom du binaire (comme dans CTest : test_crc32c_debit).
-TESTS=(test_error test_crypto test_luks1 test_luks2 test_crc32c "test_crc32c debit" test_ext4 test_fat test_usb
+TESTS=(test_error test_crypto test_luks1 test_luks2 test_crc32c "test_crc32c debit" test_ext4 test_fat test_fat_hostile test_usb
        test_cache test_banc test_luks2_lent)
 # Binaires à pousser, sans doublon.
 BINS=()

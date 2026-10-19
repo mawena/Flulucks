@@ -382,3 +382,48 @@ superbloc avec `s_log_block_size = 30` provoque un comportement indéfini dans l
 - Le parcours d'un dossier (`readdir`) ne vérifie pas la somme de ses blocs ; la recherche par nom, si.
 - Le journal n'est jamais rejoué (`needs_recovery` le signale) ; `inline_data`,
   `encrypt`, `casefold`, `largedir`, `ea_inode` rendent `FL_ENOTSUP`.
+
+## FatFs
+
+- Amont : FatFs R0.16 (ChaN, 22 juillet 2025), archive `https://elm-chan.org/fsw/ff/arc/ff16.zip`,
+  SHA-256 `99f7dc1f7e095356e4a9e3dbe29959090d8b948afe2bbc5441e52fdf4b85449e`. Licence de type BSD à une
+  clause (`native/third_party/fatfs/LICENSE.txt`), compatible avec la GPL.
+- Copiés tels quels dans `native/third_party/fatfs/` (fins de ligne CRLF d'origine) : `ff.c`, `ff.h`,
+  `diskio.h`, `ffunicode.c`, `ffsystem.c`, `LICENSE.txt`. Ni `ffconf.h` ni `diskio.c` d'amont : la
+  configuration est `native/cmake/fatfs/ffconf.h` (le `ffconf.h` d'amont dont seules ces valeurs changent :
+  `FF_USE_FASTSEEK 1`, `FF_USE_LABEL 1`, `FF_CODE_PAGE 437`, `FF_USE_LFN 3`, `FF_LFN_UNICODE 2`,
+  `FF_VOLUMES 8`, `FF_MAX_SS 4096`, `FF_LBA64 1`, `FF_FS_EXFAT 1`, `FF_FS_NOFSINFO 3`), et l'accès disque
+  est `native/src/fs/fat_diskio.c`.
+- Application (`native/cmake/third_party.cmake`) : comme pour lwext4, les sources sont copiées dans
+  `${CMAKE_BINARY_DIR}/third_party/fatfs`, puis chaque `native/third_party/patches/fatfs/*.patch` y est
+  appliqué par `git apply -p1`, dans l'ordre, avec la même empreinte `.fl_stamp` et le même échec de
+  configuration si un correctif ne s'applique pas.
+
+### 1. `f_lseek(CREATE_LINKMAP)` : chaîne de clusters en boucle (0001)
+
+Sur un disque hostile, une chaîne de FAT qui revient sur elle-même (A → A, ou A → B → A) faisait tourner
+sans fin la construction de la table de recherche rapide : la boucle de `f_lseek` ne s'arrêtait qu'à la
+fin de chaîne. Correctif : au plus `n_fatent` clusters parcourus, sinon `FR_INT_ERR`. Trouvé par
+`test_fat_hostile` (phase 4) ; cas fabriqué : chaîne de `gros.bin` bouclée sur son premier cluster.
+
+## Protections côté FluLuks pour FatFs (sans correctif)
+
+`native/src/fs/fat_glue.c` fait ce que FatFs ne fait pas :
+- **Politique de lecture seule** au montage : drapeau « sale » (octet 0x25 ou 0x41, FAT[1]), erreurs de
+  support, somme du secteur de démarrage exFAT, secteur du système de fichiers plus petit que celui du
+  disque.
+- **Drapeau « sale » posé pendant les écritures**, effacé à chaque sync réussi et au démontage.
+- **Bornes exFAT** : `BytesPerSectorShift` de 9 à 12 et somme avec `SectorsPerClusterShift` d'au plus 25,
+  vérifiées avant `f_mount` (FatFs décale sans les borner : décalage indéfini, trouvé par
+  `test_fat_hostile`).
+- **Zéros** dans la zone qu'un `f_lseek` au-delà de la fin laisserait indéfinie ; **4 Gio - 1** par
+  fichier en FAT (`FL_EFBIG`).
+- **Un seul `FIL` par fichier ouvert**, partagé par ses poignées (`FF_FS_LOCK 0`) ; renommer ou supprimer
+  un fichier ouvert : `FL_EBUSY`.
+- **Noms** : « . » ou espace final (FatFs les retirerait en silence), `: * ? " < > | \` et caractères de
+  contrôle refusés ; `\` refusé sur tout le chemin (séparateur pour FatFs). Déplacer un dossier sous
+  lui-même : refusé par comparaison des clusters de départ.
+- **Compte de clusters libres** recalculé (`f_getfree`) avant la première écriture : FSInfo et
+  `PercentInUse` restent justes sans croire ceux du disque.
+- **Après une erreur d'écriture**, la fenêtre non écrite de FatFs est abandonnée : le volume reste lisible
+  en lecture seule.

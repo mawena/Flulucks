@@ -859,7 +859,11 @@ int fl_fat_mount(fl_bdev *dev, bool want_rw, fl_fs **out) {
   uint8_t bs[512];
   int rc = fl_bdev_read_bytes(dev, 0, sizeof bs, bs);
   if (rc != FL_OK) return rc;
-  uint32_t ss = !memcmp(bs + 3, "EXFAT   ", 8) ? (bs[108] >= 9 && bs[108] <= 12 ? 1u << bs[108] : 0) : le16(bs + 11);
+  bool exfat = !memcmp(bs + 3, "EXFAT   ", 8);
+  /* exFAT : FatFs décale par BytesPerSectorShift et SectorsPerClusterShift sans les borner (décalage
+   * indéfini sur un disque hostile) ; la spécification impose 9..12 et une somme d'au plus 25. */
+  if (exfat && (bs[108] < 9 || bs[108] > 12 || bs[108] + bs[109] > 25)) return FL_ECORRUPT;
+  uint32_t ss = exfat ? 1u << bs[108] : le16(bs + 11);
   if (ss < 512 || ss > 4096 || (ss & (ss - 1))) return FL_ECORRUPT;
 
   fl_fs *fs = calloc(1, sizeof *fs);

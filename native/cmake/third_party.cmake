@@ -94,8 +94,45 @@ target_compile_definitions(fl_lwext4 PUBLIC
 target_compile_options(fl_lwext4 PRIVATE -w)
 
 # --- FatFs R0.16 (ChaN) ---
-# Copie d'amont non modifiée dans third_party/fatfs (voir third_party/PATCHES.md) ; notre configuration est
+# Copie d'amont non modifiée dans third_party/fatfs (voir third_party/PATCHES.md). Comme pour lwext4, ses
+# sources sont copiées dans le dossier de build puis les correctifs de third_party/patches/fatfs/*.patch y
+# sont appliqués dans l'ordre ; empreinte et échec de configuration identiques. Notre configuration est
 # cmake/fatfs/ffconf.h (ff.h l'inclut par "ffconf.h", absent du dossier d'amont : il est trouvé ici).
-add_library(fl_fatfs STATIC ${TP}/fatfs/ff.c ${TP}/fatfs/ffunicode.c ${TP}/fatfs/ffsystem.c)
-target_include_directories(fl_fatfs SYSTEM PUBLIC ${CMAKE_CURRENT_LIST_DIR}/fatfs ${TP}/fatfs)
+set(FATFS_DIR ${CMAKE_BINARY_DIR}/third_party/fatfs)
+file(GLOB FATFS_PATCHES CONFIGURE_DEPENDS ${TP}/patches/fatfs/*.patch)
+list(SORT FATFS_PATCHES)
+file(GLOB FATFS_UPSTREAM_FILES CONFIGURE_DEPENDS ${TP}/fatfs/*.c ${TP}/fatfs/*.h)
+list(SORT FATFS_UPSTREAM_FILES)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${FATFS_PATCHES} ${FATFS_UPSTREAM_FILES})
+set(_ff_stamp "")
+foreach(f IN LISTS FATFS_UPSTREAM_FILES FATFS_PATCHES)
+  file(SHA256 ${f} _h)
+  file(RELATIVE_PATH _r ${TP} ${f})
+  string(APPEND _ff_stamp "${_h}  ${_r}\n")
+endforeach()
+set(_ff_old "")
+if(EXISTS ${FATFS_DIR}/.fl_stamp)
+  file(READ ${FATFS_DIR}/.fl_stamp _ff_old)
+endif()
+if(NOT _ff_old STREQUAL _ff_stamp)
+  file(REMOVE_RECURSE ${FATFS_DIR})
+  file(MAKE_DIRECTORY ${FATFS_DIR})
+  file(COPY ${FATFS_UPSTREAM_FILES} DESTINATION ${FATFS_DIR})
+  foreach(p IN LISTS FATFS_PATCHES)
+    execute_process(
+      COMMAND ${CMAKE_COMMAND} -E env LC_ALL=C GIT_CEILING_DIRECTORIES=${CMAKE_BINARY_DIR}/third_party
+              ${GIT_EXECUTABLE} apply --verbose -p1 ${p}
+      WORKING_DIRECTORY ${FATFS_DIR}
+      RESULT_VARIABLE _rc OUTPUT_VARIABLE _out ERROR_VARIABLE _err)
+    if(NOT _rc EQUAL 0 OR _err MATCHES "Skipped patch" OR NOT _err MATCHES "Applied patch")
+      file(REMOVE_RECURSE ${FATFS_DIR})
+      message(FATAL_ERROR "Correctif FatFs non applicable : ${p}\n${_out}${_err}")
+    endif()
+    get_filename_component(_n ${p} NAME)
+    message(STATUS "FatFs : correctif appliqué ${_n}")
+  endforeach()
+  file(WRITE ${FATFS_DIR}/.fl_stamp "${_ff_stamp}")
+endif()
+add_library(fl_fatfs STATIC ${FATFS_DIR}/ff.c ${FATFS_DIR}/ffunicode.c ${FATFS_DIR}/ffsystem.c)
+target_include_directories(fl_fatfs SYSTEM PUBLIC ${CMAKE_CURRENT_LIST_DIR}/fatfs ${FATFS_DIR})
 target_compile_options(fl_fatfs PRIVATE -w)
