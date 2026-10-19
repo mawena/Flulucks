@@ -1,0 +1,26 @@
+Sujet : décalage à gauche d'un nombre négatif dans ntfs_mapping_pairs_decompress
+
+Les octets d'une runlist sont assemblés par (deltaxcn << 8) + octet, deltaxcn pouvant être négatif (décalage
+de LCN vers l'arrière, ou longueur négative sur un disque hostile) : comportement indéfini, signalé par UBSan.
+Multiplication par 256 à la place : même valeur, définie (au plus 8 octets, pas de dépassement).
+
+--- a/libntfs-3g/runlist.c	2026-10-19 06:10:37.757573528 +0000
++++ b/libntfs-3g/runlist.c	2026-10-19 06:10:37.784575558 +0000
+@@ -859,7 +859,7 @@
+ 			if (buf + b > attr_end)
+ 				goto io_error;
+ 			for (deltaxcn = (s8)buf[b--]; b; b--)
+-				deltaxcn = (deltaxcn << 8) + buf[b];
++				deltaxcn = deltaxcn * 256 + buf[b]; /* FluLuks : pas de << sur un négatif */
+ 		} else { /* The length entry is compulsory. */
+ 			ntfs_log_debug("Missing length entry in mapping pairs "
+ 					"array.\n");
+@@ -894,7 +894,7 @@
+ 			if (buf + b > attr_end)
+ 				goto io_error;
+ 			for (deltaxcn = (s8)buf[b--]; b > b2; b--)
+-				deltaxcn = (deltaxcn << 8) + buf[b];
++				deltaxcn = deltaxcn * 256 + buf[b]; /* FluLuks : pas de << sur un négatif */
+ 			/* Change the current lcn to it's new value. */
+ 			lcn += deltaxcn;
+ #ifdef DEBUG

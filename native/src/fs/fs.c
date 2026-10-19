@@ -20,6 +20,7 @@ static const struct {
     {FL_CONTENT_FAT16, fl_fat_mount},
     {FL_CONTENT_FAT32, fl_fat_mount},
     {FL_CONTENT_EXFAT, fl_fat_mount},
+    {FL_CONTENT_NTFS, fl_ntfs_mount},
 };
 
 /* Horloge des horodatages : lue par les systèmes de fichiers sous leur propre verrou, posée par les

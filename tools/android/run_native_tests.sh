@@ -41,7 +41,7 @@ fi
 
 # Tests, dans l'ordre ; test_luks2_lent est le plus long (Argon2 aux paramètres exacts du disque).
 # Une entrée peut porter un argument après le nom du binaire (comme dans CTest : test_crc32c_debit).
-TESTS=(test_error test_crypto test_luks1 test_luks2 test_crc32c "test_crc32c debit" test_ext4 test_fat test_fat_hostile test_usb
+TESTS=(test_error test_crypto test_luks1 test_luks2 test_crc32c "test_crc32c debit" test_ext4 test_fat test_fat_hostile test_ntfs test_usb
        test_cache test_banc test_luks2_lent)
 # Binaires à pousser, sans doublon.
 BINS=()
@@ -57,9 +57,11 @@ FIXTURES=(ext4-plain.img ext4-rw-1k.img gpt-luks2.img whole-luks2-4k.img whole-l
           tree/sous-dossier/données.bin
           fat12-arbre.img fat16-arbre.img fat32-arbre.img fat32-4k.img exfat-arbre.img luks2-fat32.img
           fat16-sale.img fat32-sale.img fat32-fat1-sale.img fat32-media.img exfat-sale.img exfat-media.img
-          exfat-somme.img fat32-512-sur-4k.img sig-exfat.img)
-# Arborescences entières (modèles des tests FAT : tm_from_dir).
-TREES=(tree-fat tree-exfat)
+          exfat-somme.img fat32-512-sur-4k.img sig-exfat.img
+          ntfs-arbre.img ntfs-4k.img ntfs-512-sur-4k.img ntfs-sale.img ntfs-chkdsk.img ntfs-hiber.img
+          ntfs-journal.img ntfs-chiffre.img ntfs-casse.img luks2-ntfs.img fat32.img)
+# Arborescences entières (modèles des tests FAT et NTFS : tm_from_dir).
+TREES=(tree-fat tree-exfat tree-ntfs)
 
 for b in "${BINS[@]}"; do [ -x "$BUILD_DIR/$b" ] || { echo "binaire absent : $BUILD_DIR/$b" >&2; exit 1; }; done
 for f in "${FIXTURES[@]}"; do [ -e "$FIX_SRC/$f" ] || { echo "fixture absente : $FIX_SRC/$f (lancer ctest -R generate_fixtures)" >&2; exit 1; }; done
@@ -71,9 +73,11 @@ for b in "${BINS[@]}"; do adb_ push "$BUILD_DIR/$b" "$REMOTE/bin/$b" >/dev/null;
 adb_ shell "chmod 755 $REMOTE/bin/*"
 for f in "${FIXTURES[@]}"; do
   size=$(stat -c %s "$FIX_SRC/$f")
-  # ne repousse pas ce qui est déjà là avec la même taille
-  have=$(adb_ shell "stat -c %s '$REMOTE/fixtures/$f' 2>/dev/null || echo -1" | tr -d '\r')
-  if [ "$have" != "$size" ]; then
+  # ne repousse pas ce qui est déjà là à l'identique (même condensat : une image régénérée garde souvent
+  # sa taille)
+  sum=$(md5sum "$FIX_SRC/$f" | cut -d' ' -f1)
+  have=$(adb_ shell "md5sum '$REMOTE/fixtures/$f' 2>/dev/null | cut -d' ' -f1" | tr -d '\r')
+  if [ "$have" != "$sum" ]; then
     echo "push $f ($((size / 1048576)) Mio)"
     adb_ push "$FIX_SRC/$f" "$REMOTE/fixtures/$f" >/dev/null
   fi

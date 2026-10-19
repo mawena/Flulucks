@@ -1,0 +1,30 @@
+Sujet : heure des horodatages fournie par le moteur
+
+ntfs_current_time() lit l'heure du système. Avec FL_NTFS_CLOCK, elle appelle fl_ntfs_now(), défini par la colle
+(ntfs_glue.c) à partir de fl_fs_now() : les tests fixent l'heure par fl_fs_set_clock, comme pour ext4 et FAT.
+
+--- a/include/ntfs-3g/ntfstime.h	2026-10-19 05:55:15.938297934 +0000
++++ b/include/ntfs-3g/ntfstime.h	2026-10-19 05:55:15.962299748 +0000
+@@ -109,6 +109,15 @@
+  *		Return the current time in ntfs format
+  */
+ 
++#ifdef FL_NTFS_CLOCK
++/* FluLuks : l'heure des horodatages vient du moteur (fl_fs_set_clock, pour les tests). */
++extern ntfs_time fl_ntfs_now(void);
++
++static __inline__ ntfs_time ntfs_current_time(void)
++{
++	return fl_ntfs_now();
++}
++#else
+ static __inline__ ntfs_time ntfs_current_time(void)
+ {
+ 	struct timespec now;
+@@ -127,5 +136,6 @@
+ #endif
+ 	return (timespec2ntfs(now));
+ }
++#endif /* FL_NTFS_CLOCK */
+ 
+ #endif /* _NTFS_NTFSTIME_H */

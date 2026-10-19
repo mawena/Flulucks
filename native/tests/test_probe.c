@@ -163,7 +163,7 @@ static void test_noms(void) {
   TT_ASSERT(fl_content_supported(FL_CONTENT_LUKS1));
   TT_ASSERT(fl_content_supported(FL_CONTENT_FAT12) && fl_content_supported(FL_CONTENT_FAT16));
   TT_ASSERT(fl_content_supported(FL_CONTENT_FAT32) && fl_content_supported(FL_CONTENT_EXFAT));
-  TT_ASSERT(!fl_content_supported(FL_CONTENT_NTFS));
+  TT_ASSERT(fl_content_supported(FL_CONTENT_NTFS));
 }
 
 int main(void) {

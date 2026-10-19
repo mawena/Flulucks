@@ -1,0 +1,21 @@
+Sujet : ntfs_readdir repris au milieu d'un octet du bitmap d'index
+
+À la reprise (*pos dans un bloc d'index dont le numéro n'est pas multiple de 8), le tampon du bitmap est lu à
+l'octet bmp_pos >> 3 mais le parcours commence au bit 0 au lieu de bmp_pos & 7 : les bits testés sont ceux
+d'autres blocs. Un bloc libre est lu comme utilisé (ou l'inverse), jusqu'à un bloc au-delà de la fin de
+$INDEX_ALLOCATION : « Failed to read index block », EIO. Le pilote FUSE liste un dossier en une passe et ne
+le voit pas ; la colle lit les dossiers par paquets (READDIR_BATCH) et le rencontre dès 52 blocs d'index.
+
+--- a/libntfs-3g/dir.c	2026-10-19 06:15:04.409002851 +0000
++++ b/libntfs-3g/dir.c	2026-10-19 06:15:04.435005036 +0000
+@@ -1313,7 +1313,9 @@
+ 		goto err_out;
+ 	}
+ 
+-	bmp_buf_pos = 0;
++	/* FluLuks : le tampon commence à l'octet bmp_pos >> 3 ; le bit de bmp_pos y est bmp_pos & 7 (0
++	 * faisait tester le bit d'un autre bloc à la reprise d'un readdir, puis lire un bloc absent). */
++	bmp_buf_pos = bmp_pos & 7;
+ 	/* If the index block is not in use find the next one that is. */
+ 	while (!(bmp[bmp_buf_pos >> 3] & (1 << (bmp_buf_pos & 7)))) {
+ find_next_index_buffer:

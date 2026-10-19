@@ -22,6 +22,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "ntfs-3g/attrib.h"
@@ -34,6 +35,13 @@
 #include "ntfs-3g/reparse.h"
 #include "ntfs-3g/unistr.h"
 #include "ntfs-3g/volume.h"
+
+/* Heure des horodatages (correctif 0002, FL_NTFS_CLOCK) : celle du système. */
+ntfs_time fl_ntfs_now(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_REALTIME, &ts);
+  return timespec2ntfs(ts);
+}
 
 /* --- périphérique sur un descripteur de fichier ------------------------------------------------- */
 

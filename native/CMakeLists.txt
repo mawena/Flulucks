@@ -45,6 +45,8 @@ set(FL_SOURCES
   src/fs/wbuf.c
   src/fs/fat_diskio.c
   src/fs/fat_glue.c
+  src/fs/ntfs_dev.c
+  src/fs/ntfs_glue.c
   src/usb/bot.c
   src/usb/scsi.c
   src/usb/usb_bdev.c
@@ -57,7 +59,7 @@ endif()
 add_library(fluluks STATIC ${FL_SOURCES})
 target_include_directories(fluluks PUBLIC include PRIVATE src)
 target_compile_options(fluluks PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 fl_fatfs Threads::Threads)
+target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 fl_fatfs fl_ntfs3g Threads::Threads)
 if(ANDROID)
   target_link_libraries(fluluks PUBLIC log) # fl_ext4_policy_log (logcat)
 endif()
@@ -129,6 +131,8 @@ if(FL_TESTS)
   fl_add_test(test_ext4)
   fl_add_test(test_fat)
   target_link_libraries(test_fat PRIVATE fl_testsupport)
+  fl_add_test(test_ntfs)
+  target_link_libraries(test_ntfs PRIVATE fl_testsupport)
   fl_add_test(test_fat_hostile)
   set_tests_properties(test_fat_hostile PROPERTIES TIMEOUT 600)
   fl_add_test(test_cache)
@@ -149,6 +153,8 @@ if(FL_TESTS)
   target_link_libraries(test_fat_banc PRIVATE fl_testsupport)
   fl_add_test(test_ntfs_banc LABELS ecriture)
   target_link_libraries(test_ntfs_banc PRIVATE fl_testsupport)
+  fl_add_test(test_ntfs_ecriture LABELS ecriture)
+  target_link_libraries(test_ntfs_ecriture PRIVATE fl_testsupport)
   fl_add_test(test_fat_ecriture LABELS ecriture)
   target_link_libraries(test_fat_ecriture PRIVATE fl_testsupport)
   fl_add_test(test_fat_batterie LABELS ecriture)

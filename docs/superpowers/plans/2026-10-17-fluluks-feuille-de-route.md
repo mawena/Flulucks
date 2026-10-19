@@ -200,9 +200,12 @@ dans le même commit que le travail.
 - [x] Plan de la phase 5 écrit *(2026-10-19 ; libntfs-3g 2022.10.3, juge indépendant `ntfsjuge.py`)*
 - [x] T1 — libntfs-3g dans l'arbre, images NTFS et juge indépendant *(correctif 0001 : accès non alignés de
       compress.c vus par UBSan ; test_ntfs_banc 5/5, suite rapide 28/28)*
-- [ ] T2 — Colle NTFS : montage, statfs, politique de lecture seule
-- [ ] T3 — Lecture : stat, readdir, pread
-- [ ] T4 — Écriture des fichiers et drapeau sale
+- [x] T2 — Colle NTFS : montage, statfs, politique de lecture seule *(veille, $LogFile, drapeaux de $Volume :
+      lecture seule sans aucune écriture ; montage puis démontage en écriture : image identique)*
+- [x] T3 — Lecture : stat, readdir, pread *(correctif 0004 : ntfs_readdir repris au milieu d'un octet du
+      bitmap d'index lisait un bloc absent ; test_ntfs 20/20 sur PC et sur le Pixel)*
+- [x] T4 — Écriture des fichiers et drapeau sale *(correctif 0003 : décalage d'un négatif dans les runlists ;
+      inodes non écrits abandonnés après une panne ; test_ntfs_ecriture 9/9)*
 - [ ] T5 — Dossiers et noms
 - [ ] T6 — Débit : cache d'écriture différée
 - [ ] T7 — Coupures et pannes
