@@ -12,11 +12,22 @@
  * Politique d'écriture (§ 4.2 de la spec), décidée au montage, volume lisible dans tous les cas :
  * somme du secteur de démarrage exFAT fausse (FL_RO_CSUM), secteur du système de fichiers plus petit que
  * celui du disque (FL_RO_SECTOR), volume « sale » (FL_RO_DIRTY) ou erreurs de support signalées
- * (FL_RO_MEDIA). FatFs ne regarde aucun de ces drapeaux. */
+ * (FL_RO_MEDIA). FatFs ne regarde aucun de ces drapeaux.
+ *
+ * Écriture : FatFs ne gère pas non plus le drapeau « sale » ; la colle le pose dans le secteur de
+ * démarrage (octet 0x25 ou 0x41 bit 0 en FAT16/32, VolumeFlags bit 1 en exFAT ; rien en FAT12) avant la
+ * première modification d'une session propre, vide le cache du disque, et l'efface à la fin de chaque sync
+ * réussi et au démontage. Le secteur 0 est écrit directement par fl_bdev : FatFs ne l'écrit jamais en
+ * FAT, et le relit lui-même avant d'y écrire PercentInUse en exFAT ; la fenêtre de FatFs est invalidée si
+ * elle le contenait. FAT[1], que FatFs garde dans sa fenêtre, n'est jamais touché. FatFs laisse indéfini
+ * le contenu d'un fichier agrandi par f_lseek : la colle écrit des zéros. Une erreur d'écriture du disque
+ * rend le volume collant en lecture seule (FL_RO_IOERR), une incohérence vue par FatFs aussi
+ * (FL_RO_CORRUPT). */
 
 #define _POSIX_C_SOURCE 200809L /* localtime_r */
 
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,7 +56,15 @@ typedef struct fat_node {
   uint32_t writers;   /* poignées ouvertes en écriture */
   DWORD *cltbl;       /* table de clusters (recherche rapide) d'un noeud sans écrivain, ou NULL */
   bool cltbl_tried;
+  bool modified;      /* écrit ou tronqué depuis le dernier f_sync */
 } fat_node;
+
+/* Poignée : fl_file.priv. */
+typedef struct {
+  fat_node *n;
+  bool writer;  /* ouverte avec FL_O_RDWR */
+  bool wrote;   /* a écrit ou tronqué */
+} fat_fh;
 
 typedef struct {
   fl_fs *fs;
@@ -56,6 +75,7 @@ typedef struct {
   uint32_t ss;  /* taille de secteur du système de fichiers */
   uint32_t open_files; /* fichiers ouverts + parcours de dossier en cours (g_fat_lock) */
   fat_node *nodes;     /* fichiers ouverts (g_fat_lock) */
+  bool dirty;          /* drapeau « sale » posé sur le disque par cette session (g_fat_lock) */
 } fat_vol;
 
 #define FULL_CAP (4 + 4096) /* "n:" + chemin validé (≤ 4095 octets) + NUL */
@@ -375,25 +395,217 @@ static int node_put(fat_vol *v, fat_node *n) {
   return rc;
 }
 
+/* --- écriture -------------------------------------------------------------------------------- */
+
+/* Lecture seule collante (sous g_fat_lock). */
+static void go_ro(fat_vol *v, const char *why) {
+  fat_disk_set_writable(v->disk, false);
+  fl_fs_go_read_only(v->fs, why);
+}
+
+/* Code d'une opération d'écriture de FatFs ; erreur du disque ou incohérence : lecture seule collante
+ * (sous g_fat_lock). */
+static int wr_err(fat_vol *v, FRESULT r) {
+  if (r == FR_DISK_ERR || (r != FR_OK && fat_disk_error(v->disk) != FL_OK)) {
+    go_ro(v, FL_RO_IOERR);
+    return FL_EIO;
+  }
+  if (r == FR_INT_ERR) {
+    go_ro(v, FL_RO_CORRUPT);
+    return FL_ECORRUPT;
+  }
+  return fr_err(r);
+}
+
+/* Pose (sale = vrai) ou efface le drapeau « sale » du secteur de démarrage, puis vide le cache du disque
+ * (sous g_fat_lock, fenêtre de FatFs propre). */
+static int set_dirty_flag(fat_vol *v, bool sale) {
+  if (v->ff.fs_type == FS_FAT12) return FL_OK;
+  fl_bdev *dev = v->fs->dev;
+  uint8_t *b = malloc(v->ss);
+  if (!b) return FL_ENOMEM;
+  int rc = fl_bdev_read_bytes(dev, 0, v->ss, b);
+  if (rc == FL_OK) {
+    size_t o = v->ff.fs_type == FS_EXFAT ? 106 : v->ff.fs_type == FS_FAT32 ? 0x41 : 0x25;
+    uint8_t bit = v->ff.fs_type == FS_EXFAT ? 0x02 : 0x01;
+    b[o] = sale ? (uint8_t)(b[o] | bit) : (uint8_t)(b[o] & ~bit);
+    rc = fl_bdev_write(dev, 0, v->ss / dev->sector_size, b);
+    if (rc == FL_OK) rc = fl_bdev_flush(dev);
+  }
+  free(b);
+  if (v->ff.winsect == v->ff.volbase && !v->ff.wflag) v->ff.winsect = (LBA_t)0 - 1; /* fenêtre périmée */
+  if (rc != FL_OK) go_ro(v, FL_RO_IOERR);
+  return rc == FL_OK ? FL_OK : FL_EIO;
+}
+
+/* Avant toute modification (sous g_fat_lock). */
+static int mark_dirty(fat_vol *v) {
+  if (v->dirty) return FL_OK;
+  /* Compte de clusters libres exact (FF_FS_NOFSINFO 3 : non lu au montage) : FatFs le tient ensuite à jour
+   * et l'écrit au sync (FSInfo en FAT32, PercentInUse en exFAT). */
+  DWORD nfree;
+  FATFS *pf;
+  FRESULT r = f_getfree(v->drv, &nfree, &pf);
+  if (r != FR_OK) return wr_err(v, r);
+  int rc = set_dirty_flag(v, true);
+  if (rc == FL_OK) v->dirty = true;
+  return rc;
+}
+
+/* Fichiers modifiés écrits, cache vidé, drapeau effacé (sous g_fat_lock). */
+static int sync_locked(fat_vol *v) {
+  if (v->fs->read_only) return atomic_load(&v->fs->went_ro) ? FL_EIO : FL_OK;
+  int rc = FL_OK;
+  for (fat_node *n = v->nodes; n; n = n->next) {
+    if (!n->modified) continue;
+    int r = wr_err(v, f_sync(&n->fil));
+    if (r == FL_OK) n->modified = false;
+    else if (rc == FL_OK) rc = r;
+  }
+  if (rc != FL_OK) return rc;
+  if (disk_ioctl(v->slot, CTRL_SYNC, NULL) != RES_OK) {
+    go_ro(v, FL_RO_IOERR);
+    return FL_EIO;
+  }
+  if (!v->dirty) return FL_OK;
+  rc = set_dirty_flag(v, false);
+  if (rc == FL_OK) v->dirty = false;
+  return rc;
+}
+
+/* Écrit des zéros dans n de `from` à `to` (from ≤ to ; sous g_fat_lock). FL_ENOSPC si le disque est plein. */
+static int fill_zeros(fat_vol *v, fat_node *n, FSIZE_t from, FSIZE_t to) {
+  static const uint8_t zeros[64 * 1024];
+  FRESULT r = f_lseek(&n->fil, from);
+  while (r == FR_OK && from < to) {
+    UINT k = to - from < sizeof zeros ? (UINT)(to - from) : (UINT)sizeof zeros, bw = 0;
+    r = f_write(&n->fil, zeros, k, &bw);
+    from += bw;
+    if (r == FR_OK && bw < k) return FL_ENOSPC;
+  }
+  return wr_err(v, r);
+}
+
+/* Limite de taille d'un fichier : 4 Gio - 1 en FAT, aucune (64 bits) en exFAT. */
+static bool too_big(const fat_vol *v, uint64_t end) { return v->ff.fs_type != FS_EXFAT && end > 0xFFFFFFFFull; }
+
+/* Le fichier change : plus de table de clusters (sous g_fat_lock). */
+static void node_drop_fastseek(fat_node *n) {
+  n->fil.cltbl = NULL;
+  free(n->cltbl);
+  n->cltbl = NULL;
+  n->cltbl_tried = false;
+}
+
 static int f_open_op(fl_fs *fs, const char *path, int flags, fl_file **out) {
   fat_vol *v = fs->priv;
-  if (flags != FL_O_RDONLY) return FL_ENOTSUP; /* écriture : tâche suivante */
+  bool rw = flags & FL_O_RDWR;
   fl_file *f = calloc(1, sizeof *f);
-  if (!f) return FL_ENOMEM;
+  fat_fh *h = calloc(1, sizeof *h);
+  if (!f || !h) {
+    free(f);
+    free(h);
+    return FL_ENOMEM;
+  }
   pthread_mutex_lock(&g_fat_lock);
   fat_node *n = NULL;
   int rc = node_get(v, path, &n);
+  if (rc == FL_ENOENT && (flags & FL_O_CREAT)) {
+    char p[FULL_CAP];
+    full_path(v, path, p);
+    rc = mark_dirty(v);
+    FIL tmp;
+    if (rc == FL_OK) {
+      FRESULT r = f_open(&tmp, p, FA_CREATE_NEW | FA_READ | FA_WRITE);
+      rc = r == FR_NO_PATH ? nopath_err(v, path) : wr_err(v, r);
+    }
+    if (rc == FL_OK) rc = wr_err(v, f_close(&tmp));
+    if (rc == FL_OK) rc = node_get(v, path, &n);
+  }
+  if (rc == FL_OK && rw && !(n->fil.flag & FA_WRITE)) rc = FL_EROFS; /* attribut lecture seule */
+  if (rc == FL_OK && rw) {
+    n->writers++;
+    h->writer = true;
+    node_drop_fastseek(n);
+    if ((flags & FL_O_TRUNC) && f_size(&n->fil) > 0) {
+      rc = mark_dirty(v);
+      if (rc == FL_OK) rc = wr_err(v, f_lseek(&n->fil, 0));
+      if (rc == FL_OK) rc = wr_err(v, f_truncate(&n->fil));
+      n->modified = true;
+      h->wrote = true;
+    }
+    if (rc != FL_OK) n->writers--;
+  }
+  if (rc != FL_OK && n) node_put(v, n);
   if (rc == FL_OK) v->open_files++;
   pthread_mutex_unlock(&g_fat_lock);
   if (rc != FL_OK) {
     free(f);
+    free(h);
     return rc;
   }
+  h->n = n;
   f->fs = fs;
   f->flags = flags;
-  f->priv = n;
+  f->priv = h;
   *out = f;
   return FL_OK;
+}
+
+static int64_t f_pwrite_op(fl_file *f, const void *buf, size_t len, uint64_t off) {
+  fat_vol *v = f->fs->priv;
+  fat_fh *h = f->priv;
+  fat_node *n = h->n;
+  if (len == 0) return 0;
+  if (off > UINT64_MAX - len || too_big(v, off + len)) return FL_EFBIG;
+  pthread_mutex_lock(&g_fat_lock);
+  int rc = n->fil.err ? FL_EIO : mark_dirty(v);
+  if (rc == FL_OK) {
+    h->wrote = true;
+    n->modified = true;
+    FSIZE_t size = f_size(&n->fil);
+    if (off > size) rc = fill_zeros(v, n, size, (FSIZE_t)off);
+  }
+  size_t done = 0;
+  if (rc == FL_OK) rc = wr_err(v, f_lseek(&n->fil, (FSIZE_t)off));
+  while (rc == FL_OK && done < len) {
+    UINT k = len - done > (1u << 30) ? 1u << 30 : (UINT)(len - done), bw = 0;
+    rc = wr_err(v, f_write(&n->fil, (const uint8_t *)buf + done, k, &bw));
+    done += bw;
+    if (rc == FL_OK && bw < k) rc = FL_ENOSPC;
+  }
+  pthread_mutex_unlock(&g_fat_lock);
+  return rc == FL_OK ? (int64_t)len : rc;
+}
+
+static int f_truncate_op(fl_file *f, uint64_t size) {
+  fat_vol *v = f->fs->priv;
+  fat_fh *h = f->priv;
+  fat_node *n = h->n;
+  if (too_big(v, size)) return FL_EFBIG;
+  pthread_mutex_lock(&g_fat_lock);
+  int rc = n->fil.err ? FL_EIO : FL_OK;
+  FSIZE_t cur = f_size(&n->fil);
+  if (rc == FL_OK && size != cur) {
+    rc = mark_dirty(v);
+    h->wrote = true;
+    n->modified = true;
+    if (rc == FL_OK && size > cur) rc = fill_zeros(v, n, cur, (FSIZE_t)size);
+    else if (rc == FL_OK) {
+      rc = wr_err(v, f_lseek(&n->fil, (FSIZE_t)size));
+      if (rc == FL_OK) rc = wr_err(v, f_truncate(&n->fil));
+    }
+  }
+  pthread_mutex_unlock(&g_fat_lock);
+  return rc;
+}
+
+static int f_sync_op(fl_fs *fs) {
+  fat_vol *v = fs->priv;
+  pthread_mutex_lock(&g_fat_lock);
+  int rc = sync_locked(v);
+  pthread_mutex_unlock(&g_fat_lock);
+  return rc;
 }
 
 /* Table de clusters d'un noeud sans écrivain, construite une fois (sous g_fat_lock). Sans place, la
@@ -415,7 +627,7 @@ static void node_fastseek(fat_node *n) {
 }
 
 static int64_t f_pread_op(fl_file *f, void *buf, size_t len, uint64_t off) {
-  fat_node *n = f->priv;
+  fat_node *n = ((fat_fh *)f->priv)->n;
   pthread_mutex_lock(&g_fat_lock);
   int64_t rc;
   FSIZE_t size = f_size(&n->fil);
@@ -438,10 +650,20 @@ static int64_t f_pread_op(fl_file *f, void *buf, size_t len, uint64_t off) {
 
 static int f_close_op(fl_file *f) {
   fat_vol *v = f->fs->priv;
+  fat_fh *h = f->priv;
+  fat_node *n = h->n;
   pthread_mutex_lock(&g_fat_lock);
-  int rc = node_put(v, f->priv);
+  int rc = FL_OK;
+  if (h->wrote && n->modified && !v->fs->read_only) {
+    rc = wr_err(v, f_sync(&n->fil));
+    if (rc == FL_OK) n->modified = false;
+  }
+  if (h->writer && --n->writers == 0) node_drop_fastseek(n);
+  int pr = node_put(v, n);
+  if (rc == FL_OK && h->wrote) rc = pr != FL_OK ? pr : sync_locked(v);
   v->open_files--;
   pthread_mutex_unlock(&g_fat_lock);
+  free(h);
   free(f);
   return rc;
 }
@@ -460,6 +682,7 @@ static int f_unmount_op(fl_fs *fs) {
     pthread_mutex_unlock(&g_fat_lock);
     return FL_EINVAL;
   }
+  if (!fs->read_only) sync_locked(v); /* drapeau effacé si tout est écrit */
   release(v);
   pthread_mutex_unlock(&g_fat_lock);
   free(v);
@@ -474,6 +697,9 @@ static const fl_fs_ops k_fat_ops = {
     .open = f_open_op,
     .pread = f_pread_op,
     .close = f_close_op,
+    .pwrite = f_pwrite_op,
+    .truncate = f_truncate_op,
+    .sync = f_sync_op,
     .unmount = f_unmount_op,
 };
 

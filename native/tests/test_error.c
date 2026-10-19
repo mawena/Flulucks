@@ -13,6 +13,7 @@ static void test_strerror(void) {
   TT_ASSERT_STR_EQ(fl_strerror(FL_ETIMEDOUT), "le disque ne répond pas");
   TT_ASSERT_STR_EQ(fl_strerror(FL_ESTALL), "transfert USB bloqué");
   TT_ASSERT_STR_EQ(fl_strerror(FL_EBUSY), "volume occupé");
+  TT_ASSERT_STR_EQ(fl_strerror(FL_EFBIG), "fichier trop gros pour ce système de fichiers");
 }
 
 static void test_secure(void) {

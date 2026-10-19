@@ -174,7 +174,9 @@ dans le même commit que le travail.
       FAT dès T2, au lieu de T9 ; arm64 compilé)*
 - [x] T3 — Lecture : stat, readdir, pread, noeuds partagés, recherche rapide *(test_fat 19/19 sur PC et sur le
       Pixel ; sans la table de clusters, 12 590 lectures au lieu de 5 000 au plus pour 500 pread)*
-- [ ] T4 — Écriture des fichiers : zéros des trous, limite 4 Gio (`FL_EFBIG`), drapeau sale
+- [x] T4 — Écriture des fichiers : zéros des trous, limite 4 Gio (`FL_EFBIG`), drapeau sale *(FSInfo et
+      PercentInUse justes grâce à un f_getfree avant la première écriture ; test_fat_ecriture 10/10, plus de 4 Gio
+      en exFAT en 20 s ; suite rapide 24/24)*
 - [ ] T5 — Dossiers et noms : renommage de casse, sous lui-même, noms refusés
 - [ ] T6 — Débit : regroupement des écritures contiguës
 - [ ] T7 — Coupures et pannes

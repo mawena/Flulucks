@@ -138,6 +138,11 @@ if(FL_TESTS)
   target_link_libraries(test_ext4_tampon PRIVATE fl_testsupport)
   fl_add_test(test_fat_banc LABELS ecriture)
   target_link_libraries(test_fat_banc PRIVATE fl_testsupport)
+  fl_add_test(test_fat_ecriture LABELS ecriture)
+  target_link_libraries(test_fat_ecriture PRIVATE fl_testsupport)
+  add_test(NAME test_fat_ecriture_lent COMMAND test_fat_ecriture lent)
+  set_tests_properties(test_fat_ecriture_lent PROPERTIES LABELS lent SKIP_RETURN_CODE 77
+    ENVIRONMENT "FL_FIXTURES=${CMAKE_BINARY_DIR}/fixtures" FIXTURES_REQUIRED fx)
   fl_add_test(test_batterie LABELS ecriture)
   target_link_libraries(test_batterie PRIVATE fl_testsupport)
   # test_manifeste lance tools/fixtures/manifest.py
