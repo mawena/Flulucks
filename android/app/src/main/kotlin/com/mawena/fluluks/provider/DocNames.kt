@@ -2,7 +2,7 @@ package com.mawena.fluluks.provider
 
 /** Noms de documents créés ou renommés par une autre application (donc hostiles). */
 object DocNames {
-    /** Taille maximale d'un nom ext4, en octets UTF-8. */
+    /** Taille maximale d'un nom ext4, en octets UTF-8 (sur FAT, 255 unités UTF-16 : jamais atteintes avant). */
     const val MAX_NAME_BYTES = 255
 
     /** Nombre maximal de variantes « nom (n) » essayées en cas de conflit. */

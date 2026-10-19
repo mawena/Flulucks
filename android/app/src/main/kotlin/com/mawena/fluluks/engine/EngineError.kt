@@ -23,6 +23,7 @@ class EngineError(val code: Int, message: String = defaultMessage(code)) : Excep
         const val FL_ETIMEDOUT = -15
         const val FL_ESTALL = -16
         const val FL_EBUSY = -17
+        const val FL_EFBIG = -18 // fichier trop gros pour ce système de fichiers (4 Gio - 1 en FAT)
 
         /** Message de fl_strerror ; repli neutre si la bibliothèque native est absente (tests JVM). */
         fun defaultMessage(code: Int): String =

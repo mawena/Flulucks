@@ -50,4 +50,19 @@ int fu_copy_image(const char *src, char *out, size_t cap);
  * creux pour e2fsck/debugfs ; chemin dans out. L'appelant le supprime. */
 int fu_extract_luks_ext4(const char *luks_img, const char *pass_file, char *out, size_t cap);
 
+/* --- FAT / exFAT (phase 4) ------------------------------------------------------------------- */
+/* 1 si mkfs.vfat, fsck.fat, mkfs.exfat, fsck.exfat, mcopy et python3 sont disponibles (PC), 0 sinon. */
+int fu_fat_tools_available(void);
+/* fsck.fat -n ou fsck.exfat -n selon l'image (secteur de démarrage) ; code de sortie, ou 1 si le code vaut
+ * 0 mais que la sortie contient une ligne d'erreur. Sortie (tronquée) dans out. */
+int fu_fsck_fat_n(const char *img, char *out, size_t cap);
+/* fsck.fat -a ou fsck.exfat -y, puis fu_fsck_fat_n : rend le code de ce dernier. */
+int fu_fsck_fat_repair(const char *img, char *out, size_t cap);
+/* python3 -I tools/fixtures/fatjuge.py <cmd> <img> [arg] ; stdout (tronqué) dans out. Code de sortie. */
+int fu_fatjuge(char *out, size_t cap, const char *cmd, const char *img, const char *arg);
+/* fatjuge.py manifest <img> vers out_path : 0, 3 (structure invalide), ou -1. */
+int fu_fat_manifest(const char *img, const char *out_path);
+/* fatjuge.py free <img> : octets libres, ou -1. */
+int64_t fu_fat_free(const char *img);
+
 #endif

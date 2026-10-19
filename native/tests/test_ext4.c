@@ -529,7 +529,10 @@ static void test_ext4_erreurs_types(void) {
   TT_ASSERT_EQ(fl_fs_unmount(fs), FL_OK);
   TT_ASSERT_EQ(fl_fs_unmount(NULL), FL_OK);
   fl_fs *g = (fl_fs *)0x1;
-  TT_ASSERT_EQ(fl_fs_mount(d, FL_CONTENT_FAT32, false, &g), FL_ENOTSUP);
+  TT_ASSERT_EQ(fl_fs_mount(d, FL_CONTENT_NTFS, false, &g), FL_ENOTSUP);
+  TT_ASSERT(g == NULL);
+  g = (fl_fs *)0x1;
+  TT_ASSERT_EQ(fl_fs_mount(d, FL_CONTENT_FAT32, false, &g), FL_ECORRUPT); /* de l'ext4 lu comme du FAT */
   TT_ASSERT(g == NULL);
   TT_ASSERT_EQ(fl_fs_mount(d, FL_CONTENT_LUKS2, false, &g), FL_ENOTSUP);
   TT_ASSERT_EQ(fl_fs_mount(NULL, FL_CONTENT_EXT4, false, &g), FL_EINVAL);

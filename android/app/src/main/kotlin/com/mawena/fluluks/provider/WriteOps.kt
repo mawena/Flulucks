@@ -103,8 +103,11 @@ class WriteOps(
         if (path == "/") throw FileNotFoundException("La racine du volume ne peut pas être renommée")
         val target = DocumentIds.child(parentOf(path), requireName(name))
         if (target == path) return path
-        if (statOrNull(target) != null) throw FileNotFoundException("Un élément porte déjà ce nom")
-        check(engine.rename(vol, b(path), b(target)))
+        // Pas de test d'existence ici : sur FAT, « a.txt » → « A.txt » désigne le même fichier, que le moteur
+        // renomme ; une cible qui est un autre élément rend FL_EEXIST.
+        val rc = engine.rename(vol, b(path), b(target))
+        if (rc == EngineError.FL_EEXIST) throw FileNotFoundException("Un élément porte déjà ce nom")
+        check(rc)
         return target
     }
 

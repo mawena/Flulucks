@@ -168,18 +168,31 @@ dans le même commit que le travail.
 
 ### Phase 4 — FAT16 / FAT32 / exFAT (lecture puis écriture) ([plan](2026-10-19-phase4-fat-exfat.md))
 - [x] Plan de la phase 4 écrit *(2026-10-19 ; FatFs R0.16, FAT12 inclus)*
-- [ ] T1 — Images FAT/exFAT et juges indépendants (`fsck.fat`, `fsck.exfat`, `fatjuge.py`)
-- [ ] T2 — FatFs dans le moteur : montage, statfs, lecture seule si sale
-- [ ] T3 — Lecture : stat, readdir, pread, noeuds partagés, recherche rapide
-- [ ] T4 — Écriture des fichiers : zéros des trous, limite 4 Gio (`FL_EFBIG`), drapeau sale
-- [ ] T5 — Dossiers et noms : renommage de casse, sous lui-même, noms refusés
-- [ ] T6 — Débit : regroupement des écritures contiguës
-- [ ] T7 — Coupures et pannes
-- [ ] T8 — Batterie aléatoire, images hostiles, vérification par le noyau
-- [ ] T9 — JNI, Kotlin, Flutter
+- [x] T1 — Images FAT/exFAT et juges indépendants (`fsck.fat`, `fsck.exfat`, `fatjuge.py`) *(mtools ne sait pas
+      écrire un émoji : il n'est que dans l'arbre exFAT ; test_fat_banc 6/6)*
+- [x] T2 — FatFs dans le moteur : montage, statfs, lecture seule si sale *(la JNI et fluluks-cli acceptent
+      FAT dès T2, au lieu de T9 ; arm64 compilé)*
+- [x] T3 — Lecture : stat, readdir, pread, noeuds partagés, recherche rapide *(test_fat 19/19 sur PC et sur le
+      Pixel ; sans la table de clusters, 12 590 lectures au lieu de 5 000 au plus pour 500 pread)*
+- [x] T4 — Écriture des fichiers : zéros des trous, limite 4 Gio (`FL_EFBIG`), drapeau sale *(FSInfo et
+      PercentInUse justes grâce à un f_getfree avant la première écriture ; test_fat_ecriture 10/10, plus de 4 Gio
+      en exFAT en 20 s ; suite rapide 24/24)*
+- [x] T5 — Dossiers et noms : renommage de casse, sous lui-même, noms refusés *(« \\ » refusé sur tout le
+      chemin : FatFs le prend pour un séparateur ; test_fat_ecriture 17/17)*
+- [x] T6 — Débit : regroupement des écritures contiguës *(32 Mio par pwrite de 128 Kio, écritures dans la zone
+      de données : exFAT 8 196 → 13, FAT32 → 130 ; après une panne d'écriture le volume reste lisible)*
+- [x] T7 — Coupures et pannes *(coupure à chaque écriture : 54 points en FAT32, 15 en exFAT ; jamais un volume
+      incohérent marqué propre — sans le drapeau sale, le test échoue —, fichiers sûrs intacts après fsck)*
+- [x] T8 — Batterie aléatoire, images hostiles, vérification par le noyau *(300 images abîmées + 9 cas
+      fabriqués : 2 défauts trouvés — f_lseek(CREATE_LINKMAP) sans fin sur une chaîne en boucle, corrigé par
+      `patches/fatfs/0001` ; décalage indéfini sur un exFAT hostile, borné par la colle ; batterie 3 × 400 et
+      3 × 5 000 opérations ; script noyau `verify_fat_with_kernel.sh` à lancer par l'utilisateur)*
+- [x] T9 — JNI, Kotlin, Flutter *(EFBIG, « Nom non autorisé sur ce disque », renommage de casse ; JVM 55/55,
+      Flutter 21/21, APK construit ; tests natifs sur le Pixel, test_fat_hostile compris : tous OK)*
 - [ ] *(utilisateur)* T10 — Essais sur le Pixel avec une clé FAT32 puis exFAT sauvegardée
-- [ ] T11 — Documentation
-- [ ] Fusion `feature/fat-exfat` → `develop`
+- [x] T11 — Documentation *(README : FAT/exFAT, limites, FatFs ; PATCHES.md : section FatFs, en T8)*
+- [x] Fusion `feature/fat-exfat` → `develop` *(après relecture finale : démontage qui rendait toujours FL_OK,
+      corrigé ; suite rapide 27/27)*
 - [ ] Version `v0.3.0`
 
 ### Phase 5 — NTFS (lecture puis écriture)

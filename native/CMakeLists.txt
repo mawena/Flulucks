@@ -43,6 +43,8 @@ set(FL_SOURCES
   src/fs/ext4_glue.c
   src/fs/ext4_policy.c
   src/fs/wbuf.c
+  src/fs/fat_diskio.c
+  src/fs/fat_glue.c
   src/usb/bot.c
   src/usb/scsi.c
   src/usb/usb_bdev.c
@@ -55,7 +57,7 @@ endif()
 add_library(fluluks STATIC ${FL_SOURCES})
 target_include_directories(fluluks PUBLIC include PRIVATE src)
 target_compile_options(fluluks PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 Threads::Threads)
+target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 fl_fatfs Threads::Threads)
 if(ANDROID)
   target_link_libraries(fluluks PUBLIC log) # fl_ext4_policy_log (logcat)
 endif()
@@ -106,6 +108,8 @@ if(FL_TESTS)
   target_include_directories(fl_testsupport PUBLIC tests/support PRIVATE src)
   target_link_libraries(fl_testsupport PUBLIC fluluks)
   target_compile_options(fl_testsupport PRIVATE -Wall -Wextra -Werror)
+  # Juge FAT/exFAT indépendant (phase 4) : tools/fixtures/fatjuge.py
+  target_compile_definitions(fl_testsupport PRIVATE FL_TOOLS_DIR="${CMAKE_SOURCE_DIR}/../tools")
 
   fl_add_test(test_error)
   fl_add_test(test_blockdev)
@@ -116,6 +120,10 @@ if(FL_TESTS)
   fl_add_test(test_luks2)
   fl_add_test(test_luks2_lent LABELS lent)
   fl_add_test(test_ext4)
+  fl_add_test(test_fat)
+  target_link_libraries(test_fat PRIVATE fl_testsupport)
+  fl_add_test(test_fat_hostile)
+  set_tests_properties(test_fat_hostile PROPERTIES TIMEOUT 600)
   fl_add_test(test_cache)
   fl_add_test(test_crc32c)
   add_test(NAME test_crc32c_debit COMMAND test_crc32c debit)
@@ -130,6 +138,20 @@ if(FL_TESTS)
   target_link_libraries(test_ext4_politique PRIVATE fl_testsupport)
   fl_add_test(test_ext4_tampon LABELS ecriture)
   target_link_libraries(test_ext4_tampon PRIVATE fl_testsupport)
+  fl_add_test(test_fat_banc LABELS ecriture)
+  target_link_libraries(test_fat_banc PRIVATE fl_testsupport)
+  fl_add_test(test_fat_ecriture LABELS ecriture)
+  target_link_libraries(test_fat_ecriture PRIVATE fl_testsupport)
+  fl_add_test(test_fat_batterie LABELS ecriture)
+  target_link_libraries(test_fat_batterie PRIVATE fl_testsupport)
+  add_test(NAME test_fat_batterie_lent COMMAND test_fat_batterie lent)
+  set_tests_properties(test_fat_batterie_lent PROPERTIES LABELS lent SKIP_RETURN_CODE 77
+    ENVIRONMENT "FL_FIXTURES=${CMAKE_BINARY_DIR}/fixtures" FIXTURES_REQUIRED fx)
+  fl_add_test(test_fat_coupure LABELS ecriture)
+  target_link_libraries(test_fat_coupure PRIVATE fl_testsupport)
+  add_test(NAME test_fat_ecriture_lent COMMAND test_fat_ecriture lent)
+  set_tests_properties(test_fat_ecriture_lent PROPERTIES LABELS lent SKIP_RETURN_CODE 77
+    ENVIRONMENT "FL_FIXTURES=${CMAKE_BINARY_DIR}/fixtures" FIXTURES_REQUIRED fx)
   fl_add_test(test_batterie LABELS ecriture)
   target_link_libraries(test_batterie PRIVATE fl_testsupport)
   # test_manifeste lance tools/fixtures/manifest.py
