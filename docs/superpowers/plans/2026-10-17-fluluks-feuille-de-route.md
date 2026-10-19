@@ -198,7 +198,8 @@ dans le même commit que le travail.
 
 ### Phase 5 — NTFS (lecture puis écriture) ([plan](2026-10-19-phase5-ntfs.md))
 - [x] Plan de la phase 5 écrit *(2026-10-19 ; libntfs-3g 2022.10.3, juge indépendant `ntfsjuge.py`)*
-- [ ] T1 — libntfs-3g dans l'arbre, images NTFS et juge indépendant
+- [x] T1 — libntfs-3g dans l'arbre, images NTFS et juge indépendant *(correctif 0001 : accès non alignés de
+      compress.c vus par UBSan ; test_ntfs_banc 5/5, suite rapide 28/28)*
 - [ ] T2 — Colle NTFS : montage, statfs, politique de lecture seule
 - [ ] T3 — Lecture : stat, readdir, pread
 - [ ] T4 — Écriture des fichiers et drapeau sale

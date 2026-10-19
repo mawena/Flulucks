@@ -1,0 +1,80 @@
+Sujet : accès non alignés dans compress.c (comportement indéfini)
+
+Le hachage LZNT1 lit un u32 non aligné sur x86, et la décompression lit les en-têtes de sous-blocs et les
+jetons par le16_to_cpup sur un pointeur quelconque : UBSan le signale (images de test, puis tout flux
+compressé lu). Lecture octet par octet sur toutes les architectures ; même résultat.
+
+--- a/libntfs-3g/compress.c	2026-10-19 05:33:49.557592288 +0000
++++ b/libntfs-3g/compress.c	2026-10-19 05:33:49.582592845 +0000
+@@ -95,6 +95,13 @@
+ 	s16 prev[NTFS_SB_SIZE];
+ } ;
+ 
++/* FluLuks : mot de 16 bits petit-boutiste lu à une adresse quelconque (le flux compressé n'est pas
++ * aligné : le16_to_cpup sur un pointeur non aligné est un comportement indéfini). */
++static inline u16 get_le16_unaligned(const u8 *p)
++{
++	return (u16)(p[0] | (p[1] << 8));
++}
++
+ /*
+  *		Hash the next 3-byte sequence in the input buffer
+  */
+@@ -103,13 +110,9 @@
+ 	u32 str;
+ 	u32 hash;
+ 
+-#if defined(__i386__) || defined(__x86_64__)
+-	/* Unaligned access allowed, and little endian CPU.
+-	 * Callers ensure that at least 4 (not 3) bytes are remaining.  */
+-	str = *(const u32 *)p & 0xFFFFFF;
+-#else
++	/* FluLuks : lecture octet par octet sur toutes les architectures (l'accès u32 non aligné du
++	 * chemin x86 est un comportement indéfini, signalé par UBSan). */
+ 	str = ((u32)p[0] << 0) | ((u32)p[1] << 8) | ((u32)p[2] << 16);
+-#endif
+ 
+ 	hash = str * HASH_MULTIPLIER;
+ 
+@@ -490,7 +493,7 @@
+ 	 * position in the compression block is one byte before its end so the
+ 	 * first two checks do not detect it.
+ 	 */
+-	if (cb == cb_end || !le16_to_cpup((le16*)cb) || dest == dest_end) {
++	if (cb == cb_end || !get_le16_unaligned(cb) || dest == dest_end) {
+ 		if (dest_end > dest)
+ 			memset(dest, 0, dest_end - dest);
+ 		ntfs_log_debug("Completed. Returning success (0).\n");
+@@ -507,12 +510,12 @@
+ 		goto return_overflow;
+ 	/* Setup the current sub-block source pointers and validate range. */
+ 	cb_sb_start = cb;
+-	cb_sb_end = cb_sb_start + (le16_to_cpup((le16*)cb) & NTFS_SB_SIZE_MASK)
++	cb_sb_end = cb_sb_start + (get_le16_unaligned(cb) & NTFS_SB_SIZE_MASK)
+ 			+ 3;
+ 	if (cb_sb_end > cb_end)
+ 		goto return_overflow;
+ 	/* Now, we are ready to process the current sub-block (sb). */
+-	if (!(le16_to_cpup((le16*)cb) & NTFS_SB_IS_COMPRESSED)) {
++	if (!(get_le16_unaligned(cb) & NTFS_SB_IS_COMPRESSED)) {
+ 		ntfs_log_debug("Found uncompressed sub-block.\n");
+ 		/* This sb is not compressed, just copy it into destination. */
+ 		/* Advance source position to first data byte. */
+@@ -586,7 +589,7 @@
+ 		for (i = dest - dest_sb_start - 1; i >= 0x10; i >>= 1)
+ 			lg++;
+ 		/* Get the phrase token into i. */
+-		pt = le16_to_cpup((le16*)cb);
++		pt = get_le16_unaligned(cb);
+ 		/*
+ 		 * Calculate starting position of the byte sequence in
+ 		 * the destination using the fact that p = (pt >> (12 - lg)) + 1
+@@ -942,7 +945,7 @@
+ 		na->data_flags = data_flags;
+ 		/* Just a precaution. */
+ 		if (cb_pos + 2 <= cb_end)
+-			*(u16*)cb_pos = 0;
++			memset(cb_pos, 0, 2);
+ 		ntfs_log_debug("Successfully read the compression block.\n");
+ 		/* Do not decompress beyond the requested block */
+ 		to_read = min(count, cb_size - ofs);
