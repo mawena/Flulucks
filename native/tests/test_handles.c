@@ -124,9 +124,11 @@ static void test_scan_ext4_et_fat(void) {
   TT_ASSERT(r != NULL);
   p = cJSON_GetArrayItem(cJSON_GetObjectItem(r, "parts"), 0);
   TT_ASSERT_STR_EQ(cJSON_GetObjectItem(p, "content")->valuestring, "FAT16");
-  TT_ASSERT(cJSON_IsFalse(cJSON_GetObjectItem(p, "supported")));
+  TT_ASSERT(cJSON_IsTrue(cJSON_GetObjectItem(p, "supported")));
   cJSON_Delete(r);
-  TT_ASSERT_EQ(fj_mount(d, 0, NULL, 0, false), FL_ENOTSUP);
+  int64_t fv = fj_mount(d, 0, NULL, 0, false);
+  TT_ASSERT(fv > 0);
+  TT_ASSERT_EQ(fj_unmount(fv, false), FL_OK);
   TT_ASSERT_EQ(fj_mount(d, 7, NULL, 0, false), FL_EINVAL);
   TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
   TT_ASSERT_EQ(fj_open_image(tt_fixture("absent.img"), true) < 0, 1);

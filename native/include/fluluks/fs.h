@@ -1,8 +1,9 @@
 #ifndef FLULUKS_FS_H
 #define FLULUKS_FS_H
 
-/* API fichiers unifiée, commune à tous les systèmes de fichiers (ext4 en phase 1 ;
- * FAT/exFAT et NTFS viendront s'y brancher).
+/* API fichiers unifiée, commune à tous les systèmes de fichiers (ext4 en phase 1, FAT12/16/32 et exFAT en
+ * phase 4 ; NTFS viendra s'y brancher). Sur FAT : uid et gid 0, droits 0644 (0444 si attribut lecture
+ * seule) ou 0755, pas de lien symbolique, noms insensibles à la casse.
  *
  * Chemins : absolus, en UTF-8, "/" pour la racine, sans "/" final, sans composant vide,
  * "." ni "..", 4095 octets au plus, 255 octets au plus par composant ; sinon FL_EINVAL.

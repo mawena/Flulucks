@@ -56,13 +56,16 @@ run np ls "$FX/gpt-luks2.img" 9 / --pass-file "$FX/pass.txt"
 [ "$RC" -eq 1 ] || fail "partition introuvable : code $RC"
 [ "$(cat "$TMP/np.err")" = "fluluks-cli: partition introuvable" ] || fail "partition introuvable : stderr"
 
-# format non pris en charge
+# FAT pris en charge (phase 4), NTFS non
 run fat parts "$FX/fat32.img"
 [ "$RC" -eq 0 ] || fail "parts fat32 : code $RC"
-grep -q "non\$" "$TMP/fat.out" || fail "parts fat32 : doit finir par non"
-run fat2 ls "$FX/fat32.img" 0 /
-[ "$RC" -eq 1 ] || fail "ls fat32 : code $RC"
-[ "$(cat "$TMP/fat2.err")" = "fluluks-cli: format non pris en charge" ] || fail "ls fat32 : stderr"
+grep -q "oui\$" "$TMP/fat.out" || fail "parts fat32 : doit finir par oui"
+run ntfs parts "$FX/ntfs.img"
+[ "$RC" -eq 0 ] || fail "parts ntfs : code $RC"
+grep -q "non\$" "$TMP/ntfs.out" || fail "parts ntfs : doit finir par non"
+run ntfs2 ls "$FX/ntfs.img" 0 /
+[ "$RC" -eq 1 ] || fail "ls ntfs : code $RC"
+[ "$(cat "$TMP/ntfs2.err")" = "fluluks-cli: format non pris en charge" ] || fail "ls ntfs : stderr"
 
 # chemin inexistant, fichier de phrase de passe absent
 run enoent cat "$FX/ext4-plain.img" 0 /nexiste/pas

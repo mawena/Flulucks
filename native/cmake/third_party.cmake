@@ -92,3 +92,10 @@ target_compile_definitions(fl_lwext4 PUBLIC
   CONFIG_DEBUG_PRINTF=0
   CONFIG_DEBUG_ASSERT=0)
 target_compile_options(fl_lwext4 PRIVATE -w)
+
+# --- FatFs R0.16 (ChaN) ---
+# Copie d'amont non modifiée dans third_party/fatfs (voir third_party/PATCHES.md) ; notre configuration est
+# cmake/fatfs/ffconf.h (ff.h l'inclut par "ffconf.h", absent du dossier d'amont : il est trouvé ici).
+add_library(fl_fatfs STATIC ${TP}/fatfs/ff.c ${TP}/fatfs/ffunicode.c ${TP}/fatfs/ffsystem.c)
+target_include_directories(fl_fatfs SYSTEM PUBLIC ${CMAKE_CURRENT_LIST_DIR}/fatfs ${TP}/fatfs)
+target_compile_options(fl_fatfs PRIVATE -w)

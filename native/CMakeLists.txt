@@ -43,6 +43,8 @@ set(FL_SOURCES
   src/fs/ext4_glue.c
   src/fs/ext4_policy.c
   src/fs/wbuf.c
+  src/fs/fat_diskio.c
+  src/fs/fat_glue.c
   src/usb/bot.c
   src/usb/scsi.c
   src/usb/usb_bdev.c
@@ -55,7 +57,7 @@ endif()
 add_library(fluluks STATIC ${FL_SOURCES})
 target_include_directories(fluluks PUBLIC include PRIVATE src)
 target_compile_options(fluluks PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 Threads::Threads)
+target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 fl_fatfs Threads::Threads)
 if(ANDROID)
   target_link_libraries(fluluks PUBLIC log) # fl_ext4_policy_log (logcat)
 endif()
@@ -118,6 +120,8 @@ if(FL_TESTS)
   fl_add_test(test_luks2)
   fl_add_test(test_luks2_lent LABELS lent)
   fl_add_test(test_ext4)
+  fl_add_test(test_fat)
+  target_link_libraries(test_fat PRIVATE fl_testsupport)
   fl_add_test(test_cache)
   fl_add_test(test_crc32c)
   add_test(NAME test_crc32c_debit COMMAND test_crc32c debit)
