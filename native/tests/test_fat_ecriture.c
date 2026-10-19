@@ -725,6 +725,95 @@ static void test_fat_nombreux(void) {
   }
 }
 
+/* --- débit (T6) -------------------------------------------------------------------------------- */
+
+/* Premier secteur (de 512 o) de la zone de données d'une image. */
+static uint64_t debut_donnees(const char *img) {
+  uint8_t b[512];
+  int fd = open(img, O_RDONLY);
+  ssize_t r = fd >= 0 ? pread(fd, b, sizeof b, 0) : -1;
+  if (fd >= 0) close(fd);
+  if (r != (ssize_t)sizeof b) return 0;
+  if (!memcmp(b + 3, "EXFAT   ", 8))
+    return ((uint64_t)(b[88] | b[89] << 8 | b[90] << 16 | (uint32_t)b[91] << 24) << b[108]) / 512;
+  uint32_t bps = b[11] | b[12] << 8, rsvd = b[14] | b[15] << 8, fatsz = b[36] | b[37] << 8 | b[38] << 16 | (uint32_t)b[39] << 24;
+  return ((uint64_t)rsvd + (uint64_t)b[16] * fatsz) * bps / 512;
+}
+
+/* 32 Mio copiés par pwrite de 128 Kio (le CHUNK du provider) : nombre d'écritures dans la zone de données.
+ * writes_ok < UINT64_MAX : panne d'écriture simulée. Rend le code de la copie (pwrite puis close). */
+static int copier_32m(const char *fixture, uint64_t writes_ok, uint64_t *ecritures, fl_statfs *apres, int *sync,
+                      int *juge) {
+  vol v;
+  memset(&v, 0, sizeof v);
+  *juge = -1;
+  if (fu_copy_image(tt_fixture(fixture), v.copie, sizeof v.copie) != 0) return FL_EIO;
+  fl_bdev *img = NULL;
+  int rc = fl_file_bdev_open(v.copie, 512, false, &img);
+  if (rc == FL_OK) rc = fl_fault_bdev_new(img, writes_ok, FL_EIO, &v.dev);
+  fl_probe_result pr;
+  if (rc == FL_OK) rc = fl_probe(v.dev, &pr);
+  if (rc == FL_OK) rc = fl_fs_mount(v.dev, pr.content, true, &v.fs);
+  uint8_t *data = motif(32 * MIB, 77);
+  fl_file *f = NULL;
+  if (rc == FL_OK) rc = data ? fl_fs_open(v.fs, "/copie.bin", FL_O_RDWR | FL_O_CREAT, &f) : FL_ENOMEM;
+  if (rc == FL_OK) fl_fault_bdev_count_from(v.dev, debut_donnees(v.copie));
+  for (size_t o = 0; rc == FL_OK && o < 32 * MIB; o += 128 * 1024) {
+    int64_t w = fl_file_pwrite(f, data + o, 128 * 1024, o);
+    if (w != 128 * 1024) rc = w < 0 ? (int)w : FL_EIO;
+  }
+  int c = f ? fl_file_close(f) : FL_OK;
+  if (rc == FL_OK) rc = c;
+  *ecritures = v.dev ? fl_fault_bdev_counted_writes(v.dev) : 0;
+  if (v.fs && fl_fs_statfs(v.fs, apres) != FL_OK) apres->free_bytes = UINT64_MAX; /* volume illisible */
+  *sync = v.fs ? fl_fs_sync(v.fs) : FL_EIO;
+  if (writes_ok == UINT64_MAX && rc == FL_OK) {
+    v.m = tm_new();
+    tm_set_fat_attrs(v.m);
+    tm_apply_file(v.m, "/copie.bin", data, 32 * MIB, 0, 0, 0644);
+    *juge = juger(&v);
+  }
+  if (v.fs) fl_fs_unmount(v.fs);
+  v.fs = NULL;
+  fl_bdev_close(v.dev);
+  v.dev = NULL;
+  fl_bdev_close(img);
+  tm_free(v.m);
+  v.m = NULL;
+  unlink(v.copie);
+  free(data);
+  return rc;
+}
+
+static void test_fat_debit(void) {
+  static const struct {
+    const char *img;
+    uint64_t max;
+  } cas[] = {{"exfat-vide.img", 64}, {"fat32-vide.img", 160}};
+  for (size_t i = 0; i < 2; i++) {
+    uint64_t n = 0;
+    fl_statfs st = {0};
+    int sync = 0, j = -1;
+    int rc = copier_32m(cas[i].img, UINT64_MAX, &n, &st, &sync, &j);
+    fprintf(stderr, "%s : %llu écritures dans la zone de données pour 32 Mio\n", cas[i].img, (unsigned long long)n);
+    TT_ASSERT_EQ(rc, FL_OK);
+    TT_ASSERT(n <= cas[i].max);
+    TT_ASSERT_EQ(sync, FL_OK);
+    TT_ASSERT_EQ(j, 0);
+    /* panne d'écriture : erreur rendue, lecture seule collante, sync en erreur */
+    memset(&st, 0, sizeof st);
+    rc = copier_32m(cas[i].img, 3, &n, &st, &sync, &j);
+    if (!st.read_only || sync != FL_EIO)
+      fprintf(stderr, "%s en panne : copie %d, lecture seule %d « %s », sync %d\n", cas[i].img, rc, st.read_only,
+              st.ro_reason, sync);
+    TT_ASSERT_EQ(rc, FL_EIO);
+    TT_ASSERT(st.free_bytes != UINT64_MAX); /* encore lisible après la panne */
+    TT_ASSERT(st.read_only);
+    TT_ASSERT_STR_EQ(st.ro_reason, FL_RO_IOERR);
+    TT_ASSERT_EQ(sync, FL_EIO);
+  }
+}
+
 int main(int argc, char **argv) {
   if (!fu_fat_tools_available()) {
     printf("SAUTÉ : outils FAT/exFAT absents ou plateforme Android (banc réservé au PC)\n");
@@ -753,5 +842,6 @@ int main(int argc, char **argv) {
   TT_RUN(test_fat_renommer_deplacer);
   TT_RUN(test_fat_ouvert_occupe);
   TT_RUN(test_fat_nombreux);
+  TT_RUN(test_fat_debit);
   TT_MAIN_END();
 }

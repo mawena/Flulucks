@@ -8,6 +8,7 @@
 #include "ff.h"     /* avant diskio.h, qui en utilise les types */
 #include "diskio.h"
 #include "fluluks/error.h"
+#include "fs/wbuf.h"
 
 struct fat_disk {
   uint8_t pdrv;
@@ -16,6 +17,7 @@ struct fat_disk {
   uint32_t ratio;  /* ss / dev->sector_size, 0 si ss est plus petit (lecture seule) */
   bool writable;
   int err;         /* première erreur d'écriture ou de vidage (collante) */
+  fl_wbuf wb;      /* écritures contiguës regroupées */
 };
 
 static fat_disk *g_disks[FF_VOLUMES]; /* sous le verrou de fat_glue.c */
@@ -35,14 +37,30 @@ int fat_disk_attach(uint8_t pdrv, fl_bdev *dev, uint32_t ss, bool writable, fat_
   return FL_OK;
 }
 
+/* Chemin d'écriture réel du tampon (offsets et longueurs multiples de ss). */
+static int wb_flush_fn(void *ctx, const void *p, size_t len, uint64_t off) {
+  fat_disk *d = ctx;
+  uint32_t dss = d->dev->sector_size;
+  return fl_bdev_write(d->dev, off / dss, (uint32_t)(len / dss), p);
+}
+
+int fat_disk_drain(fat_disk *d) {
+  int rc = fl_wbuf_flush(&d->wb, wb_flush_fn, d);
+  if (rc != FL_OK && d->err == FL_OK) d->err = rc;
+  return d->err;
+}
+
 void fat_disk_detach(fat_disk *d) {
   if (!d) return;
+  if (d->writable) fat_disk_drain(d);
+  fl_wbuf_free(&d->wb);
   g_disks[d->pdrv] = NULL;
   free(d);
 }
 
 void fat_disk_set_writable(fat_disk *d, bool writable) {
   d->writable = writable && d->ratio != 0 && !d->dev->read_only;
+  if (!d->writable) fl_wbuf_free(&d->wb); /* plus rien n'est écrit */
 }
 
 int fat_disk_error(const fat_disk *d) { return d->err; }
@@ -69,6 +87,7 @@ DRESULT disk_read(BYTE pdrv, BYTE *buff, LBA_t sector, UINT count) {
   fat_disk *d = disk(pdrv);
   if (!d) return RES_NOTRDY;
   if (!in_range(d, sector, count)) return RES_PARERR;
+  if (d->wb.data && fat_disk_drain(d) != FL_OK) return RES_ERROR;
   int rc = d->ratio ? fl_bdev_read(d->dev, (uint64_t)sector * d->ratio, count * d->ratio, buff)
                     : fl_bdev_read_bytes(d->dev, (uint64_t)sector * d->ss, (size_t)count * d->ss, buff);
   return rc == FL_OK ? RES_OK : RES_ERROR;
@@ -80,7 +99,7 @@ DRESULT disk_write(BYTE pdrv, const BYTE *buff, LBA_t sector, UINT count) {
   if (!d->writable) return RES_WRPRT;
   if (d->err != FL_OK) return RES_ERROR;
   if (!in_range(d, sector, count)) return RES_PARERR;
-  int rc = fl_bdev_write(d->dev, (uint64_t)sector * d->ratio, count * d->ratio, buff);
+  int rc = fl_wbuf_write(&d->wb, buff, (size_t)count * d->ss, (uint64_t)sector * d->ss, wb_flush_fn, d);
   if (rc != FL_OK) {
     d->err = rc;
     return RES_ERROR;
@@ -94,7 +113,7 @@ DRESULT disk_ioctl(BYTE pdrv, BYTE cmd, void *buff) {
   switch (cmd) {
     case CTRL_SYNC: {
       if (!d->writable) return RES_OK;
-      if (d->err != FL_OK) return RES_ERROR;
+      if (fat_disk_drain(d) != FL_OK) return RES_ERROR;
       int rc = fl_bdev_flush(d->dev);
       if (rc != FL_OK) {
         d->err = rc;

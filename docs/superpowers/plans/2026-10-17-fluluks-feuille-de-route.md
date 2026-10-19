@@ -179,7 +179,8 @@ dans le même commit que le travail.
       en exFAT en 20 s ; suite rapide 24/24)*
 - [x] T5 — Dossiers et noms : renommage de casse, sous lui-même, noms refusés *(« \\ » refusé sur tout le
       chemin : FatFs le prend pour un séparateur ; test_fat_ecriture 17/17)*
-- [ ] T6 — Débit : regroupement des écritures contiguës
+- [x] T6 — Débit : regroupement des écritures contiguës *(32 Mio par pwrite de 128 Kio, écritures dans la zone
+      de données : exFAT 8 196 → 13, FAT32 → 130 ; après une panne d'écriture le volume reste lisible)*
 - [ ] T7 — Coupures et pannes
 - [ ] T8 — Batterie aléatoire, images hostiles, vérification par le noyau
 - [ ] T9 — JNI, Kotlin, Flutter

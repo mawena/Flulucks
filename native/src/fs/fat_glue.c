@@ -404,6 +404,10 @@ static int name_ok(const char *path);
 static void go_ro(fat_vol *v, const char *why) {
   fat_disk_set_writable(v->disk, false);
   fl_fs_go_read_only(v->fs, why);
+  /* Fenêtre de FatFs non écrite : abandonnée (elle ne pourra plus l'être), sinon chaque lecture qui
+   * déplace la fenêtre échouerait en voulant l'écrire. La suite relit le disque tel qu'il est. */
+  v->ff.wflag = 0;
+  v->ff.winsect = (LBA_t)0 - 1;
 }
 
 /* Code d'une opération d'écriture de FatFs ; erreur du disque ou incohérence : lecture seule collante
@@ -427,7 +431,8 @@ static int set_dirty_flag(fat_vol *v, bool sale) {
   fl_bdev *dev = v->fs->dev;
   uint8_t *b = malloc(v->ss);
   if (!b) return FL_ENOMEM;
-  int rc = fl_bdev_read_bytes(dev, 0, v->ss, b);
+  int rc = fat_disk_drain(v->disk); /* écriture directe : rien ne doit rester dans le tampon */
+  if (rc == FL_OK) rc = fl_bdev_read_bytes(dev, 0, v->ss, b);
   if (rc == FL_OK) {
     size_t o = v->ff.fs_type == FS_EXFAT ? 106 : v->ff.fs_type == FS_FAT32 ? 0x41 : 0x25;
     uint8_t bit = v->ff.fs_type == FS_EXFAT ? 0x02 : 0x01;
