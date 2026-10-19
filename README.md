@@ -7,13 +7,13 @@ une vidéo dans VLC, un PDF ou une photo dans les applications habituelles.
 Elle est née d'un besoin simple : utiliser sur un téléphone non rooté (un Pixel 4 XL) le disque
 LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permettait.
 
-> **État actuel : version 0.2.1, lecture et écriture sur ext4.** L'écriture a été vérifiée sur PC
+> **État actuel : version 0.3.0, lecture et écriture sur ext4, FAT et exFAT.** L'écriture a été vérifiée sur PC
 > (batteries de non-corruption jugées par `e2fsck`, `debugfs` et le noyau Linux, coupures simulées) et
 > sur le téléphone avec des images, mais **pas encore sur un vrai disque USB** : faites une sauvegarde
 > avant d'écrire sur un disque qui compte, ou activez « Ouvrir les disques en lecture seule ». Voir les
 > [limites](#limites-actuelles).
 
-## Ce que fait la version 0.2.1
+## Ce que fait la version 0.3.0
 
 - **Détecte** un disque USB de stockage de masse branché en USB-C, et demande la permission d'accès.
 - **Lit les tables de partitions** GPT et MBR (partitions étendues comprises), ainsi qu'un disque sans
@@ -62,9 +62,8 @@ Mesures sur un Pixel 4 XL avec le vrai disque (LUKS2, Argon2id à 1 Gio de mémo
 - **Écriture refusée** (le volume s'ouvre en lecture seule, avec la raison) sur un ext4 sans journal,
   sans extents (ancien ext3 converti), à journal externe, avec un journal à sommes v1 ou v2, ou avec
   une option inconnue de FluLuks. Le journal doit avoir été rejoué (disque bien démonté sous Ubuntu).
-- **Écriture FAT et exFAT non essayée sur une vraie clé USB** : elle est vérifiée sur PC (`fsck.fat`,
-  `fsck.exfat`, un lecteur indépendant, coupures simulées, images hostiles) et sur le téléphone avec des
-  images.
+- **Écriture FAT et exFAT** : vérifiée sur PC (`fsck.fat`, `fsck.exfat`, un lecteur indépendant,
+  coupures simulées, images hostiles), sur le téléphone avec des images, puis essayée sur une vraie clé.
 - **FAT ou exFAT mal éjecté** : une clé débranchée sans « Éjecter » (ou retirée d'un ordinateur sans
   éjection) s'ouvre en lecture seule, jusqu'à sa vérification sur un ordinateur (chkdsk sous Windows,
   `fsck.fat` ou `fsck.exfat` sous Linux). FluLuks ne répare pas un système de fichiers FAT abîmé.
@@ -207,7 +206,7 @@ Le dépôt suit git flow :
 | 1 | Moteur natif en lecture sur PC | — |
 | 2 | Android en lecture : « mon disque dans VLC » | **v0.1.0** |
 | 3 | ext4 en écriture (essai sur un vrai disque à faire) | **v0.2.1** |
-| 4 | FAT16 / FAT32 / exFAT | v0.3.0 |
+| 4 | FAT16 / FAT32 / exFAT | **v0.3.0** |
 | 5 | NTFS | v0.4.0 |
 | 6 | Finitions : explorateur intégré, copies avec progression, réglages, robustesse | v1.0.0 |
 
