@@ -321,8 +321,9 @@ $PY "$HERE/fatjuge.py" build-exfat exfat-arbre.img tree-exfat
 truncate -s 300M fat32-vide.img;   mkfs.vfat -F 32 -s 8 -n FLUVIDE fat32-vide.img >/dev/null
 truncate -s 64M exfat-vide.img;    mkfs.exfat -c 4096 -L FLUVIDE exfat-vide.img >/dev/null
 truncate -s 6G exfat-grand.img;    mkfs.exfat -L FLUGRAND exfat-grand.img >/dev/null
-cp fat32-vide.img fat32-512-sur-4k.img
-for i in fat12-arbre fat16-arbre fat32-arbre fat32-4k fat32-vide; do fsck.fat -n "$i.img" >/dev/null; done
+# FAT32 à secteurs de 512 o (clusters de 512 o : 40 Mio suffisent), ouverte sur un disque de 4096 o
+truncate -s 40M fat32-512-sur-4k.img; mkfs.vfat -F 32 -s 1 -n FLU512 fat32-512-sur-4k.img >/dev/null
+for i in fat12-arbre fat16-arbre fat32-arbre fat32-4k fat32-vide fat32-512-sur-4k; do fsck.fat -n "$i.img" >/dev/null; done
 for i in exfat-arbre exfat-vide exfat-grand; do fsck.exfat -n "$i.img" >/dev/null; done
 
 # Images sales : copie, puis un seul octet modifié (ou-exclusif ou masque) à un offset donné.

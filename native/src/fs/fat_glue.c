@@ -32,6 +32,21 @@
 static pthread_mutex_t g_fat_lock = PTHREAD_MUTEX_INITIALIZER;
 static bool g_slot[FF_VOLUMES]; /* emplacements FatFs pris (g_fat_lock) */
 
+/* Fichier ouvert : un seul FIL par fichier, partagé par toutes ses poignées (FatFs interdit deux FIL en
+ * écriture sur un même fichier, et un lecteur à part ne verrait ni la taille ni le tampon de l'écrivain).
+ * Clé = emplacement de l'entrée de dossier : (secteur, offset dans le secteur) en FAT, (cluster du dossier,
+ * offset dans le dossier) en exFAT. Elle ne change pas tant que le fichier est ouvert : renommer ou
+ * supprimer un fichier ouvert est refusé (FL_EBUSY). */
+typedef struct fat_node {
+  struct fat_node *next;
+  uint64_t key_a, key_b;
+  FIL fil;
+  uint32_t refs;      /* poignées */
+  uint32_t writers;   /* poignées ouvertes en écriture */
+  DWORD *cltbl;       /* table de clusters (recherche rapide) d'un noeud sans écrivain, ou NULL */
+  bool cltbl_tried;
+} fat_node;
+
 typedef struct {
   fl_fs *fs;
   FATFS ff;
@@ -40,7 +55,11 @@ typedef struct {
   char drv[4];  /* "n:" */
   uint32_t ss;  /* taille de secteur du système de fichiers */
   uint32_t open_files; /* fichiers ouverts + parcours de dossier en cours (g_fat_lock) */
+  fat_node *nodes;     /* fichiers ouverts (g_fat_lock) */
 } fat_vol;
+
+#define FULL_CAP (4 + 4096) /* "n:" + chemin validé (≤ 4095 octets) + NUL */
+#define READDIR_BATCH 64
 
 /* --- outils ---------------------------------------------------------------------------------- */
 
@@ -152,29 +171,279 @@ static int f_statfs(fl_fs *fs, fl_statfs *out) {
   return FL_OK;
 }
 
+/* Chemin FatFs « n:/… » d'un chemin validé. */
+static void full_path(const fat_vol *v, const char *path, char out[FULL_CAP]) {
+  snprintf(out, FULL_CAP, "%s%s", v->drv, path);
+}
+
+/* Date et heure FAT (heure locale) en secondes Unix ; 0 si la date est invalide. */
+static int64_t fat_time(WORD d, WORD t) {
+  struct tm lt = {0};
+  lt.tm_year = 80 + (d >> 9);
+  lt.tm_mon = ((d >> 5) & 15) - 1;
+  lt.tm_mday = d & 31;
+  lt.tm_hour = t >> 11;
+  lt.tm_min = (t >> 5) & 63;
+  lt.tm_sec = (t & 31) * 2;
+  lt.tm_isdst = -1;
+  if (lt.tm_mon < 0 || lt.tm_mon > 11 || lt.tm_mday == 0) return 0;
+  time_t r = mktime(&lt);
+  return r == (time_t)-1 ? 0 : (int64_t)r;
+}
+
+static void fill_stat(const FILINFO *fi, fl_stat *out) {
+  memset(out, 0, sizeof *out);
+  bool dir = fi->fattrib & AM_DIR;
+  out->type = dir ? FL_FT_DIR : FL_FT_FILE;
+  out->size = dir ? 0 : (uint64_t)fi->fsize;
+  out->mtime = fat_time(fi->fdate, fi->ftime);
+  out->mode = dir ? 040755 : (fi->fattrib & AM_RDO) ? 0100444 : 0100644;
+}
+
+static void root_stat(fl_stat *out) {
+  memset(out, 0, sizeof *out);
+  out->type = FL_FT_DIR;
+  out->mode = 040755;
+}
+
+/* FR_NO_PATH : un composant intermédiaire manque (FL_ENOENT) ou n'est pas un dossier (FL_ENOTDIR). Sous
+ * g_fat_lock. */
+static int nopath_err(const fat_vol *v, const char *path) {
+  char p[FULL_CAP];
+  size_t base = strlen(v->drv);
+  full_path(v, path, p);
+  for (char *c = p + base + 1; (c = strchr(c, '/')) != NULL; c++) {
+    *c = 0;
+    FILINFO fi;
+    FRESULT r = f_stat(p, &fi);
+    *c = '/';
+    if (r != FR_OK) return FL_ENOENT;
+    if (!(fi.fattrib & AM_DIR)) return FL_ENOTDIR;
+  }
+  return FL_ENOENT;
+}
+
+/* f_stat d'un chemin validé, racine comprise (sous g_fat_lock). */
+static int stat_locked(const fat_vol *v, const char *path, FILINFO *fi, bool *root) {
+  *root = !strcmp(path, "/");
+  if (*root) {
+    memset(fi, 0, sizeof *fi);
+    fi->fattrib = AM_DIR;
+    return FL_OK;
+  }
+  char p[FULL_CAP];
+  full_path(v, path, p);
+  FRESULT r = f_stat(p, fi);
+  if (r == FR_NO_PATH) return nopath_err(v, path);
+  return fr_err(r);
+}
+
 static int f_stat_op(fl_fs *fs, const char *path, fl_stat *out) {
-  (void)fs, (void)path, (void)out;
-  return FL_ENOTSUP;
+  fat_vol *v = fs->priv;
+  FILINFO fi;
+  bool root;
+  pthread_mutex_lock(&g_fat_lock);
+  int rc = stat_locked(v, path, &fi, &root);
+  pthread_mutex_unlock(&g_fat_lock);
+  if (rc != FL_OK) return rc;
+  if (root) root_stat(out);
+  else fill_stat(&fi, out);
+  return FL_OK;
 }
 
 static int f_readdir_op(fl_fs *fs, const char *path, fl_readdir_cb cb, void *ctx) {
-  (void)fs, (void)path, (void)cb, (void)ctx;
-  return FL_ENOTSUP;
+  fat_vol *v = fs->priv;
+  DIR *dir = malloc(sizeof *dir);
+  fl_dirent *batch = malloc(READDIR_BATCH * sizeof *batch);
+  FILINFO *fi = malloc(sizeof *fi);
+  if (!dir || !batch || !fi) {
+    free(dir);
+    free(batch);
+    free(fi);
+    return FL_ENOMEM;
+  }
+  char p[FULL_CAP];
+  full_path(v, path, p);
+  pthread_mutex_lock(&g_fat_lock);
+  bool root;
+  int rc = stat_locked(v, path, fi, &root);
+  if (rc == FL_OK && !(fi->fattrib & AM_DIR)) rc = FL_ENOTDIR;
+  if (rc == FL_OK) rc = fr_err(f_opendir(dir, p));
+  if (rc == FL_OK) v->open_files++;
+  pthread_mutex_unlock(&g_fat_lock);
+  bool opened = rc == FL_OK, fin = false;
+  while (rc == FL_OK && !fin) {
+    size_t n = 0;
+    pthread_mutex_lock(&g_fat_lock);
+    while (n < READDIR_BATCH) {
+      FRESULT r = f_readdir(dir, fi);
+      if (r != FR_OK) {
+        rc = fr_err(r);
+        break;
+      }
+      if (!fi->fname[0]) {
+        fin = true;
+        break;
+      }
+      if (!strcmp(fi->fname, ".") || !strcmp(fi->fname, "..")) continue;
+      snprintf(batch[n].name, sizeof batch[n].name, "%s", fi->fname);
+      fill_stat(fi, &batch[n].st);
+      n++;
+    }
+    pthread_mutex_unlock(&g_fat_lock);
+    for (size_t i = 0; rc == FL_OK && i < n; i++) {
+      int r = cb(ctx, &batch[i]);
+      if (r != 0) {
+        rc = r;
+        fin = true;
+      }
+    }
+  }
+  if (opened) {
+    pthread_mutex_lock(&g_fat_lock);
+    f_closedir(dir);
+    v->open_files--;
+    pthread_mutex_unlock(&g_fat_lock);
+  }
+  free(dir);
+  free(batch);
+  free(fi);
+  return rc;
+}
+
+/* Clé d'un fichier ouvert par f_open (voir fat_node). */
+static void node_key(const fat_vol *v, const FIL *f, uint64_t *a, uint64_t *b) {
+  if (v->ff.fs_type == FS_EXFAT) {
+    *a = f->obj.c_scl;
+    *b = f->obj.c_ofs;
+  } else {
+    *a = (uint64_t)f->dir_sect;
+    *b = (uint64_t)(f->dir_ptr - v->ff.win);
+  }
+}
+
+static fat_node *find_node(const fat_vol *v, uint64_t a, uint64_t b) {
+  for (fat_node *n = v->nodes; n; n = n->next)
+    if (n->key_a == a && n->key_b == b) return n;
+  return NULL;
+}
+
+/* Ouvre (ou rejoint) le noeud du fichier ordinaire `path` (sous g_fat_lock). */
+static int node_get(fat_vol *v, const char *path, fat_node **out) {
+  FILINFO fi;
+  bool root;
+  int rc = stat_locked(v, path, &fi, &root);
+  if (rc != FL_OK) return rc;
+  if (fi.fattrib & AM_DIR) return FL_EISDIR;
+  fat_node *n = calloc(1, sizeof *n);
+  if (!n) return FL_ENOMEM;
+  char p[FULL_CAP];
+  full_path(v, path, p);
+  BYTE mode = FA_READ | (!v->fs->read_only && !(fi.fattrib & AM_RDO) ? FA_WRITE : 0);
+  FRESULT r = f_open(&n->fil, p, mode);
+  if (r != FR_OK) {
+    free(n);
+    return r == FR_NO_PATH ? nopath_err(v, path) : fr_err(r);
+  }
+  node_key(v, &n->fil, &n->key_a, &n->key_b);
+  fat_node *e = find_node(v, n->key_a, n->key_b);
+  if (e) {
+    f_close(&n->fil); /* jamais modifié : rien n'est écrit */
+    free(n);
+    n = e;
+  } else {
+    n->next = v->nodes;
+    v->nodes = n;
+  }
+  n->refs++;
+  *out = n;
+  return FL_OK;
+}
+
+/* Lâche une poignée du noeud ; le ferme à la dernière (sous g_fat_lock). Rend l'erreur de f_close. */
+static int node_put(fat_vol *v, fat_node *n) {
+  if (--n->refs > 0) return FL_OK;
+  for (fat_node **pp = &v->nodes; *pp; pp = &(*pp)->next)
+    if (*pp == n) {
+      *pp = n->next;
+      break;
+    }
+  n->fil.cltbl = NULL;
+  int rc = fr_err(f_close(&n->fil));
+  free(n->cltbl);
+  free(n);
+  return rc;
 }
 
 static int f_open_op(fl_fs *fs, const char *path, int flags, fl_file **out) {
-  (void)fs, (void)path, (void)flags, (void)out;
-  return FL_ENOTSUP;
+  fat_vol *v = fs->priv;
+  if (flags != FL_O_RDONLY) return FL_ENOTSUP; /* écriture : tâche suivante */
+  fl_file *f = calloc(1, sizeof *f);
+  if (!f) return FL_ENOMEM;
+  pthread_mutex_lock(&g_fat_lock);
+  fat_node *n = NULL;
+  int rc = node_get(v, path, &n);
+  if (rc == FL_OK) v->open_files++;
+  pthread_mutex_unlock(&g_fat_lock);
+  if (rc != FL_OK) {
+    free(f);
+    return rc;
+  }
+  f->fs = fs;
+  f->flags = flags;
+  f->priv = n;
+  *out = f;
+  return FL_OK;
+}
+
+/* Table de clusters d'un noeud sans écrivain, construite une fois (sous g_fat_lock). Sans place, la
+ * lecture s'en passe. */
+#define CLTBL_WORDS 4096
+static void node_fastseek(fat_node *n) {
+  if (n->writers || n->cltbl_tried) return;
+  n->cltbl_tried = true;
+  DWORD *t = malloc(CLTBL_WORDS * sizeof *t);
+  if (!t) return;
+  t[0] = CLTBL_WORDS;
+  n->fil.cltbl = t;
+  if (f_lseek(&n->fil, CREATE_LINKMAP) != FR_OK) {
+    n->fil.cltbl = NULL;
+    free(t);
+    return;
+  }
+  n->cltbl = t;
 }
 
 static int64_t f_pread_op(fl_file *f, void *buf, size_t len, uint64_t off) {
-  (void)f, (void)buf, (void)len, (void)off;
-  return FL_ENOTSUP;
+  fat_node *n = f->priv;
+  pthread_mutex_lock(&g_fat_lock);
+  int64_t rc;
+  FSIZE_t size = f_size(&n->fil);
+  if (n->fil.err) {
+    rc = FL_EIO;
+  } else if (off >= size) {
+    rc = 0;
+  } else {
+    if (len > size - off) len = (size_t)(size - off);
+    if (len > (1u << 30)) len = 1u << 30;
+    node_fastseek(n);
+    UINT br = 0;
+    FRESULT r = f_lseek(&n->fil, (FSIZE_t)off);
+    if (r == FR_OK) r = f_read(&n->fil, buf, (UINT)len, &br);
+    rc = r == FR_OK ? (int64_t)br : fr_err(r);
+  }
+  pthread_mutex_unlock(&g_fat_lock);
+  return rc;
 }
 
 static int f_close_op(fl_file *f) {
+  fat_vol *v = f->fs->priv;
+  pthread_mutex_lock(&g_fat_lock);
+  int rc = node_put(v, f->priv);
+  v->open_files--;
+  pthread_mutex_unlock(&g_fat_lock);
   free(f);
-  return FL_OK;
+  return rc;
 }
 
 /* Libère l'emplacement et le volume (sous g_fat_lock). */

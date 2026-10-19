@@ -172,7 +172,8 @@ dans le même commit que le travail.
       écrire un émoji : il n'est que dans l'arbre exFAT ; test_fat_banc 6/6)*
 - [x] T2 — FatFs dans le moteur : montage, statfs, lecture seule si sale *(la JNI et fluluks-cli acceptent
       FAT dès T2, au lieu de T9 ; arm64 compilé)*
-- [ ] T3 — Lecture : stat, readdir, pread, noeuds partagés, recherche rapide
+- [x] T3 — Lecture : stat, readdir, pread, noeuds partagés, recherche rapide *(test_fat 19/19 sur PC et sur le
+      Pixel ; sans la table de clusters, 12 590 lectures au lieu de 5 000 au plus pour 500 pread)*
 - [ ] T4 — Écriture des fichiers : zéros des trous, limite 4 Gio (`FL_EFBIG`), drapeau sale
 - [ ] T5 — Dossiers et noms : renommage de casse, sous lui-même, noms refusés
 - [ ] T6 — Débit : regroupement des écritures contiguës

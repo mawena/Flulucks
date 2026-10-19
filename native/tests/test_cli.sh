@@ -60,6 +60,12 @@ run np ls "$FX/gpt-luks2.img" 9 / --pass-file "$FX/pass.txt"
 run fat parts "$FX/fat32.img"
 [ "$RC" -eq 0 ] || fail "parts fat32 : code $RC"
 grep -q "oui\$" "$TMP/fat.out" || fail "parts fat32 : doit finir par oui"
+run fatls ls "$FX/fat32-arbre.img" 0 /
+[ "$RC" -eq 0 ] || fail "ls fat32-arbre : code $RC"
+grep -q "gros.bin" "$TMP/fatls.out" || fail "ls fat32-arbre : gros.bin absent"
+run fatcat cat "$FX/exfat-arbre.img" 0 /abc.txt
+[ "$RC" -eq 0 ] || fail "cat exfat-arbre : code $RC"
+[ "$(cat "$TMP/fatcat.out")" = "minuscules" ] || fail "cat exfat-arbre : contenu"
 run ntfs parts "$FX/ntfs.img"
 [ "$RC" -eq 0 ] || fail "parts ntfs : code $RC"
 grep -q "non\$" "$TMP/ntfs.out" || fail "parts ntfs : doit finir par non"
