@@ -59,6 +59,8 @@ struct fl_file {
 typedef int (*fl_fs_mount_fn)(fl_bdev *dev, bool want_rw, fl_fs **out);
 
 int fl_ext4_mount(fl_bdev *dev, bool want_rw, fl_fs **out);
+/* FAT12, FAT16, FAT32 et exFAT par FatFs (fat_glue.c, phase 4). */
+int fl_fat_mount(fl_bdev *dev, bool want_rw, fl_fs **out);
 
 /* Lecture seule collante : pose la raison puis read_only (une seule fois, même entre fils : les
  * suivantes sont sans effet). */

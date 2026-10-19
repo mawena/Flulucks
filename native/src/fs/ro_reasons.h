@@ -15,5 +15,9 @@
 #define FL_RO_IOERR "erreur d'écriture : volume passé en lecture seule"
 #define FL_RO_CORRUPT "structure incohérente vue pendant une écriture : vérifiez le disque sous Ubuntu"
 #define FL_RO_ABORT "écriture interrompue : volume passé en lecture seule"
+/* FAT / exFAT (phase 4) */
+#define FL_RO_DIRTY "disque mal éjecté : vérifiez-le sur un ordinateur (chkdsk ou fsck) avant d'y écrire"
+#define FL_RO_MEDIA "erreurs de support signalées par le volume : vérifiez-le sur un ordinateur"
+#define FL_RO_SECTOR "taille de secteur non prise en charge en écriture"
 
 #endif

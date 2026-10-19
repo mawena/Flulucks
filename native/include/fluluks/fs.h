@@ -1,8 +1,9 @@
 #ifndef FLULUKS_FS_H
 #define FLULUKS_FS_H
 
-/* API fichiers unifiée, commune à tous les systèmes de fichiers (ext4 en phase 1 ;
- * FAT/exFAT et NTFS viendront s'y brancher).
+/* API fichiers unifiée, commune à tous les systèmes de fichiers (ext4 en phase 1, FAT12/16/32 et exFAT en
+ * phase 4 ; NTFS viendra s'y brancher). Sur FAT : uid et gid 0, droits 0644 (0444 si attribut lecture
+ * seule) ou 0755, pas de lien symbolique, noms insensibles à la casse.
  *
  * Chemins : absolus, en UTF-8, "/" pour la racine, sans "/" final, sans composant vide,
  * "." ni "..", 4095 octets au plus, 255 octets au plus par composant ; sinon FL_EINVAL.
@@ -72,9 +73,11 @@ int fl_fs_open(fl_fs *fs, const char *path, int flags, fl_file **out);
 int64_t fl_file_pread(fl_file *f, void *buf, size_t len, uint64_t off);
 /* Octets écrits (= len) ou fl_err, jamais un compte court (après une erreur, le fichier garde ce
  * qui a été écrit, taille comprise). Écrire au-delà de la fin laisse un trou, lu comme des zéros.
- * Met à jour mtime et ctime. ext4 : FL_ENOTSUP pour un fichier sans extents (ext3). */
+ * Met à jour mtime et ctime. ext4 : FL_ENOTSUP pour un fichier sans extents (ext3). FAT12/16/32 : FL_EFBIG
+ * d'emblée, sans rien écrire, si off + len dépasse 4 Gio - 1. */
 int64_t fl_file_pwrite(fl_file *f, const void *buf, size_t len, uint64_t off);
-/* Vers le bas comme vers le haut (trou lu comme des zéros). Met à jour mtime et ctime. */
+/* Vers le bas comme vers le haut (trou lu comme des zéros). Met à jour mtime et ctime. FAT12/16/32 : FL_EFBIG
+ * au-delà de 4 Gio - 1. */
 int fl_file_truncate(fl_file *f, uint64_t size);
 /* NULL accepté. Un fichier écrit ou tronqué depuis son ouverture : fl_fs_sync (dont le code est
  * rendu). */

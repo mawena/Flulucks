@@ -148,5 +148,6 @@ const char *fl_content_name(fl_content c) {
 }
 
 bool fl_content_supported(fl_content c) {
-  return c == FL_CONTENT_LUKS1 || c == FL_CONTENT_LUKS2 || c == FL_CONTENT_EXT4;
+  return c == FL_CONTENT_LUKS1 || c == FL_CONTENT_LUKS2 || c == FL_CONTENT_EXT4 || c == FL_CONTENT_FAT12 ||
+         c == FL_CONTENT_FAT16 || c == FL_CONTENT_FAT32 || c == FL_CONTENT_EXFAT;
 }

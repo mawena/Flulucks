@@ -1,0 +1,27 @@
+Sujet : f_lseek(CREATE_LINKMAP) sans fin sur une chaîne de clusters en boucle
+
+Disque hostile : une chaîne de FAT qui revient sur elle-même (A -> A, ou A -> B -> A) fait tourner
+sans fin la création de la table de recherche rapide (ff.c, f_lseek, CREATE_LINKMAP) : la boucle ne
+s'arrête qu'à la fin de chaîne. Correctif : au plus n_fatent clusters parcourus, sinon FR_INT_ERR.
+Trouvé par test_fat_hostile (phase 4, T8).
+diff --git a/ff.c b/ff.c
+index 09356ec..f3b75fa 100644
+--- a/ff.c
++++ b/ff.c
+@@ -4575,7 +4575,7 @@ FRESULT f_lseek (
+ 
+ #if FF_USE_FASTSEEK
+ 	if (fp->cltbl) {	/* Fast seek */
+-		DWORD cl, pcl, ncl, tcl, tlen, ulen;
++		DWORD cl, pcl, ncl, tcl, tlen, ulen, nall = 0;	/* FluLuks : nall borne le parcours */
+ 		DWORD *tbl;
+ 		LBA_t dsc;
+ 
+@@ -4589,6 +4589,7 @@ FRESULT f_lseek (
+ 					tcl = cl; ncl = 0; ulen += 2;	/* Top, length and used items */
+ 					do {
+ 						pcl = cl; ncl++;
++						if (++nall > fs->n_fatent) ABORT(fs, FR_INT_ERR);	/* FluLuks : chaine en boucle */
+ 						cl = get_fat(&fp->obj, cl);
+ 						if (cl <= 1) ABORT(fs, FR_INT_ERR);
+ 						if (cl == 0xFFFFFFFF) ABORT(fs, FR_DISK_ERR);

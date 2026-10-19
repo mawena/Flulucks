@@ -24,7 +24,7 @@ typedef struct {
 int fl_probe(fl_bdev *d, fl_probe_result *out);
 /* Nom lisible, jamais NULL ("inconnu" pour UNKNOWN ou valeur invalide). */
 const char *fl_content_name(fl_content c);
-/* Vrai pour LUKS1, LUKS2, ext4 (phase 1). */
+/* Vrai pour LUKS1, LUKS2, ext4 (phase 1), FAT12, FAT16, FAT32 et exFAT (phase 4). */
 bool fl_content_supported(fl_content c);
 
 #ifdef __cplusplus

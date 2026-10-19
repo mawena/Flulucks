@@ -465,8 +465,8 @@ static int vol_open(fl_bdev *dev, uint32_t part_index, const void *pass, size_t 
     if ((rc = fl_probe(v->plain, &pr)) != FL_OK) return rc;
     target = v->plain;
   }
-  if (pr.content != FL_CONTENT_EXT4) return FL_ENOTSUP;
-  return fl_fs_mount(target, FL_CONTENT_EXT4, want_rw, &v->fs);
+  if (!fl_content_supported(pr.content) || is_luks(pr.content)) return FL_ENOTSUP; /* ext4, FAT, exFAT */
+  return fl_fs_mount(target, pr.content, want_rw, &v->fs);
 }
 
 static void (*g_mount_hook)(void *);

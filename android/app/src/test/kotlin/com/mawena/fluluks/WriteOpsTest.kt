@@ -24,6 +24,11 @@ class WriteOpsTest {
         var ops = 0
         /** Disque hostile : liste les enfants d'un chemin (nom, type) sans rapport avec `nodes`. */
         var hostile: ((String) -> List<Pair<String, String>>)? = null
+        /** Comme FAT : noms insensibles à la casse (le nom garde la casse donnée à la création ou au renommage). */
+        var caseInsensitive = false
+
+        /** Clé existante désignant p (à la casse près si caseInsensitive), ou p. */
+        private fun key(p: String) = if (caseInsensitive) nodes.keys.firstOrNull { it.equals(p, ignoreCase = true) } ?: p else p
 
         private fun s(b: ByteArray) = String(b, Charsets.UTF_8)
         private fun parent(p: String) = p.substring(0, p.lastIndexOf('/')).ifEmpty { "/" }
@@ -47,7 +52,7 @@ class WriteOpsTest {
         override fun truncate(file: Long, size: Long) = 0
 
         override fun stat(vol: Long, path: ByteArray): ByteArray {
-            val p = s(path)
+            val p = key(s(path))
             return if (!nodes.containsKey(p)) err(EngineError.FL_ENOENT) else entry(p).toString().toByteArray()
         }
 
@@ -124,9 +129,9 @@ class WriteOpsTest {
         }
 
         override fun rename(vol: Long, from: ByteArray, to: ByteArray): Int {
-            val f = s(from); val t = s(to)
+            val f = key(s(from)); val t = s(to)
             if (!nodes.containsKey(f)) return EngineError.FL_ENOENT
-            if (nodes.containsKey(t)) return EngineError.FL_EEXIST
+            if (nodes.containsKey(key(t)) && key(t) != f) return EngineError.FL_EEXIST
             if (t.startsWith("$f/")) return EngineError.FL_EINVAL
             val moved = nodes.keys.filter { it == f || it.startsWith("$f/") }
             for (k in moved) nodes[t + k.substring(f.length)] = nodes.remove(k)
@@ -183,6 +188,25 @@ class WriteOpsTest {
         assertEquals("/e", w.rename("/d", "e"))
         assertTrue(e.nodes.containsKey("/e/x"))
         assertEquals("/b", w.rename("/b", "b")) // même nom : rien à faire
+    }
+
+    @Test fun renameCaseOnly() {
+        e.caseInsensitive = true
+        file("/a.txt", byteArrayOf(7))
+        assertEquals("/A.txt", w.rename("/a.txt", "A.txt"))
+        assertArrayEquals(byteArrayOf(7), e.nodes["/A.txt"])
+        assertFalse(e.nodes.containsKey("/a.txt"))
+    }
+
+    @Test fun renameExistingMapsEexist() {
+        e.caseInsensitive = true
+        file("/a.txt"); file("/b.txt")
+        try {
+            w.rename("/a.txt", "B.TXT")
+            fail("accepté")
+        } catch (x: FileNotFoundException) {
+            assertEquals("Un élément porte déjà ce nom", x.message)
+        }
     }
 
     @Test fun moveRules() {

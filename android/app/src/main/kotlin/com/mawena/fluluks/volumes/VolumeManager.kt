@@ -52,7 +52,7 @@ import kotlinx.coroutines.withContext
  */
 object VolumeManager {
     private const val TAG = "VolumeManager"
-    private const val MAX_VOLUMES = 8 // limite de montages de lwext4
+    private const val MAX_VOLUMES = 8 // limite de montages de lwext4 et de FatFs (8 chacun)
     private const val ACTION_USB_PERMISSION = "com.mawena.fluluks.USB_PERMISSION"
     const val AUTHORITY = "com.mawena.fluluks.documents"
 

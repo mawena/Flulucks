@@ -16,6 +16,10 @@ static const struct {
   fl_fs_mount_fn mount;
 } k_backends[] = {
     {FL_CONTENT_EXT4, fl_ext4_mount},
+    {FL_CONTENT_FAT12, fl_fat_mount},
+    {FL_CONTENT_FAT16, fl_fat_mount},
+    {FL_CONTENT_FAT32, fl_fat_mount},
+    {FL_CONTENT_EXFAT, fl_fat_mount},
 };
 
 /* Horloge des horodatages : lue par les systèmes de fichiers sous leur propre verrou, posée par les

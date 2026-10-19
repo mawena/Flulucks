@@ -41,8 +41,8 @@ fi
 
 # Tests, dans l'ordre ; test_luks2_lent est le plus long (Argon2 aux paramètres exacts du disque).
 # Une entrée peut porter un argument après le nom du binaire (comme dans CTest : test_crc32c_debit).
-TESTS=(test_error test_crypto test_luks1 test_luks2 test_crc32c "test_crc32c debit" test_ext4 test_usb test_cache
-       test_banc test_luks2_lent)
+TESTS=(test_error test_crypto test_luks1 test_luks2 test_crc32c "test_crc32c debit" test_ext4 test_fat test_fat_hostile test_usb
+       test_cache test_banc test_luks2_lent)
 # Binaires à pousser, sans doublon.
 BINS=()
 for t in "${TESTS[@]}"; do
@@ -54,7 +54,12 @@ FIXTURES=(ext4-plain.img ext4-rw-1k.img gpt-luks2.img whole-luks2-4k.img whole-l
           mbr-luks1-essiv.img whole-luks2-exact.img luks2-entete-abime.img luks-tronque.img
           whole-luks2-impair.img pass.txt pass2.txt cipher-kat.json
           ext4-rw-reel.img ext4-nom255.img ext4-trou-dossier.img ext4-trou-dossier.blocs ext4-indirect.img ext4-entrees-hostiles.img
-          tree/sous-dossier/données.bin)
+          tree/sous-dossier/données.bin
+          fat12-arbre.img fat16-arbre.img fat32-arbre.img fat32-4k.img exfat-arbre.img luks2-fat32.img
+          fat16-sale.img fat32-sale.img fat32-fat1-sale.img fat32-media.img exfat-sale.img exfat-media.img
+          exfat-somme.img fat32-512-sur-4k.img sig-exfat.img)
+# Arborescences entières (modèles des tests FAT : tm_from_dir).
+TREES=(tree-fat tree-exfat)
 
 for b in "${BINS[@]}"; do [ -x "$BUILD_DIR/$b" ] || { echo "binaire absent : $BUILD_DIR/$b" >&2; exit 1; }; done
 for f in "${FIXTURES[@]}"; do [ -e "$FIX_SRC/$f" ] || { echo "fixture absente : $FIX_SRC/$f (lancer ctest -R generate_fixtures)" >&2; exit 1; }; done
@@ -71,6 +76,15 @@ for f in "${FIXTURES[@]}"; do
   if [ "$have" != "$size" ]; then
     echo "push $f ($((size / 1048576)) Mio)"
     adb_ push "$FIX_SRC/$f" "$REMOTE/fixtures/$f" >/dev/null
+  fi
+done
+for t in "${TREES[@]}"; do
+  [ -d "$FIX_SRC/$t" ] || { echo "arborescence absente : $FIX_SRC/$t" >&2; exit 1; }
+  have=$(adb_ shell "find '$REMOTE/fixtures/$t' -type f 2>/dev/null | wc -l" | tr -d '\r')
+  if [ "$have" != "$(find "$FIX_SRC/$t" -type f | wc -l)" ]; then
+    echo "push $t/"
+    adb_ shell "rm -rf '$REMOTE/fixtures/$t'"
+    adb_ push "$FIX_SRC/$t" "$REMOTE/fixtures/" >/dev/null
   fi
 done
 

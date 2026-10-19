@@ -60,5 +60,10 @@ int tm_write_manifest(const tm *m, const char *fichier);
 int tm_check_fl(const tm *m, fl_fs *fs);
 /* Idem par debugfs sur l'image `img` (hors moteur). -1 si debugfs est inutilisable. */
 int tm_check_debugfs(const tm *m, const char *img);
+/* FAT (phase 4) : uid 0, gid 0, mode 0100644 (fichiers) et 040755 (dossiers) partout. */
+void tm_set_fat_attrs(tm *m);
+/* Manifeste du modèle comparé, octet pour octet, à celui de fatjuge.py (hors moteur) sur `img`.
+ * Nombre de lignes différentes (dix premières sur stderr), ou -1 si le juge est inutilisable. */
+int tm_check_fat_judge(const tm *m, const char *img);
 
 #endif

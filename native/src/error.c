@@ -20,6 +20,7 @@ const char *fl_strerror(int err) {
     case FL_ETIMEDOUT: return "le disque ne répond pas";
     case FL_ESTALL: return "transfert USB bloqué";
     case FL_EBUSY: return "volume occupé";
+    case FL_EFBIG: return "fichier trop gros pour ce système de fichiers";
     default: return "erreur inconnue";
   }
 }

@@ -161,6 +161,8 @@ static void test_noms(void) {
   TT_ASSERT_STR_EQ(fl_content_name((fl_content)99), "inconnu");
   TT_ASSERT(fl_content_supported(FL_CONTENT_EXT4));
   TT_ASSERT(fl_content_supported(FL_CONTENT_LUKS1));
+  TT_ASSERT(fl_content_supported(FL_CONTENT_FAT12) && fl_content_supported(FL_CONTENT_FAT16));
+  TT_ASSERT(fl_content_supported(FL_CONTENT_FAT32) && fl_content_supported(FL_CONTENT_EXFAT));
   TT_ASSERT(!fl_content_supported(FL_CONTENT_NTFS));
 }
 

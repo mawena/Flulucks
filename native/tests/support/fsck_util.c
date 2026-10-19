@@ -428,3 +428,94 @@ fin:
   memset(pass, 0, sizeof pass);
   return rc;
 }
+
+/* --- FAT / exFAT (phase 4) ------------------------------------------------------------------- */
+
+int fu_fat_tools_available(void) {
+#ifdef __ANDROID__
+  return 0;
+#else
+  return dans_path("mkfs.vfat") && dans_path("fsck.fat") && dans_path("mkfs.exfat") && dans_path("fsck.exfat") &&
+         dans_path("mcopy") && dans_path("python3");
+#endif
+}
+
+/* 1 si l'image commence par un secteur de démarrage exFAT. */
+static int est_exfat(const char *img) {
+  char b[11] = {0};
+  int fd = open(img, O_RDONLY | O_CLOEXEC);
+  if (fd < 0) return 0;
+  ssize_t r = pread(fd, b, sizeof b, 0);
+  close(fd);
+  return r == (ssize_t)sizeof b && !memcmp(b + 3, "EXFAT   ", 8);
+}
+
+/* Lignes attendues d'un fsck propre : en-tête de version et ligne de bilan. Toute autre ligne compte comme
+ * une erreur, même si le code de sortie vaut 0. */
+static int ligne_propre(const char *l, size_t n) {
+  if (n == 0) return 1;
+  if (!strncmp(l, "fsck.fat ", 9) || !strncmp(l, "exfatprogs version", 18)) return 1;
+  for (size_t i = 0; i + 1 < n; i++) {
+    if (l[i] != ':' || l[i + 1] != ' ') continue;
+    const char *r = l + i + 2;
+    size_t k = n - i - 2;
+    if (k >= 6 && !strncmp(r, "clean.", 6)) return 1;                      /* fsck.exfat */
+    const char *f = memmem(r, k, " files, ", 8), *c = memmem(r, k, " clusters", 9);
+    if (f && c && c > f) return 1;                                            /* fsck.fat */
+  }
+  return 0;
+}
+
+int fu_fsck_fat_n(const char *img, char *out, size_t cap) {
+  char *big = malloc(GRANDE_SORTIE);
+  if (!big) return -1;
+  int ex = est_exfat(img);
+  char *const argv[] = {(char *)(ex ? "fsck.exfat" : "fsck.fat"), (char *)"-n", (char *)img, NULL};
+  int rc = fu_run(argv, big, GRANDE_SORTIE);
+  if (rc == 0) {
+    for (const char *l = big; *l;) {
+      const char *e = strchr(l, '\n');
+      size_t n = e ? (size_t)(e - l) : strlen(l);
+      if (!ligne_propre(l, n)) {
+        rc = 1;
+        break;
+      }
+      l += n + (e ? 1 : 0);
+    }
+  }
+  copier_tronque(out, cap, big);
+  free(big);
+  return rc;
+}
+
+int fu_fsck_fat_repair(const char *img, char *out, size_t cap) {
+  char *big = malloc(GRANDE_SORTIE);
+  if (!big) return -1;
+  int ex = est_exfat(img);
+  char *const argv[] = {(char *)(ex ? "fsck.exfat" : "fsck.fat"), (char *)(ex ? "-y" : "-a"), (char *)img, NULL};
+  int rc = fu_run(argv, big, GRANDE_SORTIE);
+  free(big);
+  if (rc < 0 || rc >= 128) return rc < 0 ? -1 : rc;
+  return fu_fsck_fat_n(img, out, cap);
+}
+
+int fu_fatjuge(char *out, size_t cap, const char *cmd, const char *img, const char *arg) {
+  char *const argv[] = {(char *)"python3", (char *)"-I", (char *)FL_TOOLS_DIR "/fixtures/fatjuge.py", (char *)cmd,
+                        (char *)img, (char *)arg, NULL};
+  return fu_run(argv, out, cap);
+}
+
+int fu_fat_manifest(const char *img, const char *out_path) {
+  char out[4096];
+  int rc = fu_fatjuge(out, sizeof out, "manifest", img, out_path);
+  if (rc != 0) fprintf(stderr, "fatjuge manifest %s : %d\n%s", img, rc, out);
+  return rc == 0 || rc == 3 ? rc : -1;
+}
+
+int64_t fu_fat_free(const char *img) {
+  char out[256];
+  if (fu_fatjuge(out, sizeof out, "free", img, NULL) != 0) return -1;
+  char *fin;
+  long long v = strtoll(out, &fin, 10);
+  return fin != out && v >= 0 ? v : -1;
+}

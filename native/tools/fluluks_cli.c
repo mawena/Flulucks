@@ -243,13 +243,14 @@ static int open_fs(const char *path, const char *idx_s, const char *passfile, ct
     if ((e = fl_probe(c->plain, &pr)) != FL_OK) return fail_err(e);
     target = c->plain;
   }
-  if (pr.content != FL_CONTENT_EXT4) return fail_err(FL_ENOTSUP);
-  if (explain) {
+  if (!fl_content_supported(pr.content) || pr.content == FL_CONTENT_LUKS1 || pr.content == FL_CONTENT_LUKS2)
+    return fail_err(FL_ENOTSUP);
+  if (explain && pr.content == FL_CONTENT_EXT4) {
     puts("== contrôles faits au montage en écriture (§ 4.2) ==");
     if ((e = fl_ext4_policy_explain(target, NULL, stdout)) != FL_OK) fprintf(stderr, "fluluks-cli: diagnostic : %s\n", fl_strerror(e));
     fflush(stdout);
   }
-  if ((e = fl_fs_mount(target, FL_CONTENT_EXT4, false, &c->fs)) != FL_OK) return fail_err(e);
+  if ((e = fl_fs_mount(target, pr.content, false, &c->fs)) != FL_OK) return fail_err(e);
   fl_statfs sf;
   if (fl_fs_statfs(c->fs, &sf) == FL_OK && sf.needs_recovery)
     fputs("fluluks-cli: attention : le journal du volume n'a pas été rejoué (volume mal démonté ou encore "

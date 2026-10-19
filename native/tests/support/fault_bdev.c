@@ -7,7 +7,8 @@
 
 typedef struct {
   fl_bdev *parent;
-  uint64_t writes_ok, writes, flushes;
+  uint64_t writes_ok, writes, flushes, reads;
+  uint64_t count_from, counted_writes; /* fl_fault_bdev_count_from */
   int err;
   int read_err; /* fl_fault_bdev_fail_reads : 0 = lectures normales */
   pthread_mutex_t mu;
@@ -42,6 +43,7 @@ static int f_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
   fault *f = d->priv;
   pthread_mutex_lock(&f->mu);
   int re = f->read_err;
+  f->reads++;
   pthread_mutex_unlock(&f->mu);
   if (re) return re;
   return fl_bdev_read(f->parent, lba, count, buf);
@@ -57,7 +59,8 @@ static int f_write(fl_bdev *d, uint64_t lba, uint32_t count, const void *buf) {
   int rc = fl_bdev_write(f->parent, lba, count, buf);
   pthread_mutex_lock(&f->mu);
   if (rc != FL_OK) f->writes--;
-  else if (f->trace) trace_add(f, has_commit(f, lba, count, d->sector_size, buf) ? 'C' : 'W');
+  else if (lba >= f->count_from) f->counted_writes++;
+  if (rc == FL_OK && f->trace) trace_add(f, has_commit(f, lba, count, d->sector_size, buf) ? 'C' : 'W');
   pthread_mutex_unlock(&f->mu);
   return rc;
 }
@@ -92,6 +95,7 @@ int fl_fault_bdev_new(fl_bdev *parent, uint64_t writes_ok, int err, fl_bdev **ou
   f->parent = parent;
   f->writes_ok = writes_ok;
   f->err = err;
+  f->count_from = UINT64_MAX;
   pthread_mutex_init(&f->mu, NULL);
   d->ops = &fault_ops;
   d->sector_size = parent->sector_size;
@@ -134,4 +138,28 @@ void fl_fault_bdev_fail_reads(fl_bdev *d, int err) {
   pthread_mutex_lock(&f->mu);
   f->read_err = err < 0 ? err : 0;
   pthread_mutex_unlock(&f->mu);
+}
+
+uint64_t fl_fault_bdev_reads(const fl_bdev *d) {
+  fault *f = d->priv;
+  pthread_mutex_lock(&f->mu);
+  uint64_t v = f->reads;
+  pthread_mutex_unlock(&f->mu);
+  return v;
+}
+
+void fl_fault_bdev_count_from(fl_bdev *d, uint64_t lba) {
+  fault *f = d->priv;
+  pthread_mutex_lock(&f->mu);
+  f->count_from = lba;
+  f->counted_writes = 0;
+  pthread_mutex_unlock(&f->mu);
+}
+
+uint64_t fl_fault_bdev_counted_writes(const fl_bdev *d) {
+  fault *f = d->priv;
+  pthread_mutex_lock(&f->mu);
+  uint64_t v = f->counted_writes;
+  pthread_mutex_unlock(&f->mu);
+  return v;
 }
