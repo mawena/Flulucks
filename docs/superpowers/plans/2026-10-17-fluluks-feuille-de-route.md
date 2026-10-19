@@ -181,7 +181,8 @@ dans le même commit que le travail.
       chemin : FatFs le prend pour un séparateur ; test_fat_ecriture 17/17)*
 - [x] T6 — Débit : regroupement des écritures contiguës *(32 Mio par pwrite de 128 Kio, écritures dans la zone
       de données : exFAT 8 196 → 13, FAT32 → 130 ; après une panne d'écriture le volume reste lisible)*
-- [ ] T7 — Coupures et pannes
+- [x] T7 — Coupures et pannes *(coupure à chaque écriture : 54 points en FAT32, 15 en exFAT ; jamais un volume
+      incohérent marqué propre — sans le drapeau sale, le test échoue —, fichiers sûrs intacts après fsck)*
 - [ ] T8 — Batterie aléatoire, images hostiles, vérification par le noyau
 - [ ] T9 — JNI, Kotlin, Flutter
 - [ ] *(utilisateur)* T10 — Essais sur le Pixel avec une clé FAT32 puis exFAT sauvegardée
