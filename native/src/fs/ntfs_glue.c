@@ -48,6 +48,7 @@
 #include "ntfs-3g/dir.h"
 #include "ntfs-3g/inode.h"
 #include "ntfs-3g/logfile.h"
+#include "ntfs-3g/mft.h"
 #include "ntfs-3g/ntfstime.h"
 #include "ntfs-3g/unistr.h"
 #include "ntfs-3g/volume.h"
@@ -600,21 +601,53 @@ static int n_close(fl_file *f) {
 
 /* --- écriture (T4) ------------------------------------------------------------------------------ */
 
-/* Pose ou efface VOLUME_IS_DIRTY, puis vide le cache du disque (sous g_ntfs_lock, aucun inode ouvert). */
+/* Écrit l'enregistrement de $Volume (modifié en mémoire) dans $MFT, ou dans sa copie de $MFTMirr, puis vide
+ * le cache du disque (mode direct, sous g_ntfs_lock). */
+static int write_volume_record(ntfs_vol *v, bool mirror) {
+  ntfs_volume *vol = v->vol;
+  if (mirror && vol->mftmirr_size <= FILE_Volume) return FL_OK;
+  void *b = malloc(vol->mft_record_size);
+  if (!b) return FL_ENOMEM;
+  memcpy(b, vol->vol_ni->mrec, vol->mft_record_size);
+  s64 w = ntfs_attr_mst_pwrite(mirror ? vol->mftmirr_na : vol->mft_na, (s64)FILE_Volume << vol->mft_record_size_bits,
+                               1, vol->mft_record_size, b);
+  int e = errno;
+  free(b);
+  if (w != 1) return wr_err(v, e);
+  if (ntfs_device_sync(vol->dev)) {
+    go_ro(v, FL_RO_IOERR);
+    return FL_EIO;
+  }
+  return FL_OK;
+}
+
+/* Pose ou efface VOLUME_IS_DIRTY dans $Volume (sous g_ntfs_lock, aucun inode ouvert). Deux copies : $MFT
+ * (qui fait foi) et $MFTMirr, chacune suivie d'un vidage du cache du disque. Posé : $MFT d'abord ; effacé :
+ * $MFT en dernier. Une coupure entre les deux laisse donc toujours $MFT marqué sale (et les copies
+ * différentes, ce que chkdsk répare). */
 static int set_dirty_flag(ntfs_vol *v, bool sale) {
   ntfs_volume *vol = v->vol;
-  /* en mode direct : rien d'autre n'attend, et $Volume (avec $MFTMirr) va au disque avant le vidage */
+  /* en mode direct : rien d'autre n'attend, et chaque copie va au disque avant son vidage */
   if (ntfs_dev_set_direct(v->dd, true) != FL_OK) {
     ntfs_dev_set_direct(v->dd, false);
     go_ro(v, FL_RO_IOERR);
     return FL_EIO;
   }
-  le16 f = sale ? (le16)(vol->flags | VOLUME_IS_DIRTY) : (le16)(vol->flags & ~VOLUME_IS_DIRTY);
-  int rc = ntfs_volume_write_flags(vol, f) ? wr_err(v, errno) : FL_OK;
-  if (rc == FL_OK && ntfs_device_sync(vol->dev)) {
-    go_ro(v, FL_RO_IOERR);
-    rc = FL_EIO;
+  int rc = FL_OK;
+  ntfs_attr_search_ctx *ctx = ntfs_attr_get_search_ctx(vol->vol_ni, NULL);
+  if (!ctx || ntfs_attr_lookup(AT_VOLUME_INFORMATION, AT_UNNAMED, 0, CASE_SENSITIVE, 0, NULL, 0, ctx) ||
+      ctx->attr->non_resident) {
+    rc = ctx ? FL_ECORRUPT : FL_ENOMEM;
+    if (rc == FL_ECORRUPT) go_ro(v, FL_RO_CORRUPT);
+  } else {
+    VOLUME_INFORMATION *vi = (VOLUME_INFORMATION *)((u8 *)ctx->attr + le16_to_cpu(ctx->attr->value_offset));
+    vi->flags = sale ? (le16)(vi->flags | VOLUME_IS_DIRTY) : (le16)(vi->flags & ~VOLUME_IS_DIRTY);
+    vol->flags = vi->flags;
   }
+  if (ctx) ntfs_attr_put_search_ctx(ctx);
+  if (rc == FL_OK) rc = write_volume_record(v, !sale);
+  if (rc == FL_OK) rc = write_volume_record(v, sale);
+  if (rc == FL_OK) NInoClearDirty(vol->vol_ni); /* les deux copies sont écrites */
   ntfs_dev_set_direct(v->dd, false);
   return rc;
 }
@@ -1026,9 +1059,10 @@ int fl_ntfs_mount(fl_bdev *dev, bool want_rw, fl_fs **out) {
     if (!why) {
       release(v);
       rc = mount_locked(dev, true, &v->dd, &v->vol);
-      if (rc == FL_ECORRUPT) { /* $LogFile ou veille apparus entre les deux montages */
-        why = FL_RO_LOGFILE;
+      if (rc == FL_ECORRUPT) { /* refusé par libntfs-3g en écriture ($MFTMirr différent, $LogFile, veille…) */
         rc = mount_locked(dev, false, &v->dd, &v->vol);
+        if (rc == FL_OK) why = write_policy(v->vol, bps, dev);
+        if (rc == FL_OK && !why) why = FL_RO_DIRTY; /* à vérifier par chkdsk */
       }
     }
   }

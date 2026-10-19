@@ -5,6 +5,9 @@ Usage :
   ntfsjuge.py check <img>                 cohérence ; sortie 0 sans rien afficher, sinon 3 et une ligne
                                           par défaut sur la sortie standard
   ntfsjuge.py manifest <img> <sortie>     manifeste au format de tm_write_manifest (tree_model.h)
+  ntfsjuge.py manifest-mft <img> <sortie> le même, depuis les enregistrements MFT et non les index (ce que
+                                          chkdsk retrouve après une coupure ; chemins « /?<n>/… » si un
+                                          parent est illisible)
   ntfsjuge.py free <img>                  octets libres selon $Bitmap (clusters libres × taille de cluster)
   ntfsjuge.py flags <img>                 drapeaux de $Volume ($VOLUME_INFORMATION), en hexadécimal
   ntfsjuge.py set-flags <img> <hex>       les remplace (dans $MFT et $MFTMirr)
@@ -12,6 +15,8 @@ Usage :
   ntfsjuge.py set-chiffre <img> <chemin>  marque le fichier comme chiffré (EFS)
   ntfsjuge.py locate <img> <chemin>       décalage (octets) de l'enregistrement MFT du fichier
   ntfsjuge.py abime <img> <cas>           défaut posé exprès (bitmap, miroir, liens, nom) pour les tests
+  ntfsjuge.py hostile <img> <cas>         cas hostile fabriqué (runlist-hors, runlist-mft, base-soi,
+                                          attr-longueur, lznt1, index-zero, index-boucle, utf16)
 
 Manifeste : une ligne par entrée, triée par chemin (octets UTF-8), séparée par des tabulations : type
 (d dossier, f fichier, l lien symbolique ou jonction, o autre point d'analyse), taille, condensat (« - »
@@ -293,16 +298,22 @@ class Ntfs:
         return out
 
     def _load_all(self):
+        self.broken = {}  # enregistrements illisibles (coupure, disque abîmé) : signalés par check
         for n in range(self.nrecords):
-            rec = self.raw_record_at(self.record_offset(n), n)
-            if rec is None:
-                continue
-            flags = u16(rec, 22)
-            self.records[n] = {
-                "raw": rec, "flags": flags, "inuse": bool(flags & 1), "isdir": bool(flags & 2),
-                "seq": u16(rec, 16), "links": u16(rec, 18), "base": u64(rec, 32) & 0xFFFFFFFFFFFF,
-                "attrs": self.parse_attrs(n, rec) if flags & 1 else [],
-            }
+            try:
+                rec = self.raw_record_at(self.record_offset(n), n)
+                if rec is None:
+                    continue
+                flags = u16(rec, 22)
+                self.records[n] = {
+                    "raw": rec, "flags": flags, "inuse": bool(flags & 1), "isdir": bool(flags & 2),
+                    "seq": u16(rec, 16), "links": u16(rec, 18), "base": u64(rec, 32) & 0xFFFFFFFFFFFF,
+                    "attrs": self.parse_attrs(n, rec) if flags & 1 else [],
+                }
+            except Bad as e:
+                if n < FILE_FIRST_USER:
+                    raise
+                self.broken[n] = str(e)
         # attributs des enregistrements d'extension rattachés à leur base
         for n, r in self.records.items():
             r["all"] = list(r["attrs"]) if r["inuse"] and r["base"] == 0 else []
@@ -508,6 +519,51 @@ class Ntfs:
         walk(5, "/")
         return out
 
+    def tree_mft(self):
+        """Comme tree(), mais depuis les enregistrements MFT ($FILE_NAME de chaque enregistrement utilisé),
+        sans les index : ce que chkdsk retrouverait après une coupure qui a déchiré un index. Un parent
+        illisible donne un chemin « /?<numéro>/nom »."""
+        paths = {5: "/"}
+
+        def path_of(n, depth=0):
+            if n in paths:
+                return paths[n]
+            r = self.records.get(n)
+            if depth > 64 or not r or not r["inuse"] or r["base"] or not r["isdir"]:
+                return "/?%d" % n
+            names = [f for f in self.file_names(n) if f[2] != NS_DOS]
+            if not names:
+                return "/?%d" % n
+            parent, _, _, name16 = names[0]
+            p = path_of(parent, depth + 1).rstrip("/") + "/" + name16.decode("utf-16-le", "surrogatepass")
+            paths[n] = p
+            return p
+
+        out = [("d", 0, "-", 0o40755, "/", 5)]
+        for n, r in sorted(self.records.items()):
+            if n < FILE_FIRST_USER or not r["inuse"] or r["base"]:
+                continue
+            try:
+                t, mode = self.kind(n)
+                names = [f for f in self.file_names(n) if f[2] != NS_DOS]
+            except Bad:
+                continue
+            for parent, _, _, name16 in names:
+                p = path_of(parent).rstrip("/") + "/" + name16.decode("utf-16-le", "surrogatepass")
+                if p.startswith("/$Extend/"):
+                    continue
+                if t == "f":
+                    try:
+                        s = self.stream(n, AT_DATA)
+                        size = s["size"] if s else 0
+                        dig = digest_chunks(self.content(n))
+                    except Bad:
+                        size, dig = 0, "illisible"
+                    out.append(("f", size, dig, mode, p, n))
+                else:
+                    out.append((t, 0, "-", mode, p, n))
+        return out
+
     def find(self, path):
         n = 5
         for comp in [c for c in path.split("/") if c]:
@@ -524,7 +580,7 @@ class Ntfs:
         return d
 
     def check(self):
-        err = []
+        err = list(self.broken.values())
         # $MFTMirr = premiers enregistrements de $MFT
         mirr = self.stream(1, AT_DATA)
         nm = (mirr["size"] if mirr else 0) // self.rs
@@ -723,6 +779,111 @@ class Ntfs:
         else:
             raise Bad("cas inconnu : %s" % case)
 
+    # --- cas hostiles fabriqués (test_ntfs_hostile) -------------------------------------------------
+
+    def _data_attr_off(self, rec):
+        off = u16(rec, 20)
+        while off + 8 <= len(rec) and u32(rec, off) != 0xFFFFFFFF:
+            if u32(rec, off) == AT_DATA and rec[off + 9] == 0:
+                return off
+            off += u32(rec, off + 4)
+        raise Bad("$DATA introuvable")
+
+    def _set_runlist(self, n, lcn):
+        """Runlist du $DATA de l'enregistrement n remplacée par un seul run de même longueur à lcn."""
+        def fn(rec):
+            a = self._data_attr_off(rec)
+            if not rec[a + 8]:
+                raise Bad("$DATA résident")
+            ncl = u64(rec, a + 24) - u64(rec, a + 16) + 1
+            mp = a + u16(rec, a + 32)
+            end = a + u32(rec, a + 4)
+            lb = ncl.to_bytes(8, "little").rstrip(b"\0") or b"\0"
+            if lb[-1] & 0x80:
+                lb += b"\0"
+            ob = lcn.to_bytes(8, "little", signed=True)
+            while len(ob) > 1 and ((ob[-1] == 0 and not ob[-2] & 0x80) or (ob[-1] == 0xFF and ob[-2] & 0x80)):
+                ob = ob[:-1]
+            new = bytes([len(lb) | len(ob) << 4]) + lb + ob + b"\0"
+            if mp + len(new) > end:
+                raise Bad("pas la place pour la nouvelle runlist")
+            rec[mp:mp + len(new)] = new
+        self.patch_record(n, fn)
+
+    def _indx_blocks(self, n):
+        """(décalage dans l'image, contenu corrigé) des blocs INDX de $I30 du dossier n."""
+        s = self.stream(n, AT_IALLOC, "$I30")
+        bsize = u32(self.attrs(n, AT_IROOT, "$I30")[0].value, 8)
+        out = []
+        for vcn, lcn, ln in s["runs"]:
+            if lcn is None:
+                continue
+            for k in range(ln * self.cs // bsize):
+                off = lcn * self.cs + k * bsize
+                raw = self.read(off, bsize)
+                if raw[:4] == b"INDX":
+                    out.append((off, bytearray(unfix(raw, "INDX"))))
+        return out
+
+    def hostile(self, case):
+        if case == "runlist-hors":
+            self._set_runlist(self.find("/gros.bin"), self.nclusters + 1000000)
+        elif case == "runlist-mft":
+            self._set_runlist(self.find("/gros.bin"), self.mft_lcn)
+        elif case == "base-soi":
+            n = self.find("/abc.txt")
+            seq = self.records[n]["seq"]
+            self.patch_record(n, lambda rec: struct.pack_into("<Q", rec, 32, n | seq << 48))
+        elif case == "attr-longueur":
+            n = self.find("/gros.bin")
+
+            def fn(rec):
+                struct.pack_into("<I", rec, self._data_attr_off(rec) + 4, 0xFFF0)
+            self.patch_record(n, fn)
+        elif case == "lznt1":
+            s = self.stream(self.find("/compressé.txt"), AT_DATA)
+            lcn = [r[1] for r in s["runs"] if r[1] is not None][0]
+            junk = bytes((i * 151 + 7) & 0xFF for i in range(self.cs))
+            self.write(lcn * self.cs + 2, junk[:self.cs - 2])
+        elif case == "index-zero":
+            off, blk = self._indx_blocks(5)[0]
+            e = 24 + u32(blk, 24)
+            struct.pack_into("<H", blk, e + 8, 0)
+            self.write(off, refix(blk))
+        elif case == "index-boucle":
+            off, blk = self._indx_blocks(self.find("/mille"))[0]
+            vcn = u64(blk, 16)
+            p, end = 24 + u32(blk, 24), 24 + u32(blk, 28)
+            while not u16(blk, p + 12) & 2:
+                p += u16(blk, p + 8)
+            if 24 + u32(blk, 28) + 8 > 24 + u32(blk, 32):
+                raise Bad("pas de place dans le bloc INDX")
+            struct.pack_into("<HHH", blk, p + 8, 24, 0, 3)  # dernière entrée, avec sous-noeud
+            struct.pack_into("<Q", blk, p + 16, vcn)          # ... qui est ce bloc lui-même
+            struct.pack_into("<I", blk, 28, u32(blk, 28) + 8)
+            self.write(off, refix(blk))
+        elif case == "utf16":
+            n = self.find("/été ☀.txt")
+            name16 = "été ☀.txt".encode("utf-16-le")
+            bad = b"\x00\xd8" + name16[2:]  # première unité : moitié haute de paire, seule
+
+            def fn(rec):
+                i = bytes(rec).find(name16)
+                if i < 0:
+                    raise Bad("nom introuvable dans l'enregistrement")
+                rec[i:i + len(name16)] = bad
+            self.patch_record(n, fn)
+            for off, blk in self._indx_blocks(5):
+                i = bytes(blk).find(name16)
+                if i >= 0:
+                    blk[i:i + len(name16)] = bad
+                    self.write(off, refix(blk))
+                    break
+            else:
+                raise Bad("nom introuvable dans l'index de la racine")
+        else:
+            raise Bad("cas hostile inconnu : %s" % case)
+
     def free_bytes(self):
         cb = self.bitmap_bits(6, AT_DATA)
         used = sum(1 for c in range(self.nclusters) if cb[c // 8] >> (c % 8) & 1)
@@ -735,7 +896,7 @@ def main(argv):
         return 2
     cmd, path = argv[1], argv[2]
     try:
-        writable = cmd in ("set-flags", "set-logfile-sale", "set-chiffre", "abime")
+        writable = cmd in ("set-flags", "set-logfile-sale", "set-chiffre", "abime", "hostile")
         fs = Ntfs(path, writable)
         if cmd == "check":
             err = fs.check()
@@ -744,6 +905,11 @@ def main(argv):
             return 3 if err else 0
         if cmd == "manifest":
             ents = sorted(fs.tree(), key=lambda e: e[4].encode("utf-8", "surrogatepass"))
+            with open(argv[3], "w", encoding="utf-8", errors="surrogatepass") as f:
+                for t, size, dig, mode, p, _ in ents:
+                    f.write("%s\t%d\t%s\t0\t0\t%o\t%s\n" % (t, size, dig, mode, p))
+        elif cmd == "manifest-mft":
+            ents = sorted(fs.tree_mft(), key=lambda e: e[4].encode("utf-8", "surrogatepass"))
             with open(argv[3], "w", encoding="utf-8", errors="surrogatepass") as f:
                 for t, size, dig, mode, p, _ in ents:
                     f.write("%s\t%d\t%s\t0\t0\t%o\t%s\n" % (t, size, dig, mode, p))
@@ -759,6 +925,8 @@ def main(argv):
             fs.set_encrypted(fs.find(argv[3]))
         elif cmd == "abime":
             fs.damage(argv[3])
+        elif cmd == "hostile":
+            fs.hostile(argv[3])
         elif cmd == "locate":
             print(fs.record_offset(fs.find(argv[3])))
         else:

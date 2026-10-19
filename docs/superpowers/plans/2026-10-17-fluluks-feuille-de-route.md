@@ -210,7 +210,9 @@ dans le même commit que le travail.
       temporaire, renommage entre deux liens durs sans effet ; test_ntfs_ecriture 19/19)*
 - [x] T6 — Débit : cache d'écriture différée *(32 Mio par pwrite de 128 Kio : 1 852 écritures et 1 042
       lectures → 19 écritures et 0 lecture ; petites lectures gardées dans la même table)*
-- [ ] T7 — Coupures et pannes
+- [x] T7 — Coupures et pannes *(88 points de coupure, 57 laissent un volume incohérent, tous marqués sales ;
+      correctif 0005 : montage en lecture seule malgré un $MFTMirr différent ; drapeau écrit $MFT d'abord en le
+      posant et en dernier en l'effaçant ; mutation : sans drapeau, le test échoue)*
 - [ ] T8 — Batterie aléatoire, images hostiles, vérification par le noyau
 - [ ] T9 — JNI, Kotlin, Flutter
 - [ ] *(utilisateur)* T10 — Essais sur le Pixel avec un disque NTFS sauvegardé
