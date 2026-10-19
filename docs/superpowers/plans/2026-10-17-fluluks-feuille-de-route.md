@@ -213,7 +213,10 @@ dans le même commit que le travail.
 - [x] T7 — Coupures et pannes *(88 points de coupure, 57 laissent un volume incohérent, tous marqués sales ;
       correctif 0005 : montage en lecture seule malgré un $MFTMirr différent ; drapeau écrit $MFT d'abord en le
       posant et en dernier en l'effaçant ; mutation : sans drapeau, le test échoue)*
-- [ ] T8 — Batterie aléatoire, images hostiles, vérification par le noyau
+- [x] T8 — Batterie aléatoire, images hostiles, vérification par le noyau *(300 images abîmées + 8 cas
+      fabriqués, lus puis écrits sans plantage ; batterie 512 et 4096 octets par secteur, graines 1 à 6 × 1 000 pas,
+      variante lente 5 000 pas ; correctif 0006 : fuite de runlist dans ntfs_delete ; vérification par le noyau :
+      `sudo tools/fixtures/verify_ntfs_with_kernel.sh`, faite par l'utilisateur avec T10)*
 - [ ] T9 — JNI, Kotlin, Flutter
 - [ ] *(utilisateur)* T10 — Essais sur le Pixel avec un disque NTFS sauvegardé
 - [ ] T11 — Documentation

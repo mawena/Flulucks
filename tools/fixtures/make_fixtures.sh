@@ -370,6 +370,10 @@ cp ntfs-arbre.img ntfs-sale.img;    NJ set-flags ntfs-sale.img 0x0001
 cp ntfs-arbre.img ntfs-chkdsk.img;  NJ set-flags ntfs-chkdsk.img 0x4000
 cp ntfs-arbre.img ntfs-journal.img; NJ set-logfile-sale ntfs-journal.img
 cp ntfs-arbre.img ntfs-chiffre.img; NJ set-chiffre ntfs-chiffre.img /abc.txt
+# ntfs-hostile-<cas>.img : cas hostiles fabriqués (test_ntfs_hostile, T8).
+for c in runlist-hors runlist-mft base-soi attr-longueur lznt1 index-zero index-boucle utf16; do
+  cp ntfs-arbre.img "ntfs-hostile-$c.img"; NJ hostile "ntfs-hostile-$c.img" "$c"
+done
 # luks2-ntfs.img : ntfs-arbre.img chiffrée (LUKS2, PBKDF2 rapide).
 PLAIN=ntfs-arbre.img make_luks luks2-ntfs xts-plain64 512 64 --type luks2 --cipher aes-xts-plain64 \
   --key-size 512 --sector-size 512 --pbkdf pbkdf2 --hash sha256 --pbkdf-force-iterations 1000
