@@ -602,6 +602,76 @@ static void test_handles_lecture_seule_demandee(void) {
   nettoyer_ctx(&c);
 }
 
+/* FAT32 (phase 4) par le pont JNI : sondage, montage en écriture, écritures, démontage, puis fsck propre.
+ * luks : la même image chiffrée en LUKS2 (déchiffrée par le moteur pour le juge). PC seulement. */
+static void corps_fat(ctx_ecr *c, int luks) {
+  char src[4096], out[1 << 14];
+  snprintf(src, sizeof src, "%s", tt_fixture(luks ? "luks2-fat32.img" : "fat32-arbre.img"));
+  TT_ASSERT_EQ(fu_copy_image(src, c->img, sizeof c->img), 0);
+  c->d = fj_open_image(c->img, false);
+  TT_ASSERT(c->d > 0);
+  fl_json j;
+  fl_json_init(&j);
+  c->r = json_de(fj_scan(c->d, &j), &j);
+  fl_json_free(&j);
+  TT_ASSERT(c->r != NULL);
+  cJSON *p = cJSON_GetArrayItem(cJSON_GetObjectItem(c->r, "parts"), 0);
+  TT_ASSERT_STR_EQ(cJSON_GetObjectItem(p, "content")->valuestring, luks ? "LUKS2" : "FAT32");
+  TT_ASSERT(cJSON_IsTrue(cJSON_GetObjectItem(p, "supported")));
+  cJSON_Delete(c->r);
+  c->r = NULL;
+  char pass[256];
+  size_t n = luks ? lire_pass(pass, sizeof pass, "pass.txt") : 0;
+  c->v = fj_mount(c->d, 0, luks ? pass : NULL, n, true);
+  TT_ASSERT(c->v > 0);
+  int64_t v = c->v;
+  c->r = statfs_de(v);
+  TT_ASSERT(c->r != NULL);
+  TT_ASSERT(cJSON_IsFalse(cJSON_GetObjectItem(c->r, "read_only")));
+  TT_ASSERT_STR_EQ(cJSON_GetObjectItem(c->r, "label")->valuestring, "FLUFAT32");
+  cJSON_Delete(c->r);
+  c->r = NULL;
+  TT_ASSERT_EQ(fj_mkdir(v, "/jni"), FL_OK);
+  c->f = fj_open_file(v, "/jni/f.txt", FL_O_RDWR | FL_O_CREAT);
+  TT_ASSERT(c->f > 0);
+  TT_ASSERT_EQ(fj_pwrite(c->f, "fat", 3, 0), 3);
+  TT_ASSERT_EQ(fj_close_file(c->f), FL_OK);
+  c->f = 0;
+  TT_ASSERT_EQ(fj_rename(v, "/abc.txt", "/ABC.TXT"), FL_OK); /* casse seule */
+  TT_ASSERT_EQ(fj_unmount(v, false), FL_OK);
+  c->v = 0;
+  TT_ASSERT_EQ(fj_close_disk(c->d), FL_OK);
+  c->d = 0;
+  char clair[4096];
+  const char *juge = c->img;
+  if (luks) {
+    char pf[4096];
+    snprintf(pf, sizeof pf, "%s", tt_fixture("pass.txt"));
+    TT_ASSERT_EQ(fu_extract_luks_ext4(c->img, pf, clair, sizeof clair), 0);
+    juge = clair;
+  }
+  int rc = fu_fsck_fat_n(juge, out, sizeof out);
+  if (rc != 0) fprintf(stderr, "%s\n", out);
+  if (luks) unlink(clair);
+  TT_ASSERT_EQ(rc, 0);
+}
+
+static void test_handles_fat32(void) {
+  if (!fu_fat_tools_available()) return;
+  ctx_ecr c;
+  memset(&c, 0, sizeof c);
+  corps_fat(&c, 0);
+  nettoyer_ctx(&c);
+}
+
+static void test_handles_luks2_fat32(void) {
+  if (!fu_fat_tools_available()) return;
+  ctx_ecr c;
+  memset(&c, 0, sizeof c);
+  corps_fat(&c, 1);
+  nettoyer_ctx(&c);
+}
+
 int main(void) {
   srand((unsigned)time(NULL));
   TT_RUN(test_scan_gpt_luks2);
@@ -618,6 +688,8 @@ int main(void) {
   TT_RUN(test_handles_ebusy_fermeture);
   TT_RUN(test_handles_ecriture);
   TT_RUN(test_handles_lecture_seule_demandee);
+  TT_RUN(test_handles_fat32);
+  TT_RUN(test_handles_luks2_fat32);
   if (!tt_failures && g_saute) return 77; /* SKIP_RETURN_CODE de CTest */
   TT_MAIN_END();
 }

@@ -187,7 +187,8 @@ dans le même commit que le travail.
       fabriqués : 2 défauts trouvés — f_lseek(CREATE_LINKMAP) sans fin sur une chaîne en boucle, corrigé par
       `patches/fatfs/0001` ; décalage indéfini sur un exFAT hostile, borné par la colle ; batterie 3 × 400 et
       3 × 5 000 opérations ; script noyau `verify_fat_with_kernel.sh` à lancer par l'utilisateur)*
-- [ ] T9 — JNI, Kotlin, Flutter
+- [x] T9 — JNI, Kotlin, Flutter *(EFBIG, « Nom non autorisé sur ce disque », renommage de casse ; JVM 55/55,
+      Flutter 21/21, APK construit ; tests natifs sur le Pixel, test_fat_hostile compris : tous OK)*
 - [ ] *(utilisateur)* T10 — Essais sur le Pixel avec une clé FAT32 puis exFAT sauvegardée
 - [ ] T11 — Documentation
 - [ ] Fusion `feature/fat-exfat` → `develop`

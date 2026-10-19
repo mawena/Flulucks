@@ -317,15 +317,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         throw e
     } catch (e: EngineError) {
         Log.w(TAG, "$op : code ${e.code}")
-        throw FileNotFoundException(when (e.code) {
-            EngineError.FL_ENODEV -> VOLUME_CLOSED
-            EngineError.FL_ENOSPC -> "Disque plein"
-            EngineError.FL_EROFS -> readOnlyMessage(documentId)
-            EngineError.FL_EEXIST -> "Un élément porte déjà ce nom"
-            EngineError.FL_EBUSY -> "Fichier en cours d'utilisation"
-            EngineError.FL_ENOTSUP -> "Écriture impossible : fichier à l'ancien format ext3 (blocs indirects)"
-            else -> "Document introuvable ou illisible"
-        })
+        throw FileNotFoundException(ProviderErrors.message(e.code, op) ?: readOnlyMessage(documentId))
     } catch (e: Exception) {
         Log.w(TAG, "$op : ${e.javaClass.simpleName}")
         throw FileNotFoundException("Erreur interne du fournisseur")
@@ -458,7 +450,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
 
     companion object {
         private const val TAG = "FluLuksProvider"
-        private const val VOLUME_CLOSED = "Volume fermé"
+        private const val VOLUME_CLOSED = ProviderErrors.VOLUME_CLOSED
         private const val OUT_OF_MEMORY = "Mémoire insuffisante"
         private const val CHUNK = 128 * 1024
         private const val MAX_WRITE = 4 shl 20 // FJ_PREAD_MAX
@@ -466,11 +458,12 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         private val writeLock = Any()
 
         /** Code du moteur → errno rendu au client par onWrite / onFsync. */
-        internal fun errnoFor(code: Int): Int = when (code) {
-            EngineError.FL_ENOSPC -> OsConstants.ENOSPC
-            EngineError.FL_EROFS -> OsConstants.EROFS
-            EngineError.FL_ENODEV -> OsConstants.ENXIO
-            else -> OsConstants.EIO
+        internal fun errnoFor(code: Int): Int = when (ProviderErrors.errno(code)) {
+            ProviderErrors.Errno.ENOSPC -> OsConstants.ENOSPC
+            ProviderErrors.Errno.EROFS -> OsConstants.EROFS
+            ProviderErrors.Errno.ENXIO -> OsConstants.ENXIO
+            ProviderErrors.Errno.EFBIG -> OsConstants.EFBIG
+            ProviderErrors.Errno.EIO -> OsConstants.EIO
         }
 
         private val ioHandler: Handler by lazy { Handler(HandlerThread("fluluks-io").also { it.start() }.looper) }
