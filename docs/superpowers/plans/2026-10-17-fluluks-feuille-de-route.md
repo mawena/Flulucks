@@ -166,8 +166,20 @@ dans le même commit que le travail.
   - [x] Version `v0.2.1` *(2026-10-18, branche `hotfix/0.2.1` → `main` et `develop`)*
   - [x] Essai sur le Pixel *(2026-10-19, par l'utilisateur : copie nettement plus rapide qu'en 0.2.0)*
 
-### Phase 4 — FAT16 / FAT32 / exFAT (lecture puis écriture)
-- [ ] Plan de la phase 4 écrit
+### Phase 4 — FAT16 / FAT32 / exFAT (lecture puis écriture) ([plan](2026-10-19-phase4-fat-exfat.md))
+- [x] Plan de la phase 4 écrit *(2026-10-19 ; FatFs R0.16, FAT12 inclus)*
+- [ ] T1 — Images FAT/exFAT et juges indépendants (`fsck.fat`, `fsck.exfat`, `fatjuge.py`)
+- [ ] T2 — FatFs dans le moteur : montage, statfs, lecture seule si sale
+- [ ] T3 — Lecture : stat, readdir, pread, noeuds partagés, recherche rapide
+- [ ] T4 — Écriture des fichiers : zéros des trous, limite 4 Gio (`FL_EFBIG`), drapeau sale
+- [ ] T5 — Dossiers et noms : renommage de casse, sous lui-même, noms refusés
+- [ ] T6 — Débit : regroupement des écritures contiguës
+- [ ] T7 — Coupures et pannes
+- [ ] T8 — Batterie aléatoire, images hostiles, vérification par le noyau
+- [ ] T9 — JNI, Kotlin, Flutter
+- [ ] *(utilisateur)* T10 — Essais sur le Pixel avec une clé FAT32 puis exFAT sauvegardée
+- [ ] T11 — Documentation
+- [ ] Fusion `feature/fat-exfat` → `develop`
 - [ ] Version `v0.3.0`
 
 ### Phase 5 — NTFS (lecture puis écriture)
