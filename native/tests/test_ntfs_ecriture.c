@@ -388,6 +388,348 @@ static void test_ntfs_ecriture_erreur_io(void) {
   TT_ASSERT_EQ(um, FL_EIO);
 }
 
+
+/* --- T5 : dossiers et noms ----------------------------------------------------------------------- */
+
+static void test_ntfs_mkdir_rmdir(void) {
+  for (size_t i = 0; i < NIMGS; i++) {
+    vol v;
+    int rc = ouvrir(IMGS[i].img, IMGS[i].ss, IMGS[i].arbre, &v);
+    if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/d1");
+    if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/d1/d2");
+    if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/d1/d2/f.txt", "f\n", 2);
+    int existe = rc == FL_OK ? fl_fs_mkdir(v.fs, "/d1") : rc;
+    int sans_parent = rc == FL_OK ? fl_fs_mkdir(v.fs, "/absent/x") : rc;
+    int non_vide = rc == FL_OK ? fl_fs_rmdir(v.fs, "/d1") : rc;
+    int pas_dossier = rc == FL_OK ? fl_fs_rmdir(v.fs, "/d1/d2/f.txt") : rc;
+    int racine = rc == FL_OK ? fl_fs_rmdir(v.fs, "/") : rc;
+    if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/vide");
+    if (rc == FL_OK) rc = fl_fs_rmdir(v.fs, "/vide");
+    tm_apply_mkdir(v.m, "/d1", 0, 0, 0755);
+    tm_apply_mkdir(v.m, "/d1/d2", 0, 0, 0755);
+    tm_apply_file(v.m, "/d1/d2/f.txt", "f\n", 2, 0, 0, 0644);
+    int j = rc == FL_OK ? juger(&v) : -1;
+    liberer(&v);
+    TT_ASSERT_EQ(rc, FL_OK);
+    TT_ASSERT_EQ(existe, FL_EEXIST);
+    TT_ASSERT_EQ(sans_parent, FL_ENOENT);
+    TT_ASSERT_EQ(non_vide, FL_ENOTEMPTY);
+    TT_ASSERT_EQ(pas_dossier, FL_ENOTDIR);
+    TT_ASSERT_EQ(racine, FL_EINVAL);
+    TT_ASSERT_EQ(j, 0);
+  }
+}
+
+static void test_ntfs_unlink(void) {
+  vol v;
+  int rc = ouvrir("ntfs-4k.img", 4096, "tree-ntfs", &v);
+  fl_file *f = NULL;
+  if (rc == FL_OK) rc = fl_fs_open(v.fs, "/abc.txt", FL_O_RDONLY, &f);
+  int ouvert = rc == FL_OK ? fl_fs_unlink(v.fs, "/abc.txt") : rc;
+  if (f) fl_file_close(f);
+  int dossier = rc == FL_OK ? fl_fs_unlink(v.fs, "/p1") : rc;
+  if (rc == FL_OK) rc = fl_fs_unlink(v.fs, "/ABC.TXT"); /* sans la casse, comme Windows */
+  int absent = rc == FL_OK ? fl_fs_unlink(v.fs, "/abc.txt") : rc;
+  for (int k = 0; rc == FL_OK && k < 1000; k++) { /* un gros index qui rétrécit */
+    char p[64];
+    snprintf(p, sizeof p, "/mille/f%04d.txt", k);
+    rc = fl_fs_unlink(v.fs, p);
+    tm_apply_unlink(v.m, p);
+  }
+  if (rc == FL_OK) rc = fl_fs_rmdir(v.fs, "/mille");
+  tm_apply_rmdir(v.m, "/mille");
+  tm_apply_unlink(v.m, "/abc.txt");
+  int j = rc == FL_OK ? juger(&v) : -1;
+  liberer(&v);
+  TT_ASSERT_EQ(rc, FL_OK);
+  TT_ASSERT_EQ(ouvert, FL_EBUSY);
+  TT_ASSERT_EQ(dossier, FL_EISDIR);
+  TT_ASSERT_EQ(absent, FL_ENOENT);
+  TT_ASSERT_EQ(j, 0);
+}
+
+static void test_ntfs_unlink_lien_dur(void) {
+  vol v;
+  int rc = ouvrir("ntfs-arbre.img", 512, NULL, &v);
+  if (rc == FL_OK) rc = fl_fs_unlink(v.fs, "/abc.txt");
+  char b[16] = {0};
+  if (rc == FL_OK) rc = relire(v.fs, "/lien-dur.txt", b, 11);
+  int j = rc == FL_OK ? juger_coherence(&v) : -1;
+  liberer(&v);
+  TT_ASSERT_EQ(rc, FL_OK);
+  TT_ASSERT_MEM_EQ(b, "minuscules\n", 11);
+  TT_ASSERT_EQ(j, 0);
+}
+
+static void test_ntfs_rename_deplacer(void) {
+  for (size_t i = 0; i < NIMGS; i++) {
+    vol v;
+    int rc = ouvrir(IMGS[i].img, IMGS[i].ss, IMGS[i].arbre, &v);
+    if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/src");
+    if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/src/sous");
+    if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/src/sous/f.txt", "contenu\n", 8);
+    if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/dst");
+    if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/a.txt", "a\n", 2);
+    if (rc == FL_OK) rc = fl_fs_rename(v.fs, "/a.txt", "/dst/b.txt");        /* fichier, autre dossier */
+    if (rc == FL_OK) rc = fl_fs_rename(v.fs, "/src", "/dst/src2");           /* dossier et son contenu */
+    if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/dst/src2/sous/g.txt", "g\n", 2); /* le dossier déplacé vit */
+    tm_apply_mkdir(v.m, "/dst", 0, 0, 0755);
+    tm_apply_mkdir(v.m, "/dst/src2", 0, 0, 0755);
+    tm_apply_mkdir(v.m, "/dst/src2/sous", 0, 0, 0755);
+    tm_apply_file(v.m, "/dst/src2/sous/f.txt", "contenu\n", 8, 0, 0, 0644);
+    tm_apply_file(v.m, "/dst/src2/sous/g.txt", "g\n", 2, 0, 0, 0644);
+    tm_apply_file(v.m, "/dst/b.txt", "a\n", 2, 0, 0, 0644);
+    int j = rc == FL_OK ? juger(&v) : -1;
+    liberer(&v);
+    TT_ASSERT_EQ(rc, FL_OK);
+    TT_ASSERT_EQ(j, 0);
+  }
+}
+
+static void test_ntfs_rename_refus(void) {
+  vol v;
+  int rc = ouvrir("ntfs-vide.img", 512, NULL, &v);
+  if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/d");
+  if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/d/e");
+  if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/x.txt", "x\n", 2);
+  if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/y.txt", "y\n", 2);
+  int existe = rc == FL_OK ? fl_fs_rename(v.fs, "/x.txt", "/y.txt") : rc;
+  int existe_casse = rc == FL_OK ? fl_fs_rename(v.fs, "/x.txt", "/Y.TXT") : rc;
+  int sous = rc == FL_OK ? fl_fs_rename(v.fs, "/d", "/d/e/f") : rc;
+  int sous_casse = rc == FL_OK ? fl_fs_rename(v.fs, "/d", "/D/e/f") : rc;
+  int lui = rc == FL_OK ? fl_fs_rename(v.fs, "/d", "/d/g") : rc;
+  int absent = rc == FL_OK ? fl_fs_rename(v.fs, "/absent", "/z") : rc;
+  int sans_parent = rc == FL_OK ? fl_fs_rename(v.fs, "/x.txt", "/absent/z") : rc;
+  tm_apply_mkdir(v.m, "/d", 0, 0, 0755);
+  tm_apply_mkdir(v.m, "/d/e", 0, 0, 0755);
+  tm_apply_file(v.m, "/x.txt", "x\n", 2, 0, 0, 0644);
+  tm_apply_file(v.m, "/y.txt", "y\n", 2, 0, 0, 0644);
+  int j = rc == FL_OK ? juger(&v) : -1;
+  liberer(&v);
+  TT_ASSERT_EQ(rc, FL_OK);
+  TT_ASSERT_EQ(existe, FL_EEXIST);
+  TT_ASSERT_EQ(existe_casse, FL_EEXIST);
+  TT_ASSERT_EQ(sous, FL_EINVAL);
+  TT_ASSERT_EQ(sous_casse, FL_EINVAL);
+  TT_ASSERT_EQ(lui, FL_EINVAL);
+  TT_ASSERT_EQ(absent, FL_ENOENT);
+  TT_ASSERT_EQ(sans_parent, FL_ENOENT);
+  TT_ASSERT_EQ(j, 0);
+}
+
+static int cb_noms(void *ctx, const fl_dirent *e) {
+  char *acc = ctx;
+  strncat(acc, e->name, 4096 - strlen(acc) - 2);
+  strcat(acc, "|");
+  return 0;
+}
+
+static void test_ntfs_rename_casse(void) {
+  vol v;
+  int rc = ouvrir("ntfs-vide.img", 512, NULL, &v);
+  if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/a.txt", "a\n", 2);
+  if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/dossier");
+  if (rc == FL_OK) rc = fl_fs_rename(v.fs, "/a.txt", "/A.txt");
+  if (rc == FL_OK) rc = fl_fs_rename(v.fs, "/dossier", "/Dossier");
+  if (rc == FL_OK) rc = fl_fs_rename(v.fs, "/A.txt", "/A.txt"); /* lui-même : sans effet */
+  char noms[4096] = "";
+  if (rc == FL_OK) rc = fl_fs_readdir(v.fs, "/", cb_noms, noms);
+  tm_apply_file(v.m, "/A.txt", "a\n", 2, 0, 0, 0644);
+  tm_apply_mkdir(v.m, "/Dossier", 0, 0, 0755);
+  int j = rc == FL_OK ? juger(&v) : -1;
+  liberer(&v);
+  TT_ASSERT_EQ(rc, FL_OK);
+  TT_ASSERT_STR_EQ(noms, "A.txt|Dossier|");
+  TT_ASSERT_EQ(j, 0);
+}
+
+static void test_ntfs_noms_interdits(void) {
+  static const char *const noms[] = {"/a:b", "/a*b", "/a?b", "/a\"b", "/a<b", "/a>b", "/a|b", "/a\\b",
+                                     "/CON", "/nul.txt", "/com1", "/LPT9.log", "/nom.", "/nom ", "/a\x01"};
+  vol v;
+  int rc = ouvrir("ntfs-vide.img", 512, NULL, &v);
+  if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/ok.txt", "ok\n", 3);
+  int mauvais = 0;
+  for (size_t i = 0; rc == FL_OK && i < sizeof noms / sizeof *noms; i++) {
+    fl_file *f = NULL;
+    int c = fl_fs_open(v.fs, noms[i], FL_O_RDWR | FL_O_CREAT, &f);
+    if (f) fl_file_close(f);
+    int m = fl_fs_mkdir(v.fs, noms[i]);
+    int r = fl_fs_rename(v.fs, "/ok.txt", noms[i]);
+    if (c != FL_EINVAL || m != FL_EINVAL || r != FL_EINVAL) {
+      fprintf(stderr, "« %s » : création %d, mkdir %d, renommage %d\n", noms[i], c, m, r);
+      mauvais++;
+    }
+  }
+  tm_apply_file(v.m, "/ok.txt", "ok\n", 3, 0, 0, 0644);
+  int j = rc == FL_OK ? juger(&v) : -1;
+  liberer(&v);
+  TT_ASSERT_EQ(rc, FL_OK);
+  TT_ASSERT_EQ(mauvais, 0);
+  TT_ASSERT_EQ(j, 0);
+}
+
+static void test_ntfs_noms_casse(void) {
+  vol v;
+  int rc = ouvrir("ntfs-4k.img", 4096, "tree-ntfs", &v);
+  fl_file *f = NULL;
+  int c = rc == FL_OK ? fl_fs_open(v.fs, "/ABC.TXT", FL_O_RDWR | FL_O_CREAT, &f) : rc; /* ouvre abc.txt */
+  if (f) fl_file_close(f);
+  int m = rc == FL_OK ? fl_fs_mkdir(v.fs, "/P1") : rc;
+  int j = rc == FL_OK ? juger(&v) : -1;
+  liberer(&v);
+  TT_ASSERT_EQ(c, FL_OK);
+  TT_ASSERT_EQ(m, FL_EEXIST);
+  TT_ASSERT_EQ(j, 0);
+}
+
+static void test_ntfs_noms_unicode(void) {
+  char n255[300] = "/";
+  for (int k = 0; k < 125; k++) strcat(n255, "é");
+  strcat(n255, "n.txt"); /* 255 octets UTF-8 */
+  vol v;
+  int rc = ouvrir("ntfs-vide.img", 512, NULL, &v);
+  if (rc == FL_OK) rc = ecrire_fichier(v.fs, "/😀.bin", "emoji\n", 6);
+  if (rc == FL_OK) rc = ecrire_fichier(v.fs, n255, "long\n", 5);
+  if (rc == FL_OK) rc = fl_fs_mkdir(v.fs, "/été ☀");
+  tm_apply_file(v.m, "/😀.bin", "emoji\n", 6, 0, 0, 0644);
+  tm_apply_file(v.m, n255, "long\n", 5, 0, 0, 0644);
+  tm_apply_mkdir(v.m, "/été ☀", 0, 0, 0755);
+  int j = rc == FL_OK ? juger(&v) : -1;
+  liberer(&v);
+  TT_ASSERT_EQ(rc, FL_OK);
+  TT_ASSERT_EQ(j, 0);
+}
+
+static void test_ntfs_metafichiers_proteges(void) {
+  vol v;
+  int rc = ouvrir("ntfs-vide.img", 512, NULL, &v);
+  int u = rc == FL_OK ? fl_fs_unlink(v.fs, "/$MFT") : rc;
+  int r = rc == FL_OK ? fl_fs_rename(v.fs, "/$Bitmap", "/x") : rc;
+  int d = rc == FL_OK ? fl_fs_rmdir(v.fs, "/$Extend") : rc;
+  int j = rc == FL_OK ? juger(&v) : -1;
+  liberer(&v);
+  TT_ASSERT_EQ(u, FL_ENOENT);
+  TT_ASSERT_EQ(r, FL_ENOENT);
+  TT_ASSERT_EQ(d, FL_ENOENT);
+  TT_ASSERT_EQ(j, 0);
+}
+
+
+/* --- T6 : débit -------------------------------------------------------------------------------- */
+
+/* 32 Mio par pwrite de 128 Kio, puis fermeture : écritures et lectures du disque comptées de l'ouverture à
+ * la fermeture comprise. */
+static void test_ntfs_debit(void) {
+  size_t n = 32 * MIB, pas = 128 * 1024;
+  uint8_t *data = motif(n, 21);
+  TT_ASSERT(data != NULL);
+  vol v;
+  int rc = ouvrir("ntfs-vide.img", 512, NULL, &v);
+  uint64_t w0 = v.dev ? fl_fault_bdev_writes(v.dev) : 0, r0 = v.dev ? fl_fault_bdev_reads(v.dev) : 0;
+  fl_file *f = NULL;
+  if (rc == FL_OK) rc = fl_fs_open(v.fs, "/debit.bin", FL_O_RDWR | FL_O_CREAT, &f);
+  for (size_t off = 0; rc == FL_OK && off < n; off += pas)
+    if (fl_file_pwrite(f, data + off, pas, off) != (int64_t)pas) rc = FL_EIO;
+  if (f && fl_file_close(f) != FL_OK && rc == FL_OK) rc = FL_EIO;
+  uint64_t w = v.dev ? fl_fault_bdev_writes(v.dev) - w0 : 0, r = v.dev ? fl_fault_bdev_reads(v.dev) - r0 : 0;
+  tm_apply_file(v.m, "/debit.bin", data, n, 0, 0, 0644);
+  int j = rc == FL_OK ? juger(&v) : -1;
+  liberer(&v);
+  free(data);
+  fprintf(stderr, "32 Mio : %llu écritures, %llu lectures\n", (unsigned long long)w, (unsigned long long)r);
+  TT_ASSERT_EQ(rc, FL_OK);
+  TT_ASSERT_EQ(j, 0);
+  TT_ASSERT(w <= 64);
+  TT_ASSERT(r <= 32);
+}
+
+/* Écritures non alignées qui chevauchent des secteurs, relues avant et après sync, sur des disques de 512 et
+ * de 4096 octets par secteur. */
+static void test_ntfs_cache_coherent(void) {
+  for (size_t i = 0; i < NIMGS; i++) {
+    vol v;
+    int rc = ouvrir(IMGS[i].img, IMGS[i].ss, IMGS[i].arbre, &v);
+    size_t n = 100000;
+    uint8_t *att = calloc(1, n), *back = malloc(n), *p = motif(n, 23);
+    fl_file *f = NULL;
+    if (rc == FL_OK) rc = fl_fs_open(v.fs, "/c.bin", FL_O_RDWR | FL_O_CREAT, &f);
+    static const size_t offs[][2] = {{1, 700}, {511, 3}, {4095, 2}, {4000, 9000}, {70001, 29999}, {12, 1}, {600, 5000}};
+    for (size_t k = 0; rc == FL_OK && k < sizeof offs / sizeof *offs; k++) {
+      size_t o = offs[k][0], l = offs[k][1];
+      if (fl_file_pwrite(f, p + o, l, o) != (int64_t)l) rc = FL_EIO;
+      memcpy(att + o, p + o, l);
+      size_t got = 0;
+      while (rc == FL_OK && got < n) {
+        int64_t r = fl_file_pread(f, back + got, n - got, got);
+        if (r <= 0) break;
+        got += (size_t)r;
+      }
+      if (rc == FL_OK && memcmp(back, att, got)) rc = FL_ECORRUPT;
+    }
+    if (rc == FL_OK) rc = fl_fs_sync(v.fs);
+    if (f && fl_file_close(f) != FL_OK && rc == FL_OK) rc = FL_EIO;
+    if (rc == FL_OK) rc = relire(v.fs, "/c.bin", back, n);
+    int same = rc == FL_OK && !memcmp(back, att, n);
+    tm_apply_file(v.m, "/c.bin", att, n, 0, 0, 0644);
+    int j = rc == FL_OK ? juger(&v) : -1;
+    liberer(&v);
+    free(att);
+    free(back);
+    free(p);
+    TT_ASSERT_EQ(rc, FL_OK);
+    TT_ASSERT(same);
+    TT_ASSERT_EQ(j, 0);
+  }
+}
+
+
+static int cb_rien(void *ctx, const fl_dirent *e) {
+  (void)e;
+  (*(int *)ctx)++;
+  return 0;
+}
+
+/* Une écriture différée qui échoue au vidage (fermeture) : erreur rendue par la fermeture, lecture seule
+ * collante, volume encore lisible, démontage en échec. */
+static void test_ntfs_cache_erreur(void) {
+  uint8_t *data = motif(MIB, 29);
+  vol v;
+  int rc = ouvrir("ntfs-vide.img", 512, NULL, &v);
+  fl_file *f = NULL;
+  if (rc == FL_OK) rc = fl_fs_open(v.fs, "/x.bin", FL_O_RDWR | FL_O_CREAT, &f);
+  for (size_t off = 0; rc == FL_OK && off < MIB; off += 64 * 1024)
+    if (fl_file_pwrite(f, data + off, 64 * 1024, off) != 64 * 1024) rc = FL_EIO;
+  uint64_t avant = v.dev ? fl_fault_bdev_writes(v.dev) : 0;
+  if (f && fl_file_close(f) != FL_OK && rc == FL_OK) rc = FL_EIO;
+  uint64_t apres = v.dev ? fl_fault_bdev_writes(v.dev) : 0;
+  liberer(&v);
+  TT_ASSERT_EQ(rc, FL_OK);
+  TT_ASSERT(apres > avant + 1); /* le vidage différé a bien lieu à la fermeture */
+  rc = ouvrir_panne("ntfs-vide.img", 512, NULL, avant, FL_EIO, &v);
+  f = NULL;
+  int64_t w = FL_OK;
+  if (rc == FL_OK) rc = fl_fs_open(v.fs, "/x.bin", FL_O_RDWR | FL_O_CREAT, &f);
+  for (size_t off = 0; rc == FL_OK && off < MIB && w >= 0; off += 64 * 1024) w = fl_file_pwrite(f, data + off, 64 * 1024, off);
+  int c = f ? fl_file_close(f) : FL_EIO;
+  fl_statfs st = {0};
+  int s = v.fs ? fl_fs_statfs(v.fs, &st) : FL_EIO;
+  int n = 0;
+  int lis = v.fs ? fl_fs_readdir(v.fs, "/", cb_rien, &n) : FL_EIO;
+  int um = v.fs ? fl_fs_unmount(v.fs) : FL_EIO;
+  v.fs = NULL;
+  liberer(&v);
+  free(data);
+  TT_ASSERT_EQ(rc, FL_OK);
+  TT_ASSERT_EQ(w, 64 * 1024); /* toutes les écritures acquittées (différées) */
+  TT_ASSERT_EQ(c, FL_EIO);
+  TT_ASSERT_EQ(s, FL_OK);
+  TT_ASSERT(st.read_only);
+  TT_ASSERT_STR_EQ(st.ro_reason, FL_RO_IOERR);
+  TT_ASSERT_EQ(lis, FL_OK);
+  TT_ASSERT_EQ(um, FL_EIO);
+}
+
 int main(void) {
   if (!fu_ntfs_tools_available()) {
     printf("SAUTÉ : outils NTFS absents ou plateforme Android (juges réservés au PC)\n");
@@ -402,5 +744,18 @@ int main(void) {
   TT_RUN(test_ntfs_compresse_lecture_seule);
   TT_RUN(test_ntfs_partage_lecteur_ecrivain);
   TT_RUN(test_ntfs_ecriture_erreur_io);
+  TT_RUN(test_ntfs_mkdir_rmdir);
+  TT_RUN(test_ntfs_unlink);
+  TT_RUN(test_ntfs_unlink_lien_dur);
+  TT_RUN(test_ntfs_rename_deplacer);
+  TT_RUN(test_ntfs_rename_refus);
+  TT_RUN(test_ntfs_rename_casse);
+  TT_RUN(test_ntfs_noms_interdits);
+  TT_RUN(test_ntfs_noms_casse);
+  TT_RUN(test_ntfs_noms_unicode);
+  TT_RUN(test_ntfs_metafichiers_proteges);
+  TT_RUN(test_ntfs_debit);
+  TT_RUN(test_ntfs_cache_coherent);
+  TT_RUN(test_ntfs_cache_erreur);
   TT_MAIN_END();
 }

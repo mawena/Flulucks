@@ -21,7 +21,13 @@
  * d'un sync réussi (inodes système écrits, cache du disque vidé), puis vide encore : un disque arraché
  * pendant une écriture reste marqué, et Windows le vérifie (chkdsk) au branchement suivant. Une erreur du
  * disque rend le volume collant en lecture seule (FL_RO_IOERR), une incohérence vue par libntfs-3g aussi
- * (FL_RO_CORRUPT) ; plus rien n'est alors écrit, le drapeau reste posé. */
+ * (FL_RO_CORRUPT) ; plus rien n'est alors écrit, le drapeau reste posé.
+ *
+ * Noms (comme Windows) : insensibles à la casse à la recherche (nom exact d'abord), casse gardée à la
+ * création ; un nom créé ou visé par un renommage qui contient : * ? " < > | \ ou un caractère de contrôle,
+ * qui finit par « . » ou une espace, ou qui est réservé (CON, NUL, COM1…) est refusé (FL_EINVAL). Un
+ * renommage est un nouveau lien puis le retrait de l'ancien nom (comme ntfs-3g) ; seule la casse change :
+ * en passant par un nom temporaire. */
 
 #define _GNU_SOURCE /* struct stat complet (st_mtime) pour les en-têtes de libntfs-3g */
 
@@ -352,7 +358,7 @@ static int mark_dirty(ntfs_vol *v);
 static int sync_locked(ntfs_vol *v);
 static int open_data(ntfs_vol *v, MFT_REF m, ntfs_inode **ni, ntfs_attr **na);
 static int close_data(ntfs_vol *v, ntfs_inode *ni, ntfs_attr *na, int rc);
-static int create_file(ntfs_vol *v, const char *path, MFT_REF *out);
+static int create_node(ntfs_vol *v, const char *path, mode_t type, MFT_REF *out);
 
 /* --- opérations de lecture ---------------------------------------------------------------------- */
 
@@ -477,7 +483,7 @@ static int n_open(fl_fs *fs, const char *path, int flags, fl_file **out) {
   pthread_mutex_lock(&g_ntfs_lock);
   MFT_REF m;
   int rc = resolve(v, path, &m, NULL);
-  if (rc == FL_ENOENT && (flags & FL_O_CREAT)) rc = create_file(v, path, &m);
+  if (rc == FL_ENOENT && (flags & FL_O_CREAT)) rc = create_node(v, path, S_IFREG, &m);
   if (rc == FL_OK) {
     ntfs_inode *ni = ntfs_inode_open(v->vol, m);
     if (!ni) {
@@ -597,13 +603,20 @@ static int n_close(fl_file *f) {
 /* Pose ou efface VOLUME_IS_DIRTY, puis vide le cache du disque (sous g_ntfs_lock, aucun inode ouvert). */
 static int set_dirty_flag(ntfs_vol *v, bool sale) {
   ntfs_volume *vol = v->vol;
-  le16 f = sale ? (le16)(vol->flags | VOLUME_IS_DIRTY) : (le16)(vol->flags & ~VOLUME_IS_DIRTY);
-  if (ntfs_volume_write_flags(vol, f)) return wr_err(v, errno);
-  if (ntfs_device_sync(vol->dev)) {
+  /* en mode direct : rien d'autre n'attend, et $Volume (avec $MFTMirr) va au disque avant le vidage */
+  if (ntfs_dev_set_direct(v->dd, true) != FL_OK) {
+    ntfs_dev_set_direct(v->dd, false);
     go_ro(v, FL_RO_IOERR);
     return FL_EIO;
   }
-  return FL_OK;
+  le16 f = sale ? (le16)(vol->flags | VOLUME_IS_DIRTY) : (le16)(vol->flags & ~VOLUME_IS_DIRTY);
+  int rc = ntfs_volume_write_flags(vol, f) ? wr_err(v, errno) : FL_OK;
+  if (rc == FL_OK && ntfs_device_sync(vol->dev)) {
+    go_ro(v, FL_RO_IOERR);
+    rc = FL_EIO;
+  }
+  ntfs_dev_set_direct(v->dd, false);
+  return rc;
 }
 
 /* Avant toute modification (sous g_ntfs_lock, aucun inode ouvert). */
@@ -696,28 +709,112 @@ static int n_truncate(fl_file *f, uint64_t size) {
   return rc;
 }
 
-/* Crée le fichier ordinaire `path` (absent) ; son numéro MFT dans *out (sous g_ntfs_lock). */
-static int create_file(ntfs_vol *v, const char *path, MFT_REF *out) {
+/* --- dossiers et noms (T5) ------------------------------------------------------------------------ */
+
+/* Nom créable sous Windows (dernier composant d'un chemin validé) en UTF-16 dans *u (à libérer) :
+ * FL_EINVAL pour : * ? " < > | \, un caractère de contrôle, un nom réservé (CON, NUL, COM1…), un « . » ou
+ * une espace finale, plus de 255 unités UTF-16 (sous g_ntfs_lock). */
+static int leaf_name(ntfs_vol *v, const char *leaf, ntfschar **u, int *len) {
+  *u = NULL;
+  *len = ntfs_mbstoucs(leaf, u);
+  if (*len <= 0 || *len > 255 || ntfs_forbidden_names(v->vol, *u, *len, TRUE)) {
+    free(*u);
+    *u = NULL;
+    return FL_EINVAL;
+  }
+  return FL_OK;
+}
+
+/* Dossier parent (chemin) et dernier composant d'un chemin validé autre que "/". */
+static const char *split(const char *path, char parent[4096]) {
   const char *leaf = strrchr(path, '/') + 1;
-  char parent[4096];
   size_t pl = (size_t)(leaf - path) - 1;
   memcpy(parent, path, pl ? pl : 1);
   parent[pl ? pl : 1] = 0;
+  return leaf;
+}
+
+/* Vrai si le dossier `dir` est `m` ou l'un de ses descendants (remonte les parents ; sous g_ntfs_lock). */
+static int is_under(ntfs_vol *v, MFT_REF dir, MFT_REF m, bool *under) {
+  *under = false;
+  for (int steps = 0; steps < 4096; steps++) {
+    if (MREF(dir) == MREF(m)) {
+      *under = true;
+      return FL_OK;
+    }
+    if (MREF(dir) == FILE_root) return FL_OK;
+    ntfs_inode *ni = ntfs_inode_open(v->vol, dir);
+    if (!ni) return ntfs_err(errno);
+    ntfs_inode *p = ntfs_dir_parent_inode(ni);
+    ntfs_inode_close(ni);
+    if (!p) return FL_ECORRUPT;
+    dir = MK_MREF(p->mft_no, le16_to_cpu(p->mrec->sequence_number));
+    ntfs_inode_close(p);
+  }
+  return FL_ECORRUPT; /* chaîne de parents trop longue : disque incohérent */
+}
+
+/* Ajoute le nom (u, len) à l'inode m dans le dossier dir (sous g_ntfs_lock). */
+static int link_name(ntfs_vol *v, MFT_REF m, MFT_REF dir, const ntfschar *u, int len) {
+  ntfs_inode *dn = ntfs_inode_open(v->vol, dir);
+  if (!dn) return wr_err(v, errno);
+  ntfs_inode *ni = ntfs_inode_open(v->vol, m);
+  int rc = ni ? FL_OK : wr_err(v, errno);
+  if (rc == FL_OK && ntfs_link(ni, dn, (ntfschar *)u, (u8)len)) rc = wr_err(v, errno);
+  if (rc == FL_OK) ntfs_inode_update_times(dn, NTFS_UPDATE_MCTIME);
+  if (ni) {
+    int c = close_ni(v, ni, dn);
+    if (rc == FL_OK) rc = c;
+  }
+  int c = close_ni(v, dn, NULL);
+  return rc == FL_OK ? c : rc;
+}
+
+/* Retire le nom `name` (UTF-8 : nom exact d'abord, puis sans la casse) de l'inode m dans le dossier dir ;
+ * l'inode est supprimé s'il n'a plus de nom (sous g_ntfs_lock). */
+static int unlink_name(ntfs_vol *v, MFT_REF m, MFT_REF dir, const char *name) {
+  ntfschar *u = NULL;
+  int len = ntfs_mbstoucs(name, &u);
+  if (len <= 0) {
+    free(u);
+    return FL_ENOENT;
+  }
+  int rc = FL_OK;
+  ntfs_inode *dn = ntfs_inode_open(v->vol, dir);
+  ntfs_inode *ni = dn ? ntfs_inode_open(v->vol, m) : NULL;
+  if (!dn || !ni) {
+    rc = wr_err(v, errno);
+    if (dn) ntfs_inode_close(dn);
+  } else {
+    /* ntfs_delete cherche le nom exact puis sans la casse, sauf pour un nom POSIX sur un volume sensible à
+     * la casse : le volume l'est le temps de l'appel. Il referme ni et dn dans tous les cas. */
+    NVolClearCaseSensitive(v->vol);
+    int r = ntfs_delete(v->vol, NULL, ni, dn, u, (u8)len);
+    int e = errno;
+    NVolSetCaseSensitive(v->vol);
+    if (r) rc = wr_err(v, e);
+  }
+  free(u);
+  return rc;
+}
+
+/* Crée le fichier ou dossier `path` (absent) ; type S_IFREG ou S_IFDIR ; numéro MFT dans *out (sous
+ * g_ntfs_lock). */
+static int create_node(ntfs_vol *v, const char *path, mode_t type, MFT_REF *out) {
+  char parent[4096];
+  const char *leaf = split(path, parent);
   MFT_REF dir;
   int rc = resolve(v, parent, &dir, NULL);
   if (rc != FL_OK) return rc;
   ntfschar *u = NULL;
-  int len = ntfs_mbstoucs(leaf, &u);
-  if (len <= 0 || len > 255) {
-    free(u);
-    return FL_EINVAL;
-  }
+  int len = 0;
+  if ((rc = leaf_name(v, leaf, &u, &len)) != FL_OK) return rc;
   rc = mark_dirty(v);
   ntfs_inode *dir_ni = rc == FL_OK ? ntfs_inode_open(v->vol, dir) : NULL;
   if (rc == FL_OK && !dir_ni) rc = wr_err(v, errno);
   if (rc == FL_OK && !is_dir(dir_ni)) rc = FL_ENOTDIR;
   if (rc == FL_OK) {
-    ntfs_inode *ni = ntfs_create(dir_ni, 0, u, (u8)len, S_IFREG);
+    ntfs_inode *ni = ntfs_create(dir_ni, 0, u, (u8)len, type);
     if (!ni) {
       rc = wr_err(v, errno);
     } else {
@@ -732,6 +829,122 @@ static int create_file(ntfs_vol *v, const char *path, MFT_REF *out) {
     if (rc == FL_OK) rc = c;
   }
   free(u);
+  return rc;
+}
+
+static int n_mkdir(fl_fs *fs, const char *path) {
+  ntfs_vol *v = fs->priv;
+  if (!strcmp(path, "/")) return FL_EEXIST;
+  pthread_mutex_lock(&g_ntfs_lock);
+  MFT_REF m;
+  int rc = resolve(v, path, &m, NULL); /* sans la casse : « P1 » existe si « p1 » existe */
+  if (rc == FL_OK) rc = FL_EEXIST;
+  else if (rc == FL_ENOENT) rc = create_node(v, path, S_IFDIR, &m);
+  pthread_mutex_unlock(&g_ntfs_lock);
+  return rc;
+}
+
+/* unlink (dir faux) ou rmdir (dir vrai). */
+static int remove_op(fl_fs *fs, const char *path, bool dir) {
+  ntfs_vol *v = fs->priv;
+  if (!strcmp(path, "/")) return dir ? FL_EINVAL : FL_EISDIR;
+  pthread_mutex_lock(&g_ntfs_lock);
+  MFT_REF m, parent;
+  fl_stat st;
+  int rc = resolve(v, path, &m, &parent);
+  if (rc == FL_OK) rc = stat_mref(v, m, &st);
+  if (rc == FL_OK && dir && st.type != FL_FT_DIR) rc = FL_ENOTDIR;
+  if (rc == FL_OK && !dir && st.type == FL_FT_DIR) rc = FL_EISDIR;
+  if (rc == FL_OK && find_node(v, m)) rc = FL_EBUSY;
+  if (rc == FL_OK && dir) {
+    ntfs_inode *ni = ntfs_inode_open(v->vol, m);
+    int e = !ni ? -1 : ntfs_check_empty_dir(ni);
+    int err = errno;
+    if (ni) ntfs_inode_close(ni);
+    if (!ni) rc = ntfs_err(err);
+    else if (e) rc = err == ENOTEMPTY ? FL_ENOTEMPTY : ntfs_err(err);
+  }
+  if (rc == FL_OK) rc = mark_dirty(v);
+  if (rc == FL_OK) rc = unlink_name(v, m, parent, strrchr(path, '/') + 1);
+  pthread_mutex_unlock(&g_ntfs_lock);
+  return rc;
+}
+
+static int n_unlink(fl_fs *fs, const char *path) { return remove_op(fs, path, false); }
+static int n_rmdir(fl_fs *fs, const char *path) { return remove_op(fs, path, true); }
+
+static int n_rename(fl_fs *fs, const char *from, const char *to) {
+  ntfs_vol *v = fs->priv;
+  if (!strcmp(from, "/") || !strcmp(to, "/")) return FL_EINVAL;
+  pthread_mutex_lock(&g_ntfs_lock);
+  MFT_REF m, from_dir, to_dir, existing;
+  char to_parent[4096];
+  const char *to_leaf = split(to, to_parent);
+  int rc = resolve(v, from, &m, &from_dir);
+  if (rc == FL_OK) rc = resolve(v, to_parent, &to_dir, NULL);
+  if (rc == FL_OK) {
+    ntfs_inode *ni = ntfs_inode_open(v->vol, to_dir);
+    rc = !ni ? ntfs_err(errno) : is_dir(ni) ? FL_OK : FL_ENOTDIR;
+    if (ni) ntfs_inode_close(ni);
+  }
+  bool under = false;
+  if (rc == FL_OK) rc = is_under(v, to_dir, m, &under);
+  if (rc == FL_OK && under) rc = FL_EINVAL; /* vers lui-même ou l'un de ses descendants */
+  bool same = false;
+  if (rc == FL_OK) {
+    int r = resolve(v, to, &existing, NULL);
+    if (r == FL_OK && MREF(existing) == MREF(m) && MREF(to_dir) == MREF(from_dir)) same = true; /* casse */
+    else if (r == FL_OK) rc = FL_EEXIST;
+    else if (r != FL_ENOENT) rc = r;
+  }
+  ntfschar *u = NULL;
+  int len = 0;
+  if (rc == FL_OK) rc = leaf_name(v, to_leaf, &u, &len);
+  const char *from_leaf = strrchr(from, '/') + 1;
+  if (rc == FL_OK && same) {
+    /* même inode, même dossier : même nom (rien à faire), autre nom du même fichier (lien dur : rien à
+     * faire non plus, comme rename(2)), ou seule la casse change */
+    ntfschar *uf = NULL;
+    int lf = ntfs_mbstoucs(from_leaf, &uf);
+    bool casse = lf > 0 && strcmp(from_leaf, to_leaf) &&
+                 ntfs_names_are_equal(uf, (size_t)lf, u, (size_t)len, IGNORE_CASE, v->vol->upcase, v->vol->upcase_len);
+    free(uf);
+    if (!casse) {
+      free(u);
+      pthread_mutex_unlock(&g_ntfs_lock);
+      return FL_OK;
+    }
+  }
+  if (rc == FL_OK) rc = mark_dirty(v);
+  if (rc == FL_OK && same) {
+    /* Seule la casse change : l'index refuserait le nouveau nom (égal sans la casse). Nom temporaire,
+     * ancien nom retiré, nouveau nom, nom temporaire retiré ; le drapeau sale couvre une coupure. */
+    char tmp[64];
+    ntfschar *ut = NULL;
+    int lt = 0;
+    MFT_REF x;
+    for (unsigned n = 0; rc == FL_OK; n++) {
+      snprintf(tmp, sizeof tmp, "~fluluks-%u.tmp", n);
+      ntfs_inode *dn = ntfs_inode_open(v->vol, to_dir);
+      int r = dn ? lookup(dn, tmp, &x) : ntfs_err(errno);
+      if (dn) ntfs_inode_close(dn);
+      if (r == FL_ENOENT) break;
+      if (r != FL_OK) rc = r;
+    }
+    if (rc == FL_OK) {
+      lt = ntfs_mbstoucs(tmp, &ut);
+      rc = lt > 0 ? link_name(v, m, to_dir, ut, lt) : FL_ENOMEM;
+    }
+    if (rc == FL_OK) rc = unlink_name(v, m, from_dir, from_leaf);
+    if (rc == FL_OK) rc = link_name(v, m, to_dir, u, len);
+    if (rc == FL_OK) rc = unlink_name(v, m, to_dir, tmp);
+    free(ut);
+  } else if (rc == FL_OK) {
+    rc = link_name(v, m, to_dir, u, len);
+    if (rc == FL_OK) rc = unlink_name(v, m, from_dir, from_leaf);
+  }
+  free(u);
+  pthread_mutex_unlock(&g_ntfs_lock);
   return rc;
 }
 
@@ -778,6 +991,10 @@ static const fl_fs_ops k_ntfs_ops = {
     .pwrite = n_pwrite,
     .truncate = n_truncate,
     .sync = n_sync,
+    .mkdir = n_mkdir,
+    .unlink = n_unlink,
+    .rmdir = n_rmdir,
+    .rename = n_rename,
     .unmount = n_unmount,
 };
 

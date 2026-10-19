@@ -206,8 +206,10 @@ dans le même commit que le travail.
       bitmap d'index lisait un bloc absent ; test_ntfs 20/20 sur PC et sur le Pixel)*
 - [x] T4 — Écriture des fichiers et drapeau sale *(correctif 0003 : décalage d'un négatif dans les runlists ;
       inodes non écrits abandonnés après une panne ; test_ntfs_ecriture 9/9)*
-- [ ] T5 — Dossiers et noms
-- [ ] T6 — Débit : cache d'écriture différée
+- [x] T5 — Dossiers et noms *(noms Windows refusés, recherche sans la casse, renommage de casse par un nom
+      temporaire, renommage entre deux liens durs sans effet ; test_ntfs_ecriture 19/19)*
+- [x] T6 — Débit : cache d'écriture différée *(32 Mio par pwrite de 128 Kio : 1 852 écritures et 1 042
+      lectures → 19 écritures et 0 lecture ; petites lectures gardées dans la même table)*
 - [ ] T7 — Coupures et pannes
 - [ ] T8 — Batterie aléatoire, images hostiles, vérification par le noyau
 - [ ] T9 — JNI, Kotlin, Flutter
