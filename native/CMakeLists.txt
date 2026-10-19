@@ -106,6 +106,8 @@ if(FL_TESTS)
   target_include_directories(fl_testsupport PUBLIC tests/support PRIVATE src)
   target_link_libraries(fl_testsupport PUBLIC fluluks)
   target_compile_options(fl_testsupport PRIVATE -Wall -Wextra -Werror)
+  # Juge FAT/exFAT indépendant (phase 4) : tools/fixtures/fatjuge.py
+  target_compile_definitions(fl_testsupport PRIVATE FL_TOOLS_DIR="${CMAKE_SOURCE_DIR}/../tools")
 
   fl_add_test(test_error)
   fl_add_test(test_blockdev)
@@ -130,6 +132,8 @@ if(FL_TESTS)
   target_link_libraries(test_ext4_politique PRIVATE fl_testsupport)
   fl_add_test(test_ext4_tampon LABELS ecriture)
   target_link_libraries(test_ext4_tampon PRIVATE fl_testsupport)
+  fl_add_test(test_fat_banc LABELS ecriture)
+  target_link_libraries(test_fat_banc PRIVATE fl_testsupport)
   fl_add_test(test_batterie LABELS ecriture)
   target_link_libraries(test_batterie PRIVATE fl_testsupport)
   # test_manifeste lance tools/fixtures/manifest.py

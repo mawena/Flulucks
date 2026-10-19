@@ -168,7 +168,8 @@ dans le même commit que le travail.
 
 ### Phase 4 — FAT16 / FAT32 / exFAT (lecture puis écriture) ([plan](2026-10-19-phase4-fat-exfat.md))
 - [x] Plan de la phase 4 écrit *(2026-10-19 ; FatFs R0.16, FAT12 inclus)*
-- [ ] T1 — Images FAT/exFAT et juges indépendants (`fsck.fat`, `fsck.exfat`, `fatjuge.py`)
+- [x] T1 — Images FAT/exFAT et juges indépendants (`fsck.fat`, `fsck.exfat`, `fatjuge.py`) *(mtools ne sait pas
+      écrire un émoji : il n'est que dans l'arbre exFAT ; test_fat_banc 6/6)*
 - [ ] T2 — FatFs dans le moteur : montage, statfs, lecture seule si sale
 - [ ] T3 — Lecture : stat, readdir, pread, noeuds partagés, recherche rapide
 - [ ] T4 — Écriture des fichiers : zéros des trous, limite 4 Gio (`FL_EFBIG`), drapeau sale

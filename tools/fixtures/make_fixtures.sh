@@ -6,7 +6,7 @@ OUT="${1:?usage: make_fixtures.sh <dossier-sortie>}"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 
-STAMP="$(cat "$HERE"/make_tree.py "$HERE"/luks_encrypt.py "$HERE"/craft.py "$HERE"/make_fixtures.sh | sha256sum | cut -d' ' -f1)"
+STAMP="$(cat "$HERE"/make_tree.py "$HERE"/luks_encrypt.py "$HERE"/craft.py "$HERE"/fatjuge.py "$HERE"/make_fixtures.sh | sha256sum | cut -d' ' -f1)"
 if [ -f "$OUT/.stamp" ] && [ "$(cat "$OUT/.stamp")" = "$STAMP" ]; then
   echo "fixtures à jour"; exit 0
 fi
@@ -290,6 +290,61 @@ truncate -s 4M swap.img;   mkswap -q swap.img
 for s in exfat lvm2 bitlocker btrfs xfs; do $PY "$HERE/craft.py" sig "$s" "sig-$s.img"; done
 
 $PY "$HERE/luks_encrypt.py" kat --out cipher-kat.json
+
+# --- FAT / exFAT (phase 4, T1) --------------------------------------------
+# tree-fat/ : arborescence valide sur FAT, posée par mtools (indépendant de FatFs) ; tree-exfat/ : la même
+# plus un nom hors du plan multilingue de base, posée par fatjuge.py build-exfat (mtools ne fait pas
+# l'exFAT). Heure UTC : les horodatages FAT sont en heure locale.
+export TZ=UTC
+$PY "$HERE/make_tree.py" --fat "$OUT/tree-fat"
+$PY "$HERE/make_tree.py" --exfat "$OUT/tree-exfat"
+MT() { MTOOLS_SKIP_CHECK=1 LC_ALL=C.UTF-8 "$@"; }
+# remplir_fat <img> [exclusions...] : copie tree-fat/ (sauf les exclusions) à la racine de l'image
+remplir_fat() {
+  local img="$1"; shift
+  local src="work/fat-src"
+  rm -rf "$src"; cp -a tree-fat "$src"
+  for x in "$@"; do rm -rf "${src:?}/$x"; done
+  (cd "$src" && MT mcopy -s -m -i "$OUT/$img" ./* ::/)
+  rm -rf "$src"
+}
+truncate -s 8M fat12-arbre.img;    mkfs.vfat -F 12 -n FLUFAT12 fat12-arbre.img >/dev/null
+remplir_fat fat12-arbre.img mille gros.bin
+truncate -s 32M fat16-arbre.img;   mkfs.vfat -F 16 -n FLUFAT16 fat16-arbre.img >/dev/null
+remplir_fat fat16-arbre.img
+truncate -s 64M fat32-arbre.img;   mkfs.vfat -F 32 -n FLUFAT32 fat32-arbre.img >/dev/null
+remplir_fat fat32-arbre.img
+truncate -s 300M fat32-4k.img;     mkfs.vfat -F 32 -S 4096 -n FLUFAT4K fat32-4k.img >/dev/null
+remplir_fat fat32-4k.img
+truncate -s 64M exfat-arbre.img;   mkfs.exfat -L FLUEXFAT exfat-arbre.img >/dev/null
+$PY "$HERE/fatjuge.py" build-exfat exfat-arbre.img tree-exfat
+truncate -s 300M fat32-vide.img;   mkfs.vfat -F 32 -s 8 -n FLUVIDE fat32-vide.img >/dev/null
+truncate -s 64M exfat-vide.img;    mkfs.exfat -c 4096 -L FLUVIDE exfat-vide.img >/dev/null
+truncate -s 6G exfat-grand.img;    mkfs.exfat -L FLUGRAND exfat-grand.img >/dev/null
+cp fat32-vide.img fat32-512-sur-4k.img
+for i in fat12-arbre fat16-arbre fat32-arbre fat32-4k fat32-vide; do fsck.fat -n "$i.img" >/dev/null; done
+for i in exfat-arbre exfat-vide exfat-grand; do fsck.exfat -n "$i.img" >/dev/null; done
+
+# Images sales : copie, puis un seul octet modifié (ou-exclusif ou masque) à un offset donné.
+# poke <img> <offset> <opération python sur l'octet b>
+poke() {
+  $PY -c 'import sys; f=open(sys.argv[1],"r+b"); o=int(sys.argv[2]); f.seek(o); b=f.read(1)[0]; f.seek(o); f.write(bytes([eval(sys.argv[3]) & 255]))' "$@"
+}
+fat_rsvd() { $PY -c 'import sys,struct; b=open(sys.argv[1],"rb").read(512); print(struct.unpack_from("<HH",b,11)[0]*struct.unpack_from("<H",b,14)[0])' "$1"; }
+cp fat16-arbre.img fat16-sale.img;       poke fat16-sale.img 37 'b | 1'
+cp fat32-arbre.img fat32-sale.img;       poke fat32-sale.img 65 'b | 1'
+# FAT[1] (FAT32) : octets 4..7 de la FAT ; bit 27 = octet 7 bit 3 (arrêt propre), bit 26 = octet 7 bit 2 (erreur)
+cp fat32-arbre.img fat32-fat1-sale.img;  poke fat32-fat1-sale.img $(( $(fat_rsvd fat32-arbre.img) + 7 )) 'b & ~8'
+cp fat32-arbre.img fat32-media.img;      poke fat32-media.img $(( $(fat_rsvd fat32-arbre.img) + 7 )) 'b & ~4'
+cp exfat-arbre.img exfat-sale.img;       poke exfat-sale.img 106 'b | 2'
+cp exfat-arbre.img exfat-media.img;      poke exfat-media.img 106 'b | 4'
+cp exfat-arbre.img exfat-somme.img;      poke exfat-somme.img 100 'b ^ 255'
+
+# luks2-fat32.img : fat32-arbre.img chiffrée (LUKS2, PBKDF2 rapide).
+PLAIN=fat32-arbre.img make_luks luks2-fat32 xts-plain64 512 64 --type luks2 --cipher aes-xts-plain64 \
+  --key-size 512 --sector-size 512 --pbkdf pbkdf2 --hash sha256 --pbkdf-force-iterations 1000
+mv work/luks2-fat32.luks luks2-fat32.img
+unset TZ
 
 rm -rf work
 echo "$STAMP" > .stamp

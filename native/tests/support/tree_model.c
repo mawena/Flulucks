@@ -591,3 +591,83 @@ fin:
   rmdir(dir);
   return res;
 }
+
+void tm_set_fat_attrs(tm *m) {
+  for (size_t i = 0; i < m->n; i++) {
+    m->e[i].uid = m->e[i].gid = 0;
+    m->e[i].mode = m->e[i].is_dir ? 040755 : 0100644;
+  }
+}
+
+/* Lignes d'un fichier (sans les fins de ligne) ; NULL si illisible. */
+static char **lignes(const char *fichier, size_t *n) {
+  FILE *f = fopen(fichier, "r");
+  if (!f) return NULL;
+  char **t = NULL, *l = NULL;
+  size_t cap = 0, lcap = 0;
+  ssize_t k;
+  *n = 0;
+  while ((k = getline(&l, &lcap, f)) >= 0) {
+    if (k > 0 && l[k - 1] == '\n') l[k - 1] = 0;
+    if (*n == cap) {
+      cap = cap ? cap * 2 : 256;
+      char **nt = realloc(t, cap * sizeof *t);
+      if (!nt) break;
+      t = nt;
+    }
+    t[(*n)++] = strdup(l);
+  }
+  free(l);
+  fclose(f);
+  return t ? t : calloc(1, sizeof *t);
+}
+
+static void liberer_lignes(char **t, size_t n) {
+  for (size_t i = 0; i < n; i++) free(t[i]);
+  free(t);
+}
+
+/* Chemin d'une ligne de manifeste (dernier champ). */
+static const char *chemin_ligne(const char *l) {
+  const char *c = strrchr(l, '\t');
+  return c ? c + 1 : l;
+}
+
+int tm_check_fat_judge(const tm *m, const char *img) {
+  char dir[4096], a[4200], b[4200];
+  if (fu_tmpdir(dir, sizeof dir) != 0) return -1;
+  snprintf(a, sizeof a, "%s/modele-XXXXXX", dir);
+  snprintf(b, sizeof b, "%s/juge-XXXXXX", dir);
+  int fa = mkstemp(a), fb = fa >= 0 ? mkstemp(b) : -1;
+  if (fa >= 0) close(fa);
+  if (fb >= 0) close(fb);
+  int rc = -1;
+  if (fa >= 0 && fb >= 0 && tm_write_manifest(m, a) == 0 && fu_fat_manifest(img, b) == 0) {
+    size_t na = 0, nb = 0;
+    char **la = lignes(a, &na), **lb = lignes(b, &nb);
+    if (la && lb) {
+      rapport r = {0};
+      size_t i = 0, j = 0;
+      while (i < na || j < nb) {
+        int c = i == na ? 1 : j == nb ? -1 : strcmp(chemin_ligne(la[i]), chemin_ligne(lb[j]));
+        if (c == 0 && !strcmp(la[i], lb[j])) {
+          i++, j++;
+          continue;
+        }
+        if (r.n < 10 && !tm_quiet) {
+          if (c <= 0) fprintf(stderr, "tree_model: modèle : %s\n", la[i]);
+          if (c >= 0) fprintf(stderr, "tree_model: juge   : %s\n", lb[j]);
+        }
+        r.n++;
+        if (c <= 0) i++;
+        if (c >= 0) j++;
+      }
+      rc = r.n;
+    }
+    if (la) liberer_lignes(la, na);
+    if (lb) liberer_lignes(lb, nb);
+  }
+  if (fa >= 0) unlink(a);
+  if (fb >= 0) unlink(b);
+  return rc;
+}
