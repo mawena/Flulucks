@@ -42,4 +42,28 @@ void main() {
     await state.requestAllFilesAccess();
     expect(api.accessRequests, 1);
   });
+
+  test('copie : transmise et avancement suivi', () async {
+    final api = FakeHostApi();
+    final state = AppState(api);
+    await state.startTransfer('phone', ['/a'], 'v1', '/', move: true);
+    final (src, paths, dst, dir, move) = api.transfers.single;
+    expect([src, ...paths, dst, dir, move], ['phone', '/a', 'v1', '/', true]);
+    var notified = 0;
+    state.addListener(() => notified++);
+    state.onTransferChanged(TransferMsg(
+      move: true,
+      currentName: 'a',
+      fileIndex: 1,
+      fileCount: 2,
+      doneBytes: 10,
+      totalBytes: 20,
+      finished: false,
+      cancelled: false,
+    ));
+    expect(state.transfer!.doneBytes, 10);
+    expect(notified, 1);
+    await state.cancelTransfer();
+    expect(api.transferCancels, 1);
+  });
 }

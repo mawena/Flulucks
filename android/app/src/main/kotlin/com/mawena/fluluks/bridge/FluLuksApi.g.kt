@@ -511,6 +511,79 @@ data class EntryMsg (
     return "EntryMsg(name=$name, path=$path, type=$type, size=$size, mtime=$mtime)"
   }
 }
+
+/**
+ * Avancement d'une copie ou d'un déplacement ; `error` peut accompagner `finished`.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class TransferMsg (
+  val move: Boolean,
+  val currentName: String,
+  val fileIndex: Long,
+  val fileCount: Long,
+  val doneBytes: Long,
+  val totalBytes: Long,
+  val finished: Boolean,
+  val cancelled: Boolean,
+  val error: String? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): TransferMsg {
+      val move = pigeonVar_list[0] as Boolean
+      val currentName = pigeonVar_list[1] as String
+      val fileIndex = pigeonVar_list[2] as Long
+      val fileCount = pigeonVar_list[3] as Long
+      val doneBytes = pigeonVar_list[4] as Long
+      val totalBytes = pigeonVar_list[5] as Long
+      val finished = pigeonVar_list[6] as Boolean
+      val cancelled = pigeonVar_list[7] as Boolean
+      val error = pigeonVar_list[8] as String?
+      return TransferMsg(move, currentName, fileIndex, fileCount, doneBytes, totalBytes, finished, cancelled, error)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      move,
+      currentName,
+      fileIndex,
+      fileCount,
+      doneBytes,
+      totalBytes,
+      finished,
+      cancelled,
+      error,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as TransferMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.move, other.move) && FluLuksApiPigeonUtils.deepEquals(this.currentName, other.currentName) && FluLuksApiPigeonUtils.deepEquals(this.fileIndex, other.fileIndex) && FluLuksApiPigeonUtils.deepEquals(this.fileCount, other.fileCount) && FluLuksApiPigeonUtils.deepEquals(this.doneBytes, other.doneBytes) && FluLuksApiPigeonUtils.deepEquals(this.totalBytes, other.totalBytes) && FluLuksApiPigeonUtils.deepEquals(this.finished, other.finished) && FluLuksApiPigeonUtils.deepEquals(this.cancelled, other.cancelled) && FluLuksApiPigeonUtils.deepEquals(this.error, other.error)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.move)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.currentName)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.fileIndex)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.fileCount)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.doneBytes)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.totalBytes)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.finished)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.cancelled)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.error)
+    return result
+  }
+  override fun toString(): String {
+    return "TransferMsg(move=$move, currentName=$currentName, fileIndex=$fileIndex, fileCount=$fileCount, doneBytes=$doneBytes, totalBytes=$totalBytes, finished=$finished, cancelled=$cancelled, error=$error)"
+  }
+}
 private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -539,6 +612,11 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
           EntryMsg.fromList(it)
         }
       }
+      134.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          TransferMsg.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -562,6 +640,10 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
       }
       is EntryMsg -> {
         stream.write(133)
+        writeValue(stream, value.toList())
+      }
+      is TransferMsg -> {
+        stream.write(134)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -590,6 +672,8 @@ interface FluLuksHostApi {
   fun deleteEntries(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit)
   fun openWith(sourceId: String, path: String)
   fun share(sourceId: String, paths: List<String>)
+  fun startTransfer(srcId: String, paths: List<String>, dstId: String, dstDir: String, move: Boolean)
+  fun cancelTransfer()
 
   companion object {
     /** The codec used by FluLuksHostApi. */
@@ -932,6 +1016,44 @@ interface FluLuksHostApi {
           channel.setMessageHandler(null)
         }
       }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.startTransfer$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val srcIdArg = args[0] as String
+            val pathsArg = args[1] as List<String>
+            val dstIdArg = args[2] as String
+            val dstDirArg = args[3] as String
+            val moveArg = args[4] as Boolean
+            val wrapped: List<Any?> = try {
+              api.startTransfer(srcIdArg, pathsArg, dstIdArg, dstDirArg, moveArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelTransfer$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.cancelTransfer()
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
     }
   }
 }
@@ -967,6 +1089,24 @@ class FluLuksEventsApi(private val binaryMessenger: BinaryMessenger, private val
     val channelName = "dev.flutter.pigeon.fluluks.FluLuksEventsApi.onEjectStateChanged$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
     channel.send(listOf(ejectingArg, errorArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(FluLuksApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  /** Copie ou déplacement en cours ou terminé ; null tant qu'aucune opération n'a eu lieu. */
+  fun onTransferChanged(transferArg: TransferMsg?, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.fluluks.FluLuksEventsApi.onTransferChanged$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(transferArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))

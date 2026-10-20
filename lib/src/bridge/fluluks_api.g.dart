@@ -489,6 +489,92 @@ class EntryMsg {
   }
 }
 
+/// Avancement d'une copie ou d'un déplacement ; `error` peut accompagner `finished`.
+class TransferMsg {
+  TransferMsg({
+    required this.move,
+    required this.currentName,
+    required this.fileIndex,
+    required this.fileCount,
+    required this.doneBytes,
+    required this.totalBytes,
+    required this.finished,
+    required this.cancelled,
+    this.error,
+  });
+
+  bool move;
+
+  String currentName;
+
+  int fileIndex;
+
+  int fileCount;
+
+  int doneBytes;
+
+  int totalBytes;
+
+  bool finished;
+
+  bool cancelled;
+
+  String? error;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      move,
+      currentName,
+      fileIndex,
+      fileCount,
+      doneBytes,
+      totalBytes,
+      finished,
+      cancelled,
+      error,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static TransferMsg decode(Object result) {
+    result as List<Object?>;
+    return TransferMsg(
+      move: result[0]! as bool,
+      currentName: result[1]! as String,
+      fileIndex: result[2]! as int,
+      fileCount: result[3]! as int,
+      doneBytes: result[4]! as int,
+      totalBytes: result[5]! as int,
+      finished: result[6]! as bool,
+      cancelled: result[7]! as bool,
+      error: result[8] as String?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! TransferMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(move, other.move) && _deepEquals(currentName, other.currentName) && _deepEquals(fileIndex, other.fileIndex) && _deepEquals(fileCount, other.fileCount) && _deepEquals(doneBytes, other.doneBytes) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(finished, other.finished) && _deepEquals(cancelled, other.cancelled) && _deepEquals(error, other.error);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'TransferMsg(move: $move, currentName: $currentName, fileIndex: $fileIndex, fileCount: $fileCount, doneBytes: $doneBytes, totalBytes: $totalBytes, finished: $finished, cancelled: $cancelled, error: $error)';
+  }
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -512,6 +598,9 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is EntryMsg) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
+    }    else if (value is TransferMsg) {
+      buffer.putUint8(134);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -530,6 +619,8 @@ class _PigeonCodec extends StandardMessageCodec {
         return SourceMsg.decode(readValue(buffer)!);
       case 133:
         return EntryMsg.decode(readValue(buffer)!);
+      case 134:
+        return TransferMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -882,6 +973,42 @@ class FluLuksHostApi {
     )
     ;
   }
+
+  Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.startTransfer$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[srcId, paths, dstId, dstDir, move]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> cancelTransfer() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelTransfer$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
 }
 
 abstract class FluLuksEventsApi {
@@ -891,6 +1018,9 @@ abstract class FluLuksEventsApi {
 
   /// Éjection en cours (synchronisation, démontage) et dernier échec (« Éjection impossible : … »).
   void onEjectStateChanged(bool ejecting, String? error);
+
+  /// Copie ou déplacement en cours ou terminé ; null tant qu'aucune opération n'a eu lieu.
+  void onTransferChanged(TransferMsg? transfer);
 
   static void setUp(FluLuksEventsApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
@@ -929,6 +1059,27 @@ abstract class FluLuksEventsApi {
           final String? arg_error = args[1] as String?;
           try {
             api.onEjectStateChanged(arg_ejecting, arg_error);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.fluluks.FluLuksEventsApi.onTransferChanged$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final TransferMsg? arg_transfer = args[0] as TransferMsg?;
+          try {
+            api.onTransferChanged(arg_transfer);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

@@ -149,4 +149,14 @@ class FakeHostApi implements HostApi {
 
   @override
   Future<void> share(String sourceId, List<String> paths) async => calls.add('share $sourceId ${paths.join(',')}');
+
+  final transfers = <(String, List<String>, String, String, bool)>[];
+  int transferCancels = 0;
+
+  @override
+  Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move) async =>
+      transfers.add((srcId, paths, dstId, dstDir, move));
+
+  @override
+  Future<void> cancelTransfer() async => transferCancels++;
 }

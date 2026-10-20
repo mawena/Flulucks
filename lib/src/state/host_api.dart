@@ -22,6 +22,8 @@ abstract class HostApi {
   Future<void> deleteEntries(String sourceId, List<String> paths);
   Future<void> openWith(String sourceId, String path);
   Future<void> share(String sourceId, List<String> paths);
+  Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
+  Future<void> cancelTransfer();
 }
 
 /// Implémentation réelle : délègue au client Pigeon généré.
@@ -69,4 +71,9 @@ class PigeonHostApi implements HostApi {
   Future<void> openWith(String sourceId, String path) => _api.openWith(sourceId, path);
   @override
   Future<void> share(String sourceId, List<String> paths) => _api.share(sourceId, paths);
+  @override
+  Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move) =>
+      _api.startTransfer(srcId, paths, dstId, dstDir, move);
+  @override
+  Future<void> cancelTransfer() => _api.cancelTransfer();
 }

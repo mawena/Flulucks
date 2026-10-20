@@ -21,12 +21,16 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   String? _ejectError;
   List<SourceMsg> _sources = const [];
   bool _allFilesAccess = false;
+  TransferMsg? _transfer;
 
   List<DiskMsg> get disks => _disks;
   List<VolumeMsg> get volumes => _volumes;
 
   /// Stockages du gestionnaire de fichiers : téléphone, cartes SD, volumes ouverts.
   List<SourceMsg> get sources => _sources;
+
+  /// Copie ou déplacement en cours, ou le dernier terminé ; null si aucun.
+  TransferMsg? get transfer => _transfer;
 
   /// Accès à tous les fichiers du téléphone accordé.
   bool get allFilesAccess => _allFilesAccess;
@@ -103,6 +107,17 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     _ejectError = error;
     notifyListeners();
   }
+
+  @override
+  void onTransferChanged(TransferMsg? transfer) {
+    _transfer = transfer;
+    notifyListeners();
+  }
+
+  Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, {required bool move}) =>
+      _guard(() => api.startTransfer(srcId, paths, dstId, dstDir, move));
+
+  Future<void> cancelTransfer() => _guard(() => api.cancelTransfer());
 
   Future<void> setReadOnlyPreference(bool value) => _guard(() async {
         await api.setReadOnlyPreference(value);

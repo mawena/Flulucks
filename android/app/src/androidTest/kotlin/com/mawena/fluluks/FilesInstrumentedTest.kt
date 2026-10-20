@@ -9,12 +9,14 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.FilesException
 import com.mawena.fluluks.files.Sources
+import com.mawena.fluluks.files.Transfers
 import com.mawena.fluluks.volumes.VolumeManager
 import java.io.File
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Assume.assumeTrue
@@ -139,5 +141,23 @@ class FilesInstrumentedTest {
         File(testDir, "b.txt").writeText("b")
         File(testDir, "A").mkdir()
         assertEquals(listOf("A", "b.txt"), Files.list(Sources.PHONE, phoneDir, false).map { it.name })
+    }
+
+    private fun transfer(src: String, paths: List<String>, dst: String, dir: String) =
+        Transfers.start(src, paths, dst, dir, false).let {
+            waitFor(60_000) { Transfers.state.value?.finished == true && !Transfers.isBusy(src) }
+            Transfers.state.value!!
+        }
+
+    @Test fun copyPhoneToDiskAndBack() {
+        val data = ByteArray(8 shl 20) { (it * 31 + it / 4099).toByte() }
+        File(testDir, "dossier").mkdir()
+        File(testDir, "dossier/gros.bin").writeBytes(data)
+        val there = transfer(Sources.PHONE, listOf("$phoneDir/dossier"), vol, "/")
+        assertNull(there.error)
+        assertEquals(data.size.toLong(), there.doneBytes)
+        File(testDir, "retour").mkdir()
+        assertNull(transfer(vol, listOf("/dossier"), Sources.PHONE, "$phoneDir/retour").error)
+        assertArrayEquals(data, File(testDir, "retour/dossier/gros.bin").readBytes())
     }
 }

@@ -109,6 +109,30 @@ class EntryMsg {
   int mtime;
 }
 
+/// Avancement d'une copie ou d'un déplacement ; `error` peut accompagner `finished`.
+class TransferMsg {
+  TransferMsg({
+    required this.move,
+    required this.currentName,
+    required this.fileIndex,
+    required this.fileCount,
+    required this.doneBytes,
+    required this.totalBytes,
+    required this.finished,
+    required this.cancelled,
+    this.error,
+  });
+  bool move;
+  String currentName;
+  int fileIndex;
+  int fileCount;
+  int doneBytes;
+  int totalBytes;
+  bool finished;
+  bool cancelled;
+  String? error;
+}
+
 @HostApi()
 abstract class FluLuksHostApi {
   List<DiskMsg> listDisks();
@@ -137,6 +161,8 @@ abstract class FluLuksHostApi {
   void deleteEntries(String sourceId, List<String> paths);
   void openWith(String sourceId, String path);
   void share(String sourceId, List<String> paths);
+  void startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
+  void cancelTransfer();
 }
 
 @FlutterApi()
@@ -145,4 +171,7 @@ abstract class FluLuksEventsApi {
 
   /// Éjection en cours (synchronisation, démontage) et dernier échec (« Éjection impossible : … »).
   void onEjectStateChanged(bool ejecting, String? error);
+
+  /// Copie ou déplacement en cours ou terminé ; null tant qu'aucune opération n'a eu lieu.
+  void onTransferChanged(TransferMsg? transfer);
 }

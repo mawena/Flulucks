@@ -11,6 +11,8 @@ import com.mawena.fluluks.files.Entry
 import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.FilesException
 import com.mawena.fluluks.files.Sources
+import com.mawena.fluluks.files.TransferState
+import com.mawena.fluluks.files.Transfers
 import com.mawena.fluluks.volumes.DiskState
 import com.mawena.fluluks.volumes.VolumeManager
 import com.mawena.fluluks.volumes.VolumeState
@@ -45,6 +47,9 @@ class HostApiImpl(
         scope.launch {
             combine(VolumeManager.ejecting, VolumeManager.ejectError) { e, err -> e to err }
                 .collect { (e, err) -> events.onEjectStateChanged(e, err) { /* réponse ignorée */ } }
+        }
+        scope.launch {
+            Transfers.state.collect { t -> events.onTransferChanged(t?.let(::transferMsg)) { /* réponse ignorée */ } }
         }
     }
 
@@ -175,6 +180,12 @@ class HostApiImpl(
         context.startActivity(Files.shareIntent(sourceId, paths))
     }
 
+    override fun startTransfer(srcId: String, paths: List<String>, dstId: String, dstDir: String, move: Boolean) = guarded {
+        Transfers.start(srcId, paths, dstId, dstDir, move)
+    }
+
+    override fun cancelTransfer() = Transfers.cancel()
+
     /** Travail du gestionnaire de fichiers hors du fil principal ; réponse sur le fil principal. */
     private fun <T> io(callback: (Result<T>) -> Unit, block: () -> T) {
         scope.launch {
@@ -253,6 +264,11 @@ class HostApiImpl(
                 FileType.SYMLINK -> "link"
                 FileType.OTHER -> "other"
             },
+        )
+
+        internal fun transferMsg(t: TransferState) = TransferMsg(
+            move = t.move, currentName = t.currentName, fileIndex = t.fileIndex.toLong(), fileCount = t.fileCount.toLong(),
+            doneBytes = t.doneBytes, totalBytes = t.totalBytes, finished = t.finished, cancelled = t.cancelled, error = t.error,
         )
 
         private fun volumeMsg(v: VolumeState) = VolumeMsg(
