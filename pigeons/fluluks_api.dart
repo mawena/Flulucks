@@ -71,6 +71,28 @@ class VolumeMsg {
   bool readOnly;
 }
 
+/// Un stockage du gestionnaire de fichiers. `kind` : `phone`, `sd` ou `disk`.
+class SourceMsg {
+  SourceMsg({
+    required this.id,
+    required this.stableKey,
+    required this.kind,
+    required this.label,
+    required this.totalBytes,
+    required this.freeBytes,
+    required this.readOnly,
+    required this.roReason,
+  });
+  String id;
+  String stableKey;
+  String kind;
+  String label;
+  int totalBytes;
+  int freeBytes;
+  bool readOnly;
+  String roReason;
+}
+
 @HostApi()
 abstract class FluLuksHostApi {
   List<DiskMsg> listDisks();
@@ -84,6 +106,11 @@ abstract class FluLuksHostApi {
   void openInFiles(String volumeId);
   bool getReadOnlyPreference();
   void setReadOnlyPreference(bool value);
+
+  // --- gestionnaire de fichiers (phase 6)
+  List<SourceMsg> listSources();
+  bool hasAllFilesAccess();
+  void requestAllFilesAccess();
 }
 
 @FlutterApi()

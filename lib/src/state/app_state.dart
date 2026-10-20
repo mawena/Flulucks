@@ -19,9 +19,24 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   bool _readOnlyPreference = false;
   bool _ejecting = false;
   String? _ejectError;
+  List<SourceMsg> _sources = const [];
+  bool _allFilesAccess = false;
 
   List<DiskMsg> get disks => _disks;
   List<VolumeMsg> get volumes => _volumes;
+
+  /// Stockages du gestionnaire de fichiers : téléphone, cartes SD, volumes ouverts.
+  List<SourceMsg> get sources => _sources;
+
+  /// Accès à tous les fichiers du téléphone accordé.
+  bool get allFilesAccess => _allFilesAccess;
+
+  SourceMsg? sourceById(String id) {
+    for (final s in _sources) {
+      if (s.id == id) return s;
+    }
+    return null;
+  }
 
   /// « Ouvrir les disques en lecture seule » : tout nouveau montage se fait alors sans écriture.
   bool get readOnlyPreference => _readOnlyPreference;
@@ -53,6 +68,8 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
       _disks = await api.listDisks();
       _volumes = await api.listVolumes();
       _readOnlyPreference = await api.getReadOnlyPreference();
+      _sources = await api.listSources();
+      _allFilesAccess = await api.hasAllFilesAccess();
       notifyListeners();
     } on PlatformException catch (e) {
       _fail(e);
@@ -64,7 +81,21 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     _disks = disks;
     _volumes = volumes;
     notifyListeners();
+    refreshSources(); // un volume ouvert ou fermé ajoute ou retire un stockage
   }
+
+  /// Relit les stockages et l'accès aux fichiers (changement d'état, retour au premier plan).
+  Future<void> refreshSources() async {
+    try {
+      _sources = await api.listSources();
+      _allFilesAccess = await api.hasAllFilesAccess();
+      notifyListeners();
+    } on PlatformException catch (e) {
+      _fail(e);
+    }
+  }
+
+  Future<void> requestAllFilesAccess() => _guard(() => api.requestAllFilesAccess());
 
   @override
   void onEjectStateChanged(bool ejecting, String? error) {

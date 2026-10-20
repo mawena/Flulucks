@@ -385,6 +385,75 @@ data class VolumeMsg (
     return "VolumeMsg(id=$id, diskId=$diskId, partIndex=$partIndex, title=$title, totalBytes=$totalBytes, freeBytes=$freeBytes, needsRecovery=$needsRecovery, roReason=$roReason, readOnly=$readOnly)"
   }
 }
+
+/**
+ * Un stockage du gestionnaire de fichiers. `kind` : `phone`, `sd` ou `disk`.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class SourceMsg (
+  val id: String,
+  val stableKey: String,
+  val kind: String,
+  val label: String,
+  val totalBytes: Long,
+  val freeBytes: Long,
+  val readOnly: Boolean,
+  val roReason: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): SourceMsg {
+      val id = pigeonVar_list[0] as String
+      val stableKey = pigeonVar_list[1] as String
+      val kind = pigeonVar_list[2] as String
+      val label = pigeonVar_list[3] as String
+      val totalBytes = pigeonVar_list[4] as Long
+      val freeBytes = pigeonVar_list[5] as Long
+      val readOnly = pigeonVar_list[6] as Boolean
+      val roReason = pigeonVar_list[7] as String
+      return SourceMsg(id, stableKey, kind, label, totalBytes, freeBytes, readOnly, roReason)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      id,
+      stableKey,
+      kind,
+      label,
+      totalBytes,
+      freeBytes,
+      readOnly,
+      roReason,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as SourceMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.id, other.id) && FluLuksApiPigeonUtils.deepEquals(this.stableKey, other.stableKey) && FluLuksApiPigeonUtils.deepEquals(this.kind, other.kind) && FluLuksApiPigeonUtils.deepEquals(this.label, other.label) && FluLuksApiPigeonUtils.deepEquals(this.totalBytes, other.totalBytes) && FluLuksApiPigeonUtils.deepEquals(this.freeBytes, other.freeBytes) && FluLuksApiPigeonUtils.deepEquals(this.readOnly, other.readOnly) && FluLuksApiPigeonUtils.deepEquals(this.roReason, other.roReason)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.id)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.stableKey)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.kind)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.label)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.totalBytes)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.freeBytes)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.readOnly)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.roReason)
+    return result
+  }
+  override fun toString(): String {
+    return "SourceMsg(id=$id, stableKey=$stableKey, kind=$kind, label=$label, totalBytes=$totalBytes, freeBytes=$freeBytes, readOnly=$readOnly, roReason=$roReason)"
+  }
+}
 private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -401,6 +470,11 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
       131.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           VolumeMsg.fromList(it)
+        }
+      }
+      132.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          SourceMsg.fromList(it)
         }
       }
       else -> super.readValueOfType(type, buffer)
@@ -420,6 +494,10 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
         stream.write(131)
         writeValue(stream, value.toList())
       }
+      is SourceMsg -> {
+        stream.write(132)
+        writeValue(stream, value.toList())
+      }
       else -> super.writeValue(stream, value)
     }
   }
@@ -437,6 +515,9 @@ interface FluLuksHostApi {
   fun openInFiles(volumeId: String)
   fun getReadOnlyPreference(): Boolean
   fun setReadOnlyPreference(value: Boolean)
+  fun listSources(): List<SourceMsg>
+  fun hasAllFilesAccess(): Boolean
+  fun requestAllFilesAccess()
 
   companion object {
     /** The codec used by FluLuksHostApi. */
@@ -599,6 +680,52 @@ interface FluLuksHostApi {
             val valueArg = args[0] as Boolean
             val wrapped: List<Any?> = try {
               api.setReadOnlyPreference(valueArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.listSources$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.listSources())
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.hasAllFilesAccess$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.hasAllFilesAccess())
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.requestAllFilesAccess$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.requestAllFilesAccess()
               listOf(null)
             } catch (exception: Throwable) {
               FluLuksApiPigeonUtils.wrapError(exception)

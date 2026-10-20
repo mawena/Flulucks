@@ -5,6 +5,8 @@ import android.content.Context
 import android.content.Intent
 import android.provider.DocumentsContract
 import com.mawena.fluluks.engine.EngineError
+import com.mawena.fluluks.files.DiskSource
+import com.mawena.fluluks.files.Sources
 import com.mawena.fluluks.volumes.DiskState
 import com.mawena.fluluks.volumes.VolumeManager
 import com.mawena.fluluks.volumes.VolumeState
@@ -113,6 +115,47 @@ class HostApiImpl(
 
     override fun setReadOnlyPreference(value: Boolean) = guarded {
         prefs.edit().putBoolean(PREF_READ_ONLY, value).apply()
+    }
+
+    // ---------------------------------------------------------------- gestionnaire de fichiers
+
+    /**
+     * Stockages : téléphone et cartes SD (place lue sur le système de fichiers), puis volumes ouverts (état
+     * publié par VolumeManager, sans appel au moteur sur le fil principal).
+     */
+    override fun listSources(): List<SourceMsg> = guardedValue {
+        val vols = VolumeManager.volumes.value.associateBy { it.id }
+        Sources.list().map { src ->
+            val v = vols[src.id]
+            if (src is DiskSource && v != null) {
+                SourceMsg(
+                    id = v.id, stableKey = if (v.partUuid.isBlank()) "disk:${v.diskId}#${v.partIndex}" else "disk:${v.partUuid}",
+                    kind = "disk", label = v.title, totalBytes = v.totalBytes, freeBytes = v.freeBytes,
+                    readOnly = v.readOnly, roReason = v.roReason,
+                )
+            } else {
+                val (free, total) = src.space()
+                val ro = src.readOnlyReason
+                SourceMsg(
+                    id = src.id, stableKey = src.stableKey, kind = Sources.kind(src), label = src.label,
+                    totalBytes = total, freeBytes = free, readOnly = ro != null, roReason = ro ?: "",
+                )
+            }
+        }
+    }
+
+    override fun hasAllFilesAccess(): Boolean = Sources.hasAllFilesAccess()
+
+    override fun requestAllFilesAccess() = guarded { Sources.requestAllFilesAccess() }
+
+    private inline fun <T> guardedValue(block: () -> T): T {
+        try {
+            return block()
+        } catch (e: FlutterError) {
+            throw e
+        } catch (e: Throwable) {
+            throw toFlutterError(e)
+        }
     }
 
     /** Toute exception d'une méthode synchrone devient une FlutterError française (jamais de trace). */

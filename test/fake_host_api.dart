@@ -99,4 +99,17 @@ class FakeHostApi implements HostApi {
 
   @override
   Future<void> setReadOnlyPreference(bool value) async => readOnlyPreference = value;
+
+  List<SourceMsg> sources = [];
+  bool allFilesAccess = true;
+  int accessRequests = 0;
+
+  @override
+  Future<List<SourceMsg>> listSources() async => sources;
+
+  @override
+  Future<bool> hasAllFilesAccess() async => allFilesAccess;
+
+  @override
+  Future<void> requestAllFilesAccess() async => accessRequests++;
 }

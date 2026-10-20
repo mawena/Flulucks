@@ -232,7 +232,7 @@ dans le même commit que le travail.
 - [x] Plan de la phase 6 écrit *(spec § 11 : nom Portail, logo dossier-bouclier, gestionnaire de fichiers
       complet avec accès à tous les fichiers)*
 - [x] T1 — Nom « Portail » et logo *(icône adaptative avec silhouette monochrome, icône de notification ; rendu vérifié sur le Pixel)*
-- [ ] T2 — Sources de fichiers (téléphone, carte SD, disques) et accès au téléphone
+- [x] T2 — Sources de fichiers (téléphone, carte SD, disques) et accès au téléphone *(verrou d'écriture partagé avec le provider ; provider 36/36 sur le Pixel)*
 - [ ] T3 — Lister, créer, renommer, supprimer, ouvrir avec, partager
 - [ ] T4 — Copier et déplacer entre stockages
 - [ ] T5 — Recherche

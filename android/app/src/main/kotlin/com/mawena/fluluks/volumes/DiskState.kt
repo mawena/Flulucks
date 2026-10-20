@@ -23,4 +23,6 @@ data class VolumeState(
     val needsRecovery: Boolean,
     val roReason: String,
     val readOnly: Boolean = true,
+    /** UUID de la partition (clé stable des favoris) ; vide si le disque n'en donne pas. */
+    val partUuid: String = "",
 )
