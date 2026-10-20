@@ -219,9 +219,13 @@ dans le même commit que le travail.
       `sudo tools/fixtures/verify_ntfs_with_kernel.sh`, faite par l'utilisateur avec T10)*
 - [x] T9 — JNI, Kotlin, Flutter *(test_handles_ntfs et test_handles_luks2_ntfs jugés par ntfsjuge.py et
       ntfsfix -n ; message FL_ENOTSUP « Fichier non modifiable ici… » ; APK de version, tests natifs verts sur le Pixel)*
-- [ ] *(utilisateur)* T10 — Essais sur le Pixel avec un disque NTFS sauvegardé
+- [x] *(utilisateur)* T10 — Essais sur le Pixel avec un disque NTFS sauvegardé *(2026-10-20 : vrai disque NTFS
+      lu et écrit depuis le Pixel 4 XL ; vérification sous Windows et relecture par le noyau
+      (`verify_ntfs_with_kernel.sh`) encore à faire)*
 - [x] T11 — Documentation *(README : NTFS, lecture seule, limites, GPL effective ; PATCHES.md : section libntfs-3g)*
-- [ ] Fusion `feature/ntfs` → `develop`
+- [x] Fusion `feature/ntfs` → `develop` *(après relecture finale : cache de lecture périmé, démarrage rapide
+      de Windows mal nommé, compression laissée active, volume plus grand que le disque ouvert en écriture,
+      cas hostile « liste d'attributs » ; corrigés, suite rapide 34/34, Pixel 15/15)*
 - [ ] Version `v0.4.0`
 
 ### Phase 6 — Finitions et robustesse
