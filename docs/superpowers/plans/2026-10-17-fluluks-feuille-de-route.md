@@ -238,7 +238,7 @@ dans le même commit que le travail.
 - [x] T5 — Recherche *(sans casse ni accents, 500 résultats et profondeur 64 au plus)*
 - [x] T6 — Vignettes des photos et vidéos *(cache de 32 Mio en mémoire seulement, vidé à l'éjection ; essai réel à passer sur le Pixel)*
 - [x] T7 — Tri, affichage et favoris *(favoris par clé stable, résolus vers le volume ouvert)*
-- [ ] T8 — Écran d'accueil et Réglages
+- [x] T8 — Écran d'accueil et Réglages *(capture sur le Pixel lors des essais de T11)*
 - [ ] T9 — Explorateur
 - [ ] T10 — Écran de recherche
 - [ ] *(utilisateur)* T11 — Essais sur le Pixel

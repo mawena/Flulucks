@@ -22,6 +22,69 @@ class Fr {
   static const scanning = 'Analyse du disque…';
   static const genericError = "L'opération a échoué";
 
+  // --- gestionnaire de fichiers
+  static const phone = 'Téléphone';
+  static const sdCard = 'Carte SD';
+  static const storage = 'Stockage';
+  static const usbDisks = 'Disques USB';
+  static const favorites = 'Favoris';
+  static const allFilesTitle = 'Accès aux fichiers du téléphone';
+  static const allFilesBody =
+      'Autorisez Portail à gérer tous les fichiers pour parcourir le téléphone et la carte SD.';
+  static const allFilesButton = 'Autoriser';
+  static const allFilesGranted = 'Autorisé';
+  static const browse = 'Parcourir';
+  static const settings = 'Réglages';
+  static const readOnlyHelp = "S'applique aux prochaines ouvertures de disques";
+  static const newFolder = 'Nouveau dossier';
+  static const folderName = 'Nom du dossier';
+  static const rename = 'Renommer';
+  static const newName = 'Nouveau nom';
+  static const delete = 'Supprimer';
+  static const deleteBody = 'La suppression est définitive.';
+  static const copy = 'Copier';
+  static const cut = 'Couper';
+  static const pasteHere = 'Coller ici';
+  static const share = 'Partager';
+  static const openWith = 'Ouvrir avec…';
+  static const emptyFolder = 'Dossier vide';
+  static const protectedFolder = 'Dossier protégé par Android';
+  static const volumeClosed = 'Le disque a été fermé';
+  static const sortBy = 'Trier par';
+  static const sortName = 'Nom';
+  static const sortSize = 'Taille';
+  static const sortDate = 'Date';
+  static const ascending = 'Croissant';
+  static const descending = 'Décroissant';
+  static const grid = 'Grille';
+  static const list = 'Liste';
+  static const showHidden = 'Afficher les fichiers cachés';
+  static const addFavorite = 'Ajouter aux favoris';
+  static const removeFavorite = 'Retirer des favoris';
+  static const favoriteUnavailable = 'Disque non ouvert';
+  static const search = 'Rechercher';
+  static const searchHint = 'Nom du fichier';
+  static const noResult = 'Aucun résultat';
+  static const tooManyResults = 'Plus de 500 résultats : précisez la recherche';
+  static const transferCancelled = 'Opération annulée';
+  static const ok = 'OK';
+
+  static String freeOf(int free, int total) => '${humanSize(free)} libres sur ${humanSize(total)}';
+  static String deleteOne(String name) => 'Supprimer « $name » ?';
+  static String deleteMany(int n) => 'Supprimer $n éléments ?';
+  static String clipboard(int n, bool move) => '$n élément(s) ${move ? 'à déplacer' : 'à copier'}';
+  static String selected(int n) => '$n sélectionné(s)';
+  static String transferLine(bool move, String name, int i, int n, int pct) =>
+      '${move ? 'Déplacement' : 'Copie'} : $name ($i/$n) — $pct %';
+  static String transferDone(int n) => 'Terminé : $n fichier(s)';
+
+  /// Date courte d'un élément (jj/mm/aaaa hh:mm, heure locale), depuis des secondes UTC.
+  static String shortDate(int seconds) {
+    final d = DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+    String two(int v) => v.toString().padLeft(2, '0');
+    return '${two(d.day)}/${two(d.month)}/${d.year} ${two(d.hour)}:${two(d.minute)}';
+  }
+
   static String unsupported(String content) => 'Non pris en charge ($content)';
   static String partitionName(int index) => 'Partition $index';
   static String readOnly(String reason) => 'Lecture seule : $reason';

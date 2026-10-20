@@ -14,7 +14,108 @@ Future<(AppState, FakeHostApi)> pump(WidgetTester tester, FakeHostApi api) async
   return (state, api);
 }
 
+Future<void> openSettings(WidgetTester tester) async {
+  await tester.tap(find.byTooltip('Réglages'));
+  await tester.pumpAndSettle();
+}
+
+SourceMsg src(String id, String kind, String label, {String? key}) => SourceMsg(
+      id: id,
+      stableKey: key ?? id,
+      kind: kind,
+      label: label,
+      totalBytes: 64000000000,
+      freeBytes: 16000000000,
+      readOnly: false,
+      roReason: '',
+    );
+
 void main() {
+  testWidgets('homeShowsPhoneSdDisksFavorites', (tester) async {
+    final api = FakeHostApi()
+      ..sources = [src('phone', 'phone', 'Téléphone'), src('sd:AB12', 'sd', 'Carte SD'), src('v1', 'disk', 'Données')]
+      ..disks = [disk([part(volumeId: 'v1')])]
+      ..volumes = [volume()]
+      ..favorites = [FavoriteMsg(key: 'phone', path: '/DCIM', label: 'DCIM', sourceId: 'phone')];
+    await pump(tester, api);
+    expect(find.text('Stockage'), findsOneWidget);
+    expect(find.text('Téléphone'), findsOneWidget);
+    expect(find.text('Carte SD'), findsOneWidget);
+    expect(find.text('16,0 Go libres sur 64,0 Go'), findsNWidgets(2));
+    expect(find.text('Disques USB'), findsOneWidget);
+    expect(find.text('Disque USB'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('DCIM'), 100);
+    expect(find.text('Favoris'), findsOneWidget);
+    await tester.tap(find.text('DCIM'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('listDir phone /DCIM false'));
+  });
+
+  testWidgets('accessCardUntilGranted', (tester) async {
+    final api = FakeHostApi()
+      ..allFilesAccess = false
+      ..sources = [src('phone', 'phone', 'Téléphone')];
+    final (state, _) = await pump(tester, api);
+    expect(find.text('Accès aux fichiers du téléphone'), findsOneWidget);
+    await tester.tap(find.text('Autoriser'));
+    await tester.pump();
+    expect(api.accessRequests, 1);
+    await tester.tap(find.text('Téléphone')); // sans accès : pas d'explorateur
+    await tester.pumpAndSettle();
+    expect(api.calls.where((c) => c.startsWith('listDir')), isEmpty);
+    api.allFilesAccess = true;
+    await state.refreshSources();
+    await tester.pump();
+    expect(find.text('Accès aux fichiers du téléphone'), findsNothing);
+  });
+
+  testWidgets('browseOnOpenVolume', (tester) async {
+    final api = FakeHostApi()
+      ..sources = [src('v1', 'disk', 'Données')]
+      ..disks = [disk([part(volumeId: 'v1')])]
+      ..volumes = [volume()];
+    await pump(tester, api);
+    await tester.tap(find.text('Parcourir'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('listDir v1 / false'));
+    expect(find.text('Données'), findsOneWidget); // titre de l'explorateur à la racine
+  });
+
+  testWidgets('unavailableFavoriteGreyed', (tester) async {
+    final api = FakeHostApi()
+      ..favorites = [FavoriteMsg(key: 'disk:u1', path: '/Films', label: 'Films')];
+    await pump(tester, api);
+    await tester.scrollUntilVisible(find.text('Films'), 100);
+    expect(find.text('Disque non ouvert'), findsOneWidget);
+    expect(tester.widget<ListTile>(find.widgetWithText(ListTile, 'Films')).enabled, isFalse);
+  });
+
+  testWidgets('settingsReadOnlySwitch', (tester) async {
+    final api = FakeHostApi();
+    await pump(tester, api);
+    expect(find.text('Ouvrir les disques en lecture seule'), findsNothing); // plus sur l'accueil
+    await openSettings(tester);
+    expect(find.text("S'applique aux prochaines ouvertures de disques"), findsOneWidget);
+    await tester.tap(find.text('Ouvrir les disques en lecture seule'));
+    await tester.pump();
+    expect(api.readOnlyPreference, isTrue);
+    await tester.tap(find.text('Afficher les fichiers cachés'));
+    await tester.pump();
+    expect(api.viewPrefs.showHidden, isTrue);
+  });
+
+  testWidgets('settingsAccessButton', (tester) async {
+    final api = FakeHostApi()..allFilesAccess = false;
+    await pump(tester, api);
+    await openSettings(tester);
+    await tester.tap(find.descendant(of: find.byType(ListTile), matching: find.text('Autoriser')));
+    await tester.pump();
+    expect(api.accessRequests, 1);
+    api.allFilesAccess = true;
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+  });
+
   testWidgets('liste vide', (tester) async {
     await pump(tester, FakeHostApi());
     expect(find.text('Portail'), findsOneWidget);
@@ -64,12 +165,15 @@ void main() {
         disk([part(content: 'ext4', encrypted: false), part(index: 2)])
       ];
     await pump(tester, api);
+    await openSettings(tester);
     final sw = find.widgetWithText(SwitchListTile, 'Ouvrir les disques en lecture seule');
     expect(tester.widget<SwitchListTile>(sw).value, isFalse);
     await tester.tap(sw);
     await tester.pump();
     expect(api.readOnlyPreference, isTrue);
     expect(tester.widget<SwitchListTile>(sw).value, isTrue);
+    await tester.pageBack();
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Ouvrir'));
     await tester.pump();
     expect(api.mounted, [('d1', 1, false)]);
@@ -83,8 +187,9 @@ void main() {
 
   testWidgets('préférence lue au démarrage', (tester) async {
     await pump(tester, FakeHostApi()..readOnlyPreference = true);
+    await openSettings(tester);
     expect(
-      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, 'Ouvrir les disques en lecture seule')).value,
       isTrue,
     );
   });
