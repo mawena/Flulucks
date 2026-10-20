@@ -226,7 +226,7 @@ dans le même commit que le travail.
 - [x] Fusion `feature/ntfs` → `develop` *(après relecture finale : cache de lecture périmé, démarrage rapide
       de Windows mal nommé, compression laissée active, volume plus grand que le disque ouvert en écriture,
       cas hostile « liste d'attributs » ; corrigés, suite rapide 34/34, Pixel 15/15)*
-- [ ] Version `v0.4.0`
+- [x] Version `v0.4.0`
 
 ### Phase 6 — Finitions et robustesse
 - [ ] Plan de la phase 6 écrit

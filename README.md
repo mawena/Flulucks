@@ -7,13 +7,13 @@ une vidéo dans VLC, un PDF ou une photo dans les applications habituelles.
 Elle est née d'un besoin simple : utiliser sur un téléphone non rooté (un Pixel 4 XL) le disque
 LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permettait.
 
-> **État actuel : version 0.3.0, lecture et écriture sur ext4, FAT et exFAT.** L'écriture a été vérifiée sur PC
-> (batteries de non-corruption jugées par `e2fsck`, `debugfs` et le noyau Linux, coupures simulées) et
-> sur le téléphone avec des images, mais **pas encore sur un vrai disque USB** : faites une sauvegarde
-> avant d'écrire sur un disque qui compte, ou activez « Ouvrir les disques en lecture seule ». Voir les
-> [limites](#limites-actuelles).
+> **État actuel : version 0.4.0, lecture et écriture sur ext4, FAT, exFAT et NTFS.** L'écriture a été
+> vérifiée sur PC (batteries de non-corruption jugées par des outils indépendants et le noyau Linux,
+> coupures simulées) et sur le téléphone avec des images. FAT, exFAT et NTFS ont été essayés sur une vraie
+> clé ou un vrai disque, **pas encore ext4** : faites une sauvegarde avant d'écrire sur un disque qui
+> compte, ou activez « Ouvrir les disques en lecture seule ». Voir les [limites](#limites-actuelles).
 
-## Ce que fait la version 0.3.0
+## Ce que fait la version 0.4.0
 
 - **Détecte** un disque USB de stockage de masse branché en USB-C, et demande la permission d'accès.
 - **Lit les tables de partitions** GPT et MBR (partitions étendues comprises), ainsi qu'un disque sans
@@ -77,8 +77,8 @@ Mesures sur un Pixel 4 XL avec le vrai disque (LUKS2, Argon2id à 1 Gio de mémo
   éjection) s'ouvre en lecture seule, jusqu'à sa vérification sur un ordinateur (chkdsk sous Windows,
   `fsck.fat` ou `fsck.exfat` sous Linux). FluLuks ne répare pas un système de fichiers FAT abîmé.
 - **Écriture NTFS** : vérifiée sur PC (un lecteur NTFS indépendant écrit pour les tests, `ntfsfix -n`,
-  coupures simulées, images hostiles) et sur le téléphone avec des images. La relecture par le pilote ntfs3
-  du noyau Linux (script fourni) et l'essai sur un vrai disque restent à faire. Sauvegardez avant d'écrire
+  coupures simulées, images hostiles), sur le téléphone avec des images, puis essayée sur un vrai disque.
+  La relecture par le pilote ntfs3 du noyau Linux (script fourni) reste à faire. Sauvegardez avant d'écrire
   sur un disque Windows important.
 - **NTFS en lecture seule** quand Windows n'a pas fermé le volume proprement :
   - Windows en veille prolongée ou en **démarrage rapide** (réglage par défaut de Windows 10 et 11) :
@@ -238,7 +238,7 @@ Le dépôt suit git flow :
 | 2 | Android en lecture : « mon disque dans VLC » | **v0.1.0** |
 | 3 | ext4 en écriture (essai sur un vrai disque à faire) | **v0.2.1** |
 | 4 | FAT16 / FAT32 / exFAT | **v0.3.0** |
-| 5 | NTFS (essai sur un vrai disque à faire) | v0.4.0 |
+| 5 | NTFS | **v0.4.0** |
 | 6 | Finitions : explorateur intégré, copies avec progression, réglages, robustesse | v1.0.0 |
 
 Suivi détaillé, étape par étape : [docs/superpowers/plans/2026-10-17-fluluks-feuille-de-route.md](docs/superpowers/plans/2026-10-17-fluluks-feuille-de-route.md).
