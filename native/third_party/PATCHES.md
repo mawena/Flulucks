@@ -427,3 +427,78 @@ fin de chaîne. Correctif : au plus `n_fatent` clusters parcourus, sinon `FR_INT
   `PercentInUse` restent justes sans croire ceux du disque.
 - **Après une erreur d'écriture**, la fenêtre non écrite de FatFs est abandonnée : le volume reste lisible
   en lecture seule.
+
+## libntfs-3g
+
+- Amont : ntfs-3g 2022.10.3 (Tuxera), archive `https://tuxera.com/opensource/ntfs-3g_ntfsprogs-2022.10.3.tgz`, SHA-256
+  `f20e36ee68074b845e3629e6bced4706ad053804cbaf062fbae60738f854170c`. Licence GPL version 2 ou ultérieure
+  (`native/third_party/ntfs-3g/COPYING`) : l'application qui la lie est soumise à la GPL.
+- Copiés tels quels dans `native/third_party/ntfs-3g/` : `libntfs-3g/*.c` sauf `unix_io.c` et `win32_io.c`,
+  `include/ntfs-3g/*.h`, `COPYING`, `AUTHORS`, `CREDITS`, `README`. La configuration est
+  `native/cmake/ntfs-3g/config.h` (`NO_NTFS_DEVICE_DEFAULT_IO_OPS`, `HAVE_CLOCK_GETTIME`,
+  `MAJOR_IN_SYSMACROS`, ni ACL POSIX, ni xattr, ni EFS) ; l'accès disque est `native/src/fs/ntfs_dev.c`.
+- Compilée avec `-w` (nos sources gardent `-Wall -Wextra -Werror`), en gnu11 avec `_GNU_SOURCE` et
+  `_FILE_OFFSET_BITS=64`.
+- Application (`native/cmake/third_party.cmake`) : comme pour FatFs, les sources sont copiées dans le dossier
+  de build, puis chaque `native/third_party/patches/ntfs-3g/*.patch` y est appliqué par `git apply -p1`, dans
+  l'ordre, avec la même empreinte `.fl_stamp`.
+
+### 1. Accès non alignés dans `compress.c` (0001)
+
+Le hachage LZNT1 et la décompression lisaient des `u16`/`u32` par un pointeur quelconque : comportement
+indéfini, signalé par UBSan dès qu'un flux compressé est lu. Lecture octet par octet ; même résultat.
+
+### 2. Heure fournie par le moteur (0002)
+
+Avec `FL_NTFS_CLOCK`, `ntfs_current_time()` appelle `fl_ntfs_now()` de la colle (à partir de `fl_fs_now()`) :
+les tests fixent l'heure par `fl_fs_set_clock`, comme pour ext4 et FAT.
+
+### 3. Décalage d'un négatif dans `ntfs_mapping_pairs_decompress` (0003)
+
+Les octets d'une runlist étaient assemblés par `(deltaxcn << 8) + octet`, `deltaxcn` pouvant être négatif
+(décalage de LCN vers l'arrière, ou disque hostile) : comportement indéfini. Multiplication par 256 à la
+place.
+
+### 4. `ntfs_readdir` repris au milieu d'un octet du bitmap d'index (0004)
+
+À la reprise dans un bloc d'index dont le numéro n'est pas multiple de 8, le parcours du bitmap commençait au
+bit 0 au lieu de `bmp_pos & 7` : un bloc libre était lu comme utilisé, jusqu'à « Failed to read index
+block » (EIO). Le pilote FUSE lit un dossier en une passe et ne le voit pas ; la colle lit par paquets et le
+rencontrait dès 52 blocs d'index.
+
+### 5. Montage en lecture seule malgré un `$MFTMirr` différent de `$MFT` (0005)
+
+Une coupure entre l'écriture d'un enregistrement système dans `$MFT` et sa copie dans `$MFTMirr` rendait le
+disque illisible jusqu'à un chkdsk : libntfs-3g refusait tout montage. En lecture seule, `$MFT` fait foi
+(comme le pilote ntfs3 du noyau) ; en écriture, le refus reste. Trouvé par `test_ntfs_coupure`.
+
+### 6. Fuite de la runlist dans `ntfs_delete` (0006)
+
+Quand la libération des clusters échoue (runlist hors du volume sur un disque hostile), la runlist
+décompressée n'était pas libérée. Trouvé par ASan dans `test_ntfs_hostile`. S'applique après 0004.
+
+## Protections côté FluLuks pour libntfs-3g (sans correctif)
+
+`native/src/fs/ntfs_glue.c` et `native/src/fs/ntfs_dev.c` font ce que libntfs-3g ne fait pas :
+- **Politique de lecture seule** : montage d'abord en lecture seule, puis remontage en écriture seulement si
+  le volume est propre. Lecture seule avec la raison pour un volume marqué sale ou en attente de chkdsk,
+  `hiberfil.sys` en veille prolongée ou démarrage rapide, `$LogFile` à rejouer, version autre que 3.0/3.1,
+  secteurs NTFS plus petits que ceux du disque. Si libntfs-3g refuse le remontage, le volume reste en lecture
+  seule.
+- **Drapeau « sale » ordonné** : `VOLUME_IS_DIRTY` écrit directement dans `$Volume`, `$MFT` puis miroir en
+  le posant (avant la première modification), miroir puis `$MFT` en l'effaçant (à chaque sync et au
+  démontage), un vidage après chaque copie. Une coupure à n'importe quel point laisse un volume cohérent ou
+  marqué sale (88 points de coupure essayés).
+- **Lecture seule définitive** après une erreur d'entrée-sortie ou une structure incohérente pendant
+  l'écriture : les écritures en attente sont abandonnées, plus rien n'est écrit.
+- **Un verrou global** : libntfs-3g n'est pas réentrante. Chaque opération ouvre et ferme ses inodes, si
+  bien qu'il n'existe jamais deux copies d'un même enregistrement MFT en mémoire.
+- **Fichiers cachés** : enregistrements MFT système (< 16) et noms DOS seuls.
+- **Noms** : recherche exacte d'abord, puis sans la casse ; noms interdits par Windows refusés
+  (`ntfs_forbidden_names` strict). Renommer en ne changeant que la casse passe par un nom temporaire ;
+  renommer vers un autre lien dur du même fichier ne fait rien. La date du dossier parent est mise à jour
+  à la création (libntfs-3g ne le fait pas).
+- **Fichiers compressés et EFS** : écriture refusée (`FL_ENOTSUP`) ; EFS ni lu ni écrit.
+- **Cache d'écriture** dans `ntfs_dev.c` : écritures alignées de 64 Kio ou plus regroupées par 4 Mio, autres
+  écritures et petites lectures gardées dans une table de secteurs (4 Mio au plus), vidée au sync. Une
+  copie de 32 Mio passe de 1 852 écritures et 1 042 lectures à 19 écritures.

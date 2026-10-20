@@ -191,7 +191,7 @@ dans le même commit que le travail.
       Flutter 21/21, APK construit ; tests natifs sur le Pixel, test_fat_hostile compris : tous OK)*
 - [x] *(utilisateur)* T10 — Essais sur le Pixel avec une clé FAT32 puis exFAT sauvegardée *(2026-10-19, par
       l'utilisateur : validés)*
-- [ ] T11 — Documentation
+- [x] T11 — Documentation *(README : NTFS, lecture seule, limites, GPL effective ; PATCHES.md : section libntfs-3g)*
 - [x] Fusion `feature/fat-exfat` → `develop` *(après relecture finale : démontage qui rendait toujours FL_OK,
       corrigé ; suite rapide 27/27)*
 - [x] Version `v0.3.0` *(2026-10-19, branche `release/0.3.0` → `main` et `develop`)*
@@ -220,7 +220,7 @@ dans le même commit que le travail.
 - [x] T9 — JNI, Kotlin, Flutter *(test_handles_ntfs et test_handles_luks2_ntfs jugés par ntfsjuge.py et
       ntfsfix -n ; message FL_ENOTSUP « Fichier non modifiable ici… » ; APK de version, tests natifs verts sur le Pixel)*
 - [ ] *(utilisateur)* T10 — Essais sur le Pixel avec un disque NTFS sauvegardé
-- [ ] T11 — Documentation
+- [x] T11 — Documentation *(README : NTFS, lecture seule, limites, GPL effective ; PATCHES.md : section libntfs-3g)*
 - [ ] Fusion `feature/ntfs` → `develop`
 - [ ] Version `v0.4.0`
 
