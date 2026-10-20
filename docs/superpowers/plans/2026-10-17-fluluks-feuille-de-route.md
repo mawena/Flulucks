@@ -241,8 +241,10 @@ dans le même commit que le travail.
 - [x] T8 — Écran d'accueil et Réglages *(capture sur le Pixel lors des essais de T11)*
 - [x] T9 — Explorateur *(liste et grille, vignettes, tri, sélection, presse-papiers, barre de copie ; captures lors des essais de T11)*
 - [x] T10 — Écran de recherche *(400 ms après la dernière frappe, recherche précédente annulée)*
-- [ ] *(utilisateur)* T11 — Essais sur le Pixel
-- [ ] T12 — Documentation
+- [x] *(utilisateur)* T11 — Essais sur le Pixel *(2026-10-20 : tout est correct selon l'utilisateur)*
+- [x] T12 — Récupération de `feature/portail-save` *(un test repris, branche supprimée)*
+- [ ] T13 — Affichage des dossiers en liste ou en grille, choisi dans les Réglages
+- [ ] T14 — Documentation
 - [ ] Fusion `feature/portail` → `develop`
 - [ ] Version `v0.5.0`
 
@@ -251,6 +253,12 @@ dans le même commit que le travail.
 - [ ] *(verrouillage automatique, débranchement inattendu, performances du § 5, essai d'ext4 en écriture
       sur le vrai disque)*
 - [ ] Version `v1.0.0`
+
+### Phase 8 — Lecteurs intégrés et stockages distants
+- [ ] Plan de la phase 8 écrit
+- [ ] *(visionneuse d'images, lecteur de musique, éditeur de texte, lecteur vidéo, dossiers distants FTP
+      puis SFTP)*
+- [ ] Version `v1.1.0`
 
 ---
 

@@ -660,7 +660,50 @@ L'agent construit et installe l'APK à jour, puis passe la main. L'utilisateur e
    gros fichier avec annulation.
 5. **Fichiers :** ouvrir avec VLC, partager vers une messagerie.
 
-### Task 12 : documentation et v0.5.0
+### Task 12 : récupération de `feature/portail-save` *(demande du 2026-10-20, I.1)*
+
+La session locale s'est arrêtée au milieu de T3 (limite d'utilisation). Son travail non commité a été
+rangé par l'utilisateur dans le commit `e0ae82a` (« waiting claude session limit remove ») de la branche
+`feature/portail-save`. T3 a ensuite été refaite dans la session cloud, plus complète (`FilesException`,
+`guard`, `deleteAll`).
+
+- [ ] **Step 1 : comparer** `e0ae82a` à `feature/portail`, fichier par fichier.
+  - `Files.kt` : remplacé par la version cloud, rien à reprendre.
+  - `FilesTest.kt` : un seul cas absent de la version cloud, les messages d'erreur en français qui ne
+    reprennent jamais le détail d'une exception inattendue. Il est repris sous le nom
+    `errorMessagesAreFrenchAndNeverLeakDetails`, avec l'API actuelle (`Files.toFilesException`).
+  - `FluLuks.code-workspace` : remplacé par `Portail.code-workspace`, rien à reprendre.
+- [ ] **Step 2 : vérifier** `./gradlew :app:testDebugUnitTest --tests '*FilesTest*'`. Expected : 8/8.
+- [ ] **Step 3 : commit** `test(fichiers): reprise du test des messages d'erreur de feature/portail-save`,
+  puis suppression de la branche `feature/portail-save` (locale, et distante si elle existe).
+
+### Task 13 : liste ou grille choisie dans les Réglages *(demande du 2026-10-20, I.2)*
+
+**Files :** Modify `lib/src/screens/settings_screen.dart`, `lib/src/strings_fr.dart` et
+`test/settings_screen_test.dart`.
+
+**Interfaces :**
+- Consumes : `ViewPrefsMsg.grid` et `AppState.setViewPrefs` (T7), déjà utilisés par le menu de
+  l'explorateur.
+- Produces : dans `SettingsScreen`, sous le titre `Fr.display` (`Affichage des dossiers`), un choix
+  `SegmentedButton<bool>` à deux segments, `Fr.list` (icône `Icons.view_list`) et `Fr.grid` (icône
+  `Icons.grid_view`).
+  - Le choix appelle `setViewPrefs` avec les autres préférences inchangées.
+  - L'explorateur l'applique à chaque ouverture. Son menu `Fr.grid` / `Fr.list` reste, et modifie le
+    même réglage.
+
+- [ ] **Step 1 : tests qui échouent** (`settings_screen_test.dart`) :
+  - `displayChoiceShowsCurrentMode` : avec `grid: true`, le segment `Grille` est sélectionné ;
+  - `displayChoiceCallsApi` : toucher `Liste` envoie `grid: false`, avec tri, ordre et fichiers cachés
+    inchangés ;
+  - `explorerOpensInChosenMode` (dans `explorer_screen_test.dart`) : avec `grid: true`, une `GridView`
+    est affichée dès l'ouverture.
+- [ ] **Step 2 : lancer** `flutter test test/settings_screen_test.dart`. Expected : FAIL.
+- [ ] **Step 3 : implémenter.**
+- [ ] **Step 4 : vérifier.** `flutter analyze`, `flutter test`, APK installée sur le Pixel.
+- [ ] **Step 5 : commit** `feat(réglages): affichage des dossiers en liste ou en grille`.
+
+### Task 14 : documentation et v0.5.0
 
 - [ ] **Step 1 : écrire.**
   - **README :**
@@ -683,3 +726,13 @@ L'agent construit et installe l'APK à jour, puis passe la main. L'utilisateur e
 - performances du § 5 mesurées sur le Pixel : listage de 1 000 fichiers, copies téléphone ↔ disque ;
 - essai d'ext4 en écriture sur le vrai disque (tâche 13 de la phase 3) ;
 - version **v1.0.0**.
+
+**Phase 8 (demande du 2026-10-20, J.1 ; plan écrit à la fin de la phase 7) :** lecteurs intégrés et
+stockages distants :
+- visionneuse d'images (glisser d'une photo à l'autre, zoom) ;
+- lecteur de musique (lecture en arrière-plan, file d'attente du dossier) ;
+- éditeur de fichiers texte (ouvrir, modifier, enregistrer, encodage UTF-8) ;
+- lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo) ;
+- dossiers distants : **FTP** d'abord, puis **SFTP**, comme sources du gestionnaire (copier, déplacer,
+  ouvrir) ;
+- version **v1.1.0**.

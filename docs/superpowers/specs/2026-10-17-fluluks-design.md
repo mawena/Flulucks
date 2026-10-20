@@ -293,3 +293,14 @@ Décisions de l'utilisateur, après la phase 5 :
   DocumentsProvider.
 - Ordre de construction (§ 6, point 7) : phase 6 = nom, logo et gestionnaire de fichiers (v0.5.0) ;
   phase 7 = verrouillage automatique, débranchement inattendu, performances (v1.0.0).
+
+## 12. Évolution du 2026-10-20 (suite) : demandes après les essais de la phase 6
+
+Décisions de l'utilisateur (`docs/Manuel/maj-20-10-2026.md`) :
+- **Affichage des dossiers** en liste ou en grille, choisi dans les Réglages (en plus du menu de
+  l'explorateur). Phase 6, T13.
+- **Lecteurs intégrés et stockages distants**, à planifier après la v1.0.0 (phase 8) :
+  - voir des images, écouter de la musique, éditer des fichiers texte, lire des vidéos dans Portail ;
+  - accéder à des dossiers distants par FTP, puis par SFTP, comme sources du gestionnaire de fichiers.
+- Ce qui est lu ou affiché depuis un disque chiffré suit la règle du § 11 : rien n'en est écrit sur le
+  stockage du téléphone sans action explicite de l'utilisateur (copie, export).
