@@ -24,6 +24,8 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   TransferMsg? _transfer;
   ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
   List<FavoriteMsg> _favorites = const [];
+  ClipboardItems? _clipboard;
+  (String, String)? _transferDestination;
 
   List<DiskMsg> get disks => _disks;
   List<VolumeMsg> get volumes => _volumes;
@@ -44,6 +46,22 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     }
     return null;
   }
+
+  /// Éléments copiés ou coupés, en attente de « Coller ici » ; null si vide.
+  ClipboardItems? get clipboard => _clipboard;
+
+  void setClipboard(String sourceId, List<String> paths, {required bool move}) {
+    _clipboard = ClipboardItems(sourceId, List.unmodifiable(paths), move);
+    notifyListeners();
+  }
+
+  void clearClipboard() {
+    _clipboard = null;
+    notifyListeners();
+  }
+
+  /// (source, dossier) où écrit la dernière copie lancée : l'explorateur qui l'affiche se rafraîchit.
+  (String, String)? get transferDestination => _transferDestination;
 
   /// Copie ou déplacement en cours, ou le dernier terminé ; null si aucun.
   TransferMsg? get transfer => _transfer;
@@ -134,7 +152,10 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   }
 
   Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, {required bool move}) =>
-      _guard(() => api.startTransfer(srcId, paths, dstId, dstDir, move));
+      _guard(() async {
+        await api.startTransfer(srcId, paths, dstId, dstDir, move);
+        _transferDestination = (dstId, dstDir);
+      });
 
   Future<void> cancelTransfer() => _guard(() => api.cancelTransfer());
 
@@ -195,4 +216,13 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     _lastError = e.message ?? Fr.genericError;
     notifyListeners();
   }
+}
+
+/// Contenu du presse-papiers de l'explorateur.
+class ClipboardItems {
+  const ClipboardItems(this.sourceId, this.paths, this.move);
+
+  final String sourceId;
+  final List<String> paths;
+  final bool move;
 }

@@ -239,7 +239,7 @@ dans le même commit que le travail.
 - [x] T6 — Vignettes des photos et vidéos *(cache de 32 Mio en mémoire seulement, vidé à l'éjection ; essai réel à passer sur le Pixel)*
 - [x] T7 — Tri, affichage et favoris *(favoris par clé stable, résolus vers le volume ouvert)*
 - [x] T8 — Écran d'accueil et Réglages *(capture sur le Pixel lors des essais de T11)*
-- [ ] T9 — Explorateur
+- [x] T9 — Explorateur *(liste et grille, vignettes, tri, sélection, presse-papiers, barre de copie ; captures lors des essais de T11)*
 - [ ] T10 — Écran de recherche
 - [ ] *(utilisateur)* T11 — Essais sur le Pixel
 - [ ] T12 — Documentation
