@@ -27,12 +27,12 @@ void main() {
     expect(find.text('Déverrouiller'), findsOneWidget);
   });
 
-  testWidgets('NTFS non pris en charge, sans bouton', (tester) async {
+  testWidgets('BitLocker non pris en charge, sans bouton', (tester) async {
     await pump(
       tester,
-      FakeHostApi()..disks = [disk([part(content: 'NTFS', supported: false, encrypted: false)])],
+      FakeHostApi()..disks = [disk([part(content: 'BitLocker', supported: false, encrypted: false)])],
     );
-    expect(find.text('Non pris en charge (NTFS)'), findsOneWidget);
+    expect(find.text('Non pris en charge (BitLocker)'), findsOneWidget);
     expect(find.byType(FilledButton), findsNothing);
   });
 

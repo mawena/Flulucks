@@ -633,7 +633,8 @@ static const char *chemin_ligne(const char *l) {
   return c ? c + 1 : l;
 }
 
-int tm_check_fat_judge(const tm *m, const char *img) {
+/* Manifeste du modèle comparé à celui d'un juge (manifest(img, chemin) : 0 si écrit). */
+static int compare_judge(const tm *m, const char *img, int (*manifest)(const char *, const char *)) {
   char dir[4096], a[4200], b[4200];
   if (fu_tmpdir(dir, sizeof dir) != 0) return -1;
   snprintf(a, sizeof a, "%s/modele-XXXXXX", dir);
@@ -642,7 +643,7 @@ int tm_check_fat_judge(const tm *m, const char *img) {
   if (fa >= 0) close(fa);
   if (fb >= 0) close(fb);
   int rc = -1;
-  if (fa >= 0 && fb >= 0 && tm_write_manifest(m, a) == 0 && fu_fat_manifest(img, b) == 0) {
+  if (fa >= 0 && fb >= 0 && tm_write_manifest(m, a) == 0 && manifest(img, b) == 0) {
     size_t na = 0, nb = 0;
     char **la = lignes(a, &na), **lb = lignes(b, &nb);
     if (la && lb) {
@@ -670,4 +671,17 @@ int tm_check_fat_judge(const tm *m, const char *img) {
   if (fa >= 0) unlink(a);
   if (fb >= 0) unlink(b);
   return rc;
+}
+
+int tm_check_fat_judge(const tm *m, const char *img) { return compare_judge(m, img, fu_fat_manifest); }
+
+void tm_set_ntfs_attrs(tm *m) { tm_set_fat_attrs(m); }
+
+int tm_check_ntfs_judge(const tm *m, const char *img) {
+  char out[8192];
+  int c = fu_ntfsjuge(out, sizeof out, "check", img, NULL);
+  if (c != 0 && c != 3) return -1;
+  if (c == 3 && !tm_quiet) fprintf(stderr, "tree_model: ntfsjuge check %s :\n%s", img, out);
+  int d = compare_judge(m, img, fu_ntfs_manifest);
+  return d < 0 ? -1 : d + (c == 3);
 }

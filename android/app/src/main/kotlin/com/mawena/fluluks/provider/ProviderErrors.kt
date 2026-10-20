@@ -28,8 +28,8 @@ object ProviderErrors {
         EngineError.FL_EEXIST -> "Un élément porte déjà ce nom"
         EngineError.FL_EBUSY -> "Fichier en cours d'utilisation"
         EngineError.FL_EFBIG -> "Fichier trop gros pour ce disque (4 Gio au plus en FAT)"
-        // seul ext4 rend FL_ENOTSUP sur un fichier (FAT n'en a pas de cas)
-        EngineError.FL_ENOTSUP -> "Écriture impossible : fichier à l'ancien format ext3 (blocs indirects)"
+        // FL_ENOTSUP sur un fichier : NTFS compressé ou chiffré (EFS), ou ext4 sans extents (ext3) ; FAT n'en a pas
+        EngineError.FL_ENOTSUP -> "Fichier non modifiable ici : compressé ou chiffré par Windows, ou à l'ancien format ext3"
         EngineError.FL_EINVAL -> if (op in NAMING_OPS) "Nom non autorisé sur ce disque" else "Document introuvable ou illisible"
         else -> "Document introuvable ou illisible"
     }

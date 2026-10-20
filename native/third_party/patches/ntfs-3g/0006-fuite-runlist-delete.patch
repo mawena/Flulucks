@@ -1,0 +1,17 @@
+Sujet : fuite de la runlist dans ntfs_delete quand la libération des clusters échoue
+
+Sur un disque hostile (runlist hors du volume), ntfs_cluster_free_from_rl échoue et la boucle continue sans
+libérer la runlist décompressée (ASan, test_ntfs_hostile, cas runlist-hors).
+
+Ce correctif s'applique après 0004 (même fichier).
+
+--- a/libntfs-3g/dir.c	2026-10-19 06:59:41.361427257 +0000
++++ b/libntfs-3g/dir.c	2026-10-19 06:59:41.390428490 +0000
+@@ -2120,6 +2120,7 @@
+ 				err = errno;
+ 				ntfs_log_error("Failed to free clusters.  "
+ 						"Leaving inconsistent metadata.\n");
++				free(rl); /* FluLuks : fuite sinon */
+ 				continue;
+ 			}
+ 			free(rl);

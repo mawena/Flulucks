@@ -1,0 +1,21 @@
+Sujet : montage en lecture seule malgré un $MFTMirr différent de $MFT
+
+Une coupure entre l'écriture d'un enregistrement système dans $MFT et sa copie dans $MFTMirr laisse les deux
+différents. libntfs-3g refuse alors tout montage, même en lecture seule : le disque devient illisible
+jusqu'à un chkdsk. En lecture seule, $MFT fait foi (comme le pilote ntfs3 du noyau) ; en écriture, le refus
+reste. La colle ne monte en écriture qu'un volume propre ; une coupure laisse le drapeau « sale » posé.
+
+--- a/libntfs-3g/volume.c	2026-10-19 06:50:49.977517501 +0000
++++ b/libntfs-3g/volume.c	2026-10-19 06:50:50.003518408 +0000
+@@ -1043,7 +1043,10 @@
+ 		    || memcmp(mrec, mrec2, record_size)) {
+ 			ntfs_log_error("$MFTMirr does not match $MFT (record "
+ 				       "%d).\n", i);
+-			goto io_error_exit;
++			/* FluLuks : en lecture seule, $MFT fait foi (volume
++			 * coupé entre les deux copies, à vérifier par chkdsk) */
++			if (!(flags & NTFS_MNT_RDONLY))
++				goto io_error_exit;
+ 		}
+ 	}
+ 

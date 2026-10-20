@@ -31,3 +31,6 @@ android/app/debug
 android/app/profile
 android/app/release
 GeneratedPluginRegistrant.*
+
+# Python
+__pycache__/

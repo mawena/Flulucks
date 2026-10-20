@@ -19,5 +19,10 @@
 #define FL_RO_DIRTY "disque mal éjecté : vérifiez-le sur un ordinateur (chkdsk ou fsck) avant d'y écrire"
 #define FL_RO_MEDIA "erreurs de support signalées par le volume : vérifiez-le sur un ordinateur"
 #define FL_RO_SECTOR "taille de secteur non prise en charge en écriture"
+/* NTFS (phase 5) ; volume sale : FL_RO_DIRTY, secteur plus petit que celui du disque : FL_RO_SECTOR */
+#define FL_RO_HIBER "Windows en veille prolongée ou en démarrage rapide : arrêtez complètement Windows avant d'y écrire"
+#define FL_RO_LOGFILE "disque mal fermé par Windows : rebranchez-le sous Windows, puis éjectez-le proprement"
+#define FL_RO_VERSION "version de NTFS non prise en charge en écriture"
+#define FL_RO_TAILLE "volume plus grand que le disque : disque cloné ou capacité mal annoncée, écriture désactivée"
 
 #endif

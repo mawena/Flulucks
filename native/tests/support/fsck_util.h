@@ -65,4 +65,18 @@ int fu_fat_manifest(const char *img, const char *out_path);
 /* fatjuge.py free <img> : octets libres, ou -1. */
 int64_t fu_fat_free(const char *img);
 
+/* --- NTFS (phase 5) --------------------------------------------------------------------------- */
+/* 1 si mkntfs, ntfsfix et python3 sont disponibles (PC), 0 sinon. */
+int fu_ntfs_tools_available(void);
+/* python3 -I tools/fixtures/ntfsjuge.py <cmd> <img> [arg] ; stdout (tronqué) dans out. Code de sortie. */
+int fu_ntfsjuge(char *out, size_t cap, const char *cmd, const char *img, const char *arg);
+/* ntfsjuge.py manifest <img> vers out_path : 0, 3 (structure invalide), ou -1. */
+int fu_ntfs_manifest(const char *img, const char *out_path);
+/* ntfsjuge.py free <img> : octets libres, ou -1. */
+int64_t fu_ntfs_free(const char *img);
+/* ntfsjuge.py flags <img> : drapeaux de $Volume, ou -1. */
+int fu_ntfs_flags(const char *img);
+/* ntfsfix -n <img> : code de sortie ; sortie (tronquée) dans out. */
+int fu_ntfsfix_n(const char *img, char *out, size_t cap);
+
 #endif

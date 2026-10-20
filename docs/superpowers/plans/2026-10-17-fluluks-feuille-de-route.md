@@ -191,13 +191,41 @@ dans le même commit que le travail.
       Flutter 21/21, APK construit ; tests natifs sur le Pixel, test_fat_hostile compris : tous OK)*
 - [x] *(utilisateur)* T10 — Essais sur le Pixel avec une clé FAT32 puis exFAT sauvegardée *(2026-10-19, par
       l'utilisateur : validés)*
-- [x] T11 — Documentation *(README : FAT/exFAT, limites, FatFs ; PATCHES.md : section FatFs, en T8)*
+- [x] T11 — Documentation *(README : NTFS, lecture seule, limites, GPL effective ; PATCHES.md : section libntfs-3g)*
 - [x] Fusion `feature/fat-exfat` → `develop` *(après relecture finale : démontage qui rendait toujours FL_OK,
       corrigé ; suite rapide 27/27)*
 - [x] Version `v0.3.0` *(2026-10-19, branche `release/0.3.0` → `main` et `develop`)*
 
-### Phase 5 — NTFS (lecture puis écriture)
-- [ ] Plan de la phase 5 écrit
+### Phase 5 — NTFS (lecture puis écriture) ([plan](2026-10-19-phase5-ntfs.md))
+- [x] Plan de la phase 5 écrit *(2026-10-19 ; libntfs-3g 2022.10.3, juge indépendant `ntfsjuge.py`)*
+- [x] T1 — libntfs-3g dans l'arbre, images NTFS et juge indépendant *(correctif 0001 : accès non alignés de
+      compress.c vus par UBSan ; test_ntfs_banc 5/5, suite rapide 28/28)*
+- [x] T2 — Colle NTFS : montage, statfs, politique de lecture seule *(veille, $LogFile, drapeaux de $Volume :
+      lecture seule sans aucune écriture ; montage puis démontage en écriture : image identique)*
+- [x] T3 — Lecture : stat, readdir, pread *(correctif 0004 : ntfs_readdir repris au milieu d'un octet du
+      bitmap d'index lisait un bloc absent ; test_ntfs 20/20 sur PC et sur le Pixel)*
+- [x] T4 — Écriture des fichiers et drapeau sale *(correctif 0003 : décalage d'un négatif dans les runlists ;
+      inodes non écrits abandonnés après une panne ; test_ntfs_ecriture 9/9)*
+- [x] T5 — Dossiers et noms *(noms Windows refusés, recherche sans la casse, renommage de casse par un nom
+      temporaire, renommage entre deux liens durs sans effet ; test_ntfs_ecriture 19/19)*
+- [x] T6 — Débit : cache d'écriture différée *(32 Mio par pwrite de 128 Kio : 1 852 écritures et 1 042
+      lectures → 19 écritures et 0 lecture ; petites lectures gardées dans la même table)*
+- [x] T7 — Coupures et pannes *(88 points de coupure, 57 laissent un volume incohérent, tous marqués sales ;
+      correctif 0005 : montage en lecture seule malgré un $MFTMirr différent ; drapeau écrit $MFT d'abord en le
+      posant et en dernier en l'effaçant ; mutation : sans drapeau, le test échoue)*
+- [x] T8 — Batterie aléatoire, images hostiles, vérification par le noyau *(300 images abîmées + 8 cas
+      fabriqués, lus puis écrits sans plantage ; batterie 512 et 4096 octets par secteur, graines 1 à 6 × 1 000 pas,
+      variante lente 5 000 pas ; correctif 0006 : fuite de runlist dans ntfs_delete ; vérification par le noyau :
+      `sudo tools/fixtures/verify_ntfs_with_kernel.sh`, faite par l'utilisateur avec T10)*
+- [x] T9 — JNI, Kotlin, Flutter *(test_handles_ntfs et test_handles_luks2_ntfs jugés par ntfsjuge.py et
+      ntfsfix -n ; message FL_ENOTSUP « Fichier non modifiable ici… » ; APK de version, tests natifs verts sur le Pixel)*
+- [x] *(utilisateur)* T10 — Essais sur le Pixel avec un disque NTFS sauvegardé *(2026-10-20 : vrai disque NTFS
+      lu et écrit depuis le Pixel 4 XL ; vérification sous Windows et relecture par le noyau
+      (`verify_ntfs_with_kernel.sh`) encore à faire)*
+- [x] T11 — Documentation *(README : NTFS, lecture seule, limites, GPL effective ; PATCHES.md : section libntfs-3g)*
+- [x] Fusion `feature/ntfs` → `develop` *(après relecture finale : cache de lecture périmé, démarrage rapide
+      de Windows mal nommé, compression laissée active, volume plus grand que le disque ouvert en écriture,
+      cas hostile « liste d'attributs » ; corrigés, suite rapide 34/34, Pixel 15/15)*
 - [ ] Version `v0.4.0`
 
 ### Phase 6 — Finitions et robustesse
