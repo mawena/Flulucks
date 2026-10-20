@@ -10,6 +10,7 @@ import com.mawena.fluluks.files.DiskSource
 import com.mawena.fluluks.files.Entry
 import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.FilesException
+import com.mawena.fluluks.files.Search
 import com.mawena.fluluks.files.Sources
 import com.mawena.fluluks.files.TransferState
 import com.mawena.fluluks.files.Transfers
@@ -185,6 +186,14 @@ class HostApiImpl(
     }
 
     override fun cancelTransfer() = Transfers.cancel()
+
+    override fun search(sourceId: String, path: String, query: String, showHidden: Boolean, callback: (Result<SearchResultMsg>) -> Unit) =
+        io(callback) {
+            val r = Search.run(sourceId, path, query, showHidden)
+            SearchResultMsg(r.entries.map(::entryMsg), r.truncated)
+        }
+
+    override fun cancelSearch() = Search.cancel()
 
     /** Travail du gestionnaire de fichiers hors du fil principal ; réponse sur le fil principal. */
     private fun <T> io(callback: (Result<T>) -> Unit, block: () -> T) {

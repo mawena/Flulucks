@@ -159,4 +159,20 @@ class FakeHostApi implements HostApi {
 
   @override
   Future<void> cancelTransfer() async => transferCancels++;
+
+  /// Réponse de [search] selon la requête ; un completer dans [searchGates] la retarde.
+  SearchResultMsg Function(String query) searchResult = (_) => SearchResultMsg(entries: [], truncated: false);
+  final searchGates = <String, Completer<void>>{};
+  int searchCancels = 0;
+
+  @override
+  Future<SearchResultMsg> search(String sourceId, String path, String query, bool showHidden) async {
+    calls.add('search $sourceId $path $query');
+    final gate = searchGates[query];
+    if (gate != null) await gate.future;
+    return searchResult(query);
+  }
+
+  @override
+  Future<void> cancelSearch() async => searchCancels++;
 }

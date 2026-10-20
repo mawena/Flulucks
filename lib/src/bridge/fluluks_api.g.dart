@@ -575,6 +575,57 @@ class TransferMsg {
   }
 }
 
+/// Résultats d'une recherche ; `truncated` au-delà de 500.
+class SearchResultMsg {
+  SearchResultMsg({
+    required this.entries,
+    required this.truncated,
+  });
+
+  List<EntryMsg> entries;
+
+  bool truncated;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      entries,
+      truncated,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static SearchResultMsg decode(Object result) {
+    result as List<Object?>;
+    return SearchResultMsg(
+      entries: (result[0]! as List<Object?>).cast<EntryMsg>(),
+      truncated: result[1]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! SearchResultMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(entries, other.entries) && _deepEquals(truncated, other.truncated);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'SearchResultMsg(entries: $entries, truncated: $truncated)';
+  }
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -601,6 +652,9 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is TransferMsg) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
+    }    else if (value is SearchResultMsg) {
+      buffer.putUint8(135);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -621,6 +675,8 @@ class _PigeonCodec extends StandardMessageCodec {
         return EntryMsg.decode(readValue(buffer)!);
       case 134:
         return TransferMsg.decode(readValue(buffer)!);
+      case 135:
+        return SearchResultMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -994,6 +1050,43 @@ class FluLuksHostApi {
 
   Future<void> cancelTransfer() async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelTransfer$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<SearchResultMsg> search(String sourceId, String path, String query, bool showHidden) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.search$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path, query, showHidden]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as SearchResultMsg;
+  }
+
+  Future<void> cancelSearch() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelSearch$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,

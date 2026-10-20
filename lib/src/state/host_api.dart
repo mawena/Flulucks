@@ -24,6 +24,8 @@ abstract class HostApi {
   Future<void> share(String sourceId, List<String> paths);
   Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
   Future<void> cancelTransfer();
+  Future<SearchResultMsg> search(String sourceId, String path, String query, bool showHidden);
+  Future<void> cancelSearch();
 }
 
 /// Implémentation réelle : délègue au client Pigeon généré.
@@ -76,4 +78,9 @@ class PigeonHostApi implements HostApi {
       _api.startTransfer(srcId, paths, dstId, dstDir, move);
   @override
   Future<void> cancelTransfer() => _api.cancelTransfer();
+  @override
+  Future<SearchResultMsg> search(String sourceId, String path, String query, bool showHidden) =>
+      _api.search(sourceId, path, query, showHidden);
+  @override
+  Future<void> cancelSearch() => _api.cancelSearch();
 }

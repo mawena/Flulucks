@@ -133,6 +133,13 @@ class TransferMsg {
   String? error;
 }
 
+/// Résultats d'une recherche ; `truncated` au-delà de 500.
+class SearchResultMsg {
+  SearchResultMsg({required this.entries, required this.truncated});
+  List<EntryMsg> entries;
+  bool truncated;
+}
+
 @HostApi()
 abstract class FluLuksHostApi {
   List<DiskMsg> listDisks();
@@ -163,6 +170,9 @@ abstract class FluLuksHostApi {
   void share(String sourceId, List<String> paths);
   void startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
   void cancelTransfer();
+  @async
+  SearchResultMsg search(String sourceId, String path, String query, bool showHidden);
+  void cancelSearch();
 }
 
 @FlutterApi()

@@ -584,6 +584,51 @@ data class TransferMsg (
     return "TransferMsg(move=$move, currentName=$currentName, fileIndex=$fileIndex, fileCount=$fileCount, doneBytes=$doneBytes, totalBytes=$totalBytes, finished=$finished, cancelled=$cancelled, error=$error)"
   }
 }
+
+/**
+ * Résultats d'une recherche ; `truncated` au-delà de 500.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class SearchResultMsg (
+  val entries: List<EntryMsg>,
+  val truncated: Boolean
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): SearchResultMsg {
+      val entries = pigeonVar_list[0] as List<EntryMsg>
+      val truncated = pigeonVar_list[1] as Boolean
+      return SearchResultMsg(entries, truncated)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      entries,
+      truncated,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as SearchResultMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.entries, other.entries) && FluLuksApiPigeonUtils.deepEquals(this.truncated, other.truncated)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.entries)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.truncated)
+    return result
+  }
+  override fun toString(): String {
+    return "SearchResultMsg(entries=$entries, truncated=$truncated)"
+  }
+}
 private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
   override fun readValueOfType(type: Byte, buffer: ByteBuffer): Any? {
     return when (type) {
@@ -617,6 +662,11 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
           TransferMsg.fromList(it)
         }
       }
+      135.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          SearchResultMsg.fromList(it)
+        }
+      }
       else -> super.readValueOfType(type, buffer)
     }
   }
@@ -644,6 +694,10 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
       }
       is TransferMsg -> {
         stream.write(134)
+        writeValue(stream, value.toList())
+      }
+      is SearchResultMsg -> {
+        stream.write(135)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -674,6 +728,8 @@ interface FluLuksHostApi {
   fun share(sourceId: String, paths: List<String>)
   fun startTransfer(srcId: String, paths: List<String>, dstId: String, dstDir: String, move: Boolean)
   fun cancelTransfer()
+  fun search(sourceId: String, path: String, query: String, showHidden: Boolean, callback: (Result<SearchResultMsg>) -> Unit)
+  fun cancelSearch()
 
   companion object {
     /** The codec used by FluLuksHostApi. */
@@ -1044,6 +1100,45 @@ interface FluLuksHostApi {
           channel.setMessageHandler { _, reply ->
             val wrapped: List<Any?> = try {
               api.cancelTransfer()
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.search$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathArg = args[1] as String
+            val queryArg = args[2] as String
+            val showHiddenArg = args[3] as Boolean
+            api.search(sourceIdArg, pathArg, queryArg, showHiddenArg) { result: Result<SearchResultMsg> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelSearch$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.cancelSearch()
               listOf(null)
             } catch (exception: Throwable) {
               FluLuksApiPigeonUtils.wrapError(exception)
