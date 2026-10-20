@@ -626,6 +626,128 @@ class SearchResultMsg {
   }
 }
 
+/// Préférences d'affichage ; `sort` : `name`, `size` ou `date`.
+class ViewPrefsMsg {
+  ViewPrefsMsg({
+    required this.sort,
+    required this.ascending,
+    required this.grid,
+    required this.showHidden,
+  });
+
+  String sort;
+
+  bool ascending;
+
+  bool grid;
+
+  bool showHidden;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      sort,
+      ascending,
+      grid,
+      showHidden,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static ViewPrefsMsg decode(Object result) {
+    result as List<Object?>;
+    return ViewPrefsMsg(
+      sort: result[0]! as String,
+      ascending: result[1]! as bool,
+      grid: result[2]! as bool,
+      showHidden: result[3]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! ViewPrefsMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(sort, other.sort) && _deepEquals(ascending, other.ascending) && _deepEquals(grid, other.grid) && _deepEquals(showHidden, other.showHidden);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'ViewPrefsMsg(sort: $sort, ascending: $ascending, grid: $grid, showHidden: $showHidden)';
+  }
+}
+
+/// Favori ; `sourceId` null si le stockage n'est pas ouvert.
+class FavoriteMsg {
+  FavoriteMsg({
+    required this.key,
+    required this.path,
+    required this.label,
+    this.sourceId,
+  });
+
+  String key;
+
+  String path;
+
+  String label;
+
+  String? sourceId;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      key,
+      path,
+      label,
+      sourceId,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static FavoriteMsg decode(Object result) {
+    result as List<Object?>;
+    return FavoriteMsg(
+      key: result[0]! as String,
+      path: result[1]! as String,
+      label: result[2]! as String,
+      sourceId: result[3] as String?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! FavoriteMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(key, other.key) && _deepEquals(path, other.path) && _deepEquals(label, other.label) && _deepEquals(sourceId, other.sourceId);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'FavoriteMsg(key: $key, path: $path, label: $label, sourceId: $sourceId)';
+  }
+}
+
 
 class _PigeonCodec extends StandardMessageCodec {
   const _PigeonCodec();
@@ -655,6 +777,12 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is SearchResultMsg) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
+    }    else if (value is ViewPrefsMsg) {
+      buffer.putUint8(136);
+      writeValue(buffer, value.encode());
+    }    else if (value is FavoriteMsg) {
+      buffer.putUint8(137);
+      writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
     }
@@ -677,6 +805,10 @@ class _PigeonCodec extends StandardMessageCodec {
         return TransferMsg.decode(readValue(buffer)!);
       case 135:
         return SearchResultMsg.decode(readValue(buffer)!);
+      case 136:
+        return ViewPrefsMsg.decode(readValue(buffer)!);
+      case 137:
+        return FavoriteMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
     }
@@ -1120,6 +1252,98 @@ class FluLuksHostApi {
     )
     ;
     return pigeonVar_replyValue as Uint8List?;
+  }
+
+  Future<ViewPrefsMsg> getViewPrefs() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.getViewPrefs$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as ViewPrefsMsg;
+  }
+
+  Future<void> setViewPrefs(ViewPrefsMsg prefs) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.setViewPrefs$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[prefs]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<List<FavoriteMsg>> listFavorites() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.listFavorites$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<FavoriteMsg>();
+  }
+
+  Future<void> addFavorite(String sourceId, String path, String label) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.addFavorite$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path, label]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> removeFavorite(String key, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.removeFavorite$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[key, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
   }
 }
 

@@ -11,6 +11,9 @@ import com.mawena.fluluks.files.Entry
 import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.FilesException
 import com.mawena.fluluks.files.Search
+import com.mawena.fluluks.files.SharedPrefStore
+import com.mawena.fluluks.files.ViewPrefs
+import com.mawena.fluluks.files.ViewSettings
 import com.mawena.fluluks.files.Sources
 import com.mawena.fluluks.files.Thumbnails
 import com.mawena.fluluks.files.TransferState
@@ -198,6 +201,22 @@ class HostApiImpl(
 
     override fun thumbnail(sourceId: String, path: String, sizePx: Long, callback: (Result<ByteArray?>) -> Unit) =
         io(callback) { Thumbnails.get(sourceId, path, sizePx.toInt()) }
+
+    private val viewPrefs by lazy { ViewPrefs(SharedPrefStore(context)) }
+
+    override fun getViewPrefs(): ViewPrefsMsg = viewPrefs.get().let { ViewPrefsMsg(it.sort, it.ascending, it.grid, it.showHidden) }
+
+    override fun setViewPrefs(prefs: ViewPrefsMsg) = guarded {
+        viewPrefs.set(ViewSettings(prefs.sort, prefs.ascending, prefs.grid, prefs.showHidden))
+    }
+
+    override fun listFavorites(): List<FavoriteMsg> = guardedValue {
+        viewPrefs.favorites().map { FavoriteMsg(it.key, it.path, it.label, it.sourceId) }
+    }
+
+    override fun addFavorite(sourceId: String, path: String, label: String) = guarded { viewPrefs.add(sourceId, path, label) }
+
+    override fun removeFavorite(key: String, path: String) = guarded { viewPrefs.remove(key, path) }
 
     /** Travail du gestionnaire de fichiers hors du fil principal ; réponse sur le fil principal. */
     private fun <T> io(callback: (Result<T>) -> Unit, block: () -> T) {

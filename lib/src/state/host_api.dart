@@ -27,6 +27,11 @@ abstract class HostApi {
   Future<SearchResultMsg> search(String sourceId, String path, String query, bool showHidden);
   Future<void> cancelSearch();
   Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx);
+  Future<ViewPrefsMsg> getViewPrefs();
+  Future<void> setViewPrefs(ViewPrefsMsg prefs);
+  Future<List<FavoriteMsg>> listFavorites();
+  Future<void> addFavorite(String sourceId, String path, String label);
+  Future<void> removeFavorite(String key, String path);
 }
 
 /// Implémentation réelle : délègue au client Pigeon généré.
@@ -86,4 +91,14 @@ class PigeonHostApi implements HostApi {
   Future<void> cancelSearch() => _api.cancelSearch();
   @override
   Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx) => _api.thumbnail(sourceId, path, sizePx);
+  @override
+  Future<ViewPrefsMsg> getViewPrefs() => _api.getViewPrefs();
+  @override
+  Future<void> setViewPrefs(ViewPrefsMsg prefs) => _api.setViewPrefs(prefs);
+  @override
+  Future<List<FavoriteMsg>> listFavorites() => _api.listFavorites();
+  @override
+  Future<void> addFavorite(String sourceId, String path, String label) => _api.addFavorite(sourceId, path, label);
+  @override
+  Future<void> removeFavorite(String key, String path) => _api.removeFavorite(key, path);
 }

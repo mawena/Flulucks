@@ -140,6 +140,24 @@ class SearchResultMsg {
   bool truncated;
 }
 
+/// Préférences d'affichage ; `sort` : `name`, `size` ou `date`.
+class ViewPrefsMsg {
+  ViewPrefsMsg({required this.sort, required this.ascending, required this.grid, required this.showHidden});
+  String sort;
+  bool ascending;
+  bool grid;
+  bool showHidden;
+}
+
+/// Favori ; `sourceId` null si le stockage n'est pas ouvert.
+class FavoriteMsg {
+  FavoriteMsg({required this.key, required this.path, required this.label, this.sourceId});
+  String key;
+  String path;
+  String label;
+  String? sourceId;
+}
+
 @HostApi()
 abstract class FluLuksHostApi {
   List<DiskMsg> listDisks();
@@ -175,6 +193,11 @@ abstract class FluLuksHostApi {
   void cancelSearch();
   @async
   Uint8List? thumbnail(String sourceId, String path, int sizePx);
+  ViewPrefsMsg getViewPrefs();
+  void setViewPrefs(ViewPrefsMsg prefs);
+  List<FavoriteMsg> listFavorites();
+  void addFavorite(String sourceId, String path, String label);
+  void removeFavorite(String key, String path);
 }
 
 @FlutterApi()

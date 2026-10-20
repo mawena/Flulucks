@@ -185,4 +185,27 @@ class FakeHostApi implements HostApi {
     thumbRequests.add(path);
     return thumbs[path];
   }
+
+  ViewPrefsMsg viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
+  List<FavoriteMsg> favorites = [];
+
+  @override
+  Future<ViewPrefsMsg> getViewPrefs() async => viewPrefs;
+
+  @override
+  Future<void> setViewPrefs(ViewPrefsMsg prefs) async => viewPrefs = prefs;
+
+  @override
+  Future<List<FavoriteMsg>> listFavorites() async => favorites;
+
+  @override
+  Future<void> addFavorite(String sourceId, String path, String label) async {
+    final key = sources.firstWhere((s) => s.id == sourceId).stableKey;
+    if (favorites.any((f) => f.key == key && f.path == path)) return;
+    favorites = [...favorites, FavoriteMsg(key: key, path: path, label: label, sourceId: sourceId)];
+  }
+
+  @override
+  Future<void> removeFavorite(String key, String path) async =>
+      favorites = favorites.where((f) => !(f.key == key && f.path == path)).toList();
 }

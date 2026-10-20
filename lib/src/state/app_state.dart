@@ -22,12 +22,28 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   List<SourceMsg> _sources = const [];
   bool _allFilesAccess = false;
   TransferMsg? _transfer;
+  ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
+  List<FavoriteMsg> _favorites = const [];
 
   List<DiskMsg> get disks => _disks;
   List<VolumeMsg> get volumes => _volumes;
 
   /// Stockages du gestionnaire de fichiers : téléphone, cartes SD, volumes ouverts.
   List<SourceMsg> get sources => _sources;
+
+  /// Tri, grille et fichiers cachés (persistés côté Kotlin).
+  ViewPrefsMsg get viewPrefs => _viewPrefs;
+
+  /// Favoris, résolus vers les stockages ouverts (`sourceId` null sinon).
+  List<FavoriteMsg> get favorites => _favorites;
+
+  FavoriteMsg? favoriteFor(String sourceId, String path) {
+    final key = sourceById(sourceId)?.stableKey;
+    for (final f in _favorites) {
+      if (f.key == key && f.path == path) return f;
+    }
+    return null;
+  }
 
   /// Copie ou déplacement en cours, ou le dernier terminé ; null si aucun.
   TransferMsg? get transfer => _transfer;
@@ -74,6 +90,8 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
       _readOnlyPreference = await api.getReadOnlyPreference();
       _sources = await api.listSources();
       _allFilesAccess = await api.hasAllFilesAccess();
+      _viewPrefs = await api.getViewPrefs();
+      _favorites = await api.listFavorites();
       notifyListeners();
     } on PlatformException catch (e) {
       _fail(e);
@@ -88,11 +106,12 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     refreshSources(); // un volume ouvert ou fermé ajoute ou retire un stockage
   }
 
-  /// Relit les stockages et l'accès aux fichiers (changement d'état, retour au premier plan).
+  /// Relit les stockages, l'accès aux fichiers et les favoris (changement d'état, retour au premier plan).
   Future<void> refreshSources() async {
     try {
       _sources = await api.listSources();
       _allFilesAccess = await api.hasAllFilesAccess();
+      _favorites = await api.listFavorites();
       notifyListeners();
     } on PlatformException catch (e) {
       _fail(e);
@@ -118,6 +137,24 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
       _guard(() => api.startTransfer(srcId, paths, dstId, dstDir, move));
 
   Future<void> cancelTransfer() => _guard(() => api.cancelTransfer());
+
+  Future<void> setViewPrefs(ViewPrefsMsg prefs) => _guard(() async {
+        await api.setViewPrefs(prefs);
+        _viewPrefs = prefs;
+        notifyListeners();
+      });
+
+  Future<void> addFavorite(String sourceId, String path, String label) => _guard(() async {
+        await api.addFavorite(sourceId, path, label);
+        _favorites = await api.listFavorites();
+        notifyListeners();
+      });
+
+  Future<void> removeFavorite(String key, String path) => _guard(() async {
+        await api.removeFavorite(key, path);
+        _favorites = await api.listFavorites();
+        notifyListeners();
+      });
 
   Future<void> setReadOnlyPreference(bool value) => _guard(() async {
         await api.setReadOnlyPreference(value);
