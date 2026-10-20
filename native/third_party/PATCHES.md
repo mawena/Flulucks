@@ -482,8 +482,9 @@ décompressée n'était pas libérée. Trouvé par ASan dans `test_ntfs_hostile`
 `native/src/fs/ntfs_glue.c` et `native/src/fs/ntfs_dev.c` font ce que libntfs-3g ne fait pas :
 - **Politique de lecture seule** : montage d'abord en lecture seule, puis remontage en écriture seulement si
   le volume est propre. Lecture seule avec la raison pour un volume marqué sale ou en attente de chkdsk,
-  `hiberfil.sys` en veille prolongée ou démarrage rapide, `$LogFile` à rejouer, version autre que 3.0/3.1,
-  secteurs NTFS plus petits que ceux du disque. Si libntfs-3g refuse le remontage, le volume reste en lecture
+  `hiberfil.sys` en veille prolongée, `$LogFile` en version 2.0 (démarrage rapide de Windows) ou à rejouer,
+  version autre que 3.0/3.1, secteurs NTFS plus petits que ceux du disque, volume plus grand que le disque
+  (une écriture au-delà de la fin est de plus une erreur collante). Si libntfs-3g refuse le remontage, le volume reste en lecture
   seule.
 - **Drapeau « sale » ordonné** : `VOLUME_IS_DIRTY` écrit directement dans `$Volume`, `$MFT` puis miroir en
   le posant (avant la première modification), miroir puis `$MFT` en l'effaçant (à chaque sync et au
@@ -498,7 +499,8 @@ décompressée n'était pas libérée. Trouvé par ASan dans `test_ntfs_hostile`
   (`ntfs_forbidden_names` strict). Renommer en ne changeant que la casse passe par un nom temporaire ;
   renommer vers un autre lien dur du même fichier ne fait rien. La date du dossier parent est mise à jour
   à la création (libntfs-3g ne le fait pas).
-- **Fichiers compressés et EFS** : écriture refusée (`FL_ENOTSUP`) ; EFS ni lu ni écrit.
+- **Fichiers compressés et EFS** : écriture refusée (`FL_ENOTSUP`) ; EFS ni lu ni écrit. Compression
+  désactivée au montage (`NVolClearCompression`) : un fichier créé dans un dossier compressé ne l'est pas.
 - **Cache d'écriture** dans `ntfs_dev.c` : écritures alignées de 64 Kio ou plus regroupées par 4 Mio, autres
   écritures et petites lectures gardées dans une table de secteurs (4 Mio au plus), vidée au sync. Une
   copie de 32 Mio passe de 1 852 écritures et 1 042 lectures à 19 écritures.

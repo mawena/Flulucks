@@ -76,15 +76,17 @@ Mesures sur un Pixel 4 XL avec le vrai disque (LUKS2, Argon2id à 1 Gio de mémo
 - **FAT ou exFAT mal éjecté** : une clé débranchée sans « Éjecter » (ou retirée d'un ordinateur sans
   éjection) s'ouvre en lecture seule, jusqu'à sa vérification sur un ordinateur (chkdsk sous Windows,
   `fsck.fat` ou `fsck.exfat` sous Linux). FluLuks ne répare pas un système de fichiers FAT abîmé.
-- **Écriture NTFS** : vérifiée sur PC (un lecteur NTFS indépendant écrit pour les tests, `ntfsfix -n`, le
-  pilote ntfs3 du noyau Linux, coupures simulées, images hostiles) et sur le téléphone avec des images.
-  Sauvegardez avant d'écrire sur un disque Windows important.
+- **Écriture NTFS** : vérifiée sur PC (un lecteur NTFS indépendant écrit pour les tests, `ntfsfix -n`,
+  coupures simulées, images hostiles) et sur le téléphone avec des images. La relecture par le pilote ntfs3
+  du noyau Linux (script fourni) et l'essai sur un vrai disque restent à faire. Sauvegardez avant d'écrire
+  sur un disque Windows important.
 - **NTFS en lecture seule** quand Windows n'a pas fermé le volume proprement :
   - Windows en veille prolongée ou en **démarrage rapide** (réglage par défaut de Windows 10 et 11) :
     arrêtez complètement Windows (Maj + Arrêter) avant d'y écrire ;
   - disque débranché de Windows sans éjection, journal `$LogFile` à rejouer, ou chkdsk demandé :
     rebranchez-le sous Windows, puis éjectez-le proprement ;
-  - version de NTFS autre que 3.0 ou 3.1, ou secteurs NTFS plus petits que ceux du disque.
+  - version de NTFS autre que 3.0 ou 3.1, secteurs NTFS plus petits que ceux du disque, ou volume plus grand
+    que le disque (disque cloné sur un plus petit).
 - **Limites NTFS** :
   - fichiers **compressés** par Windows : lus, mais pas modifiés (« Fichier non modifiable ici ») ;
     aucun fichier créé par FluLuks n'est compressé ;

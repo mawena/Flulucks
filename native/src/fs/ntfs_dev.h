@@ -7,8 +7,9 @@
  * libntfs-3g lit et écrit en octets, à des positions quelconques (elle compte sur le noyau pour les
  * secteurs partiels) : les lectures passent par fl_bdev_read_bytes, les écritures partielles relisent les
  * secteurs de bord (lecture-modification-écriture). Les erreurs fl_err deviennent errno (EIO, EROFS,
- * ENODEV, ETIMEDOUT, ENOMEM, EINVAL hors du disque). La première erreur d'écriture ou de vidage est
- * gardée (ntfs_dev_error, collante) et rendue par l'appel en cours puis par toute écriture suivante.
+ * ENODEV, ETIMEDOUT, ENOMEM ; EINVAL pour une lecture hors du disque, EIO pour une écriture). La première
+ * erreur d'écriture ou de vidage est gardée (ntfs_dev_error, collante) et rendue par l'appel en cours puis
+ * par toute écriture suivante.
  *
  * Écriture différée (débit) : libntfs-3g écrit $Bitmap et l'enregistrement MFT entre deux morceaux de
  * données ; sur un disque dur, chaque aller-retour coûte une recherche de tête. Les écritures alignées d'au

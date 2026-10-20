@@ -83,6 +83,7 @@ static void test_ntfs_raisons_tiennent(void) {
   TT_ASSERT(strlen(FL_RO_HIBER) <= 127);
   TT_ASSERT(strlen(FL_RO_LOGFILE) <= 127);
   TT_ASSERT(strlen(FL_RO_VERSION) <= 127);
+  TT_ASSERT(strlen(FL_RO_TAILLE) <= 127);
   TT_ASSERT(fl_content_supported(FL_CONTENT_NTFS));
 }
 
@@ -130,6 +131,12 @@ static void test_ntfs_politique_sale(void) { attendre_lecture_seule("ntfs-sale.i
 static void test_ntfs_politique_chkdsk(void) { attendre_lecture_seule("ntfs-chkdsk.img", 512, FL_RO_DIRTY); }
 static void test_ntfs_politique_hiber(void) { attendre_lecture_seule("ntfs-hiber.img", 512, FL_RO_HIBER); }
 static void test_ntfs_politique_journal(void) { attendre_lecture_seule("ntfs-journal.img", 512, FL_RO_LOGFILE); }
+/* Windows 8 et suivants, démarrage rapide : $LogFile propre mais en version 2.0 (métadonnées gardées en cache). */
+static void test_ntfs_politique_demarrage_rapide(void) {
+  attendre_lecture_seule("ntfs-rapide.img", 512, FL_RO_HIBER);
+}
+/* Volume de 32 Mio sur un disque de 28 Mio (clone sur un disque plus petit, capacité mal annoncée). */
+static void test_ntfs_politique_tronque(void) { attendre_lecture_seule("ntfs-tronque.img", 512, FL_RO_TAILLE); }
 static void test_ntfs_politique_secteur(void) { attendre_lecture_seule("ntfs-512-sur-4k.img", 4096, FL_RO_SECTOR); }
 
 static void test_ntfs_politique_utilisateur(void) {
@@ -430,7 +437,9 @@ int main(void) {
   TT_RUN(test_ntfs_politique_chkdsk);
   TT_RUN(test_ntfs_politique_hiber);
   TT_RUN(test_ntfs_politique_journal);
+  TT_RUN(test_ntfs_politique_demarrage_rapide);
   TT_RUN(test_ntfs_politique_secteur);
+  TT_RUN(test_ntfs_politique_tronque);
   TT_RUN(test_ntfs_politique_utilisateur);
   TT_RUN(test_ntfs_4k);
   TT_RUN(test_ntfs_demontage_propre);

@@ -254,7 +254,7 @@ static void test_ntfs_hostile_aleatoire(void) {
 
 static void test_ntfs_hostile_fabriques(void) {
   static const char *const cas[] = {"runlist-hors", "runlist-mft", "base-soi", "index-zero", "lznt1", "utf16",
-                                    "attr-longueur", "index-boucle"};
+                                    "attr-longueur", "index-boucle", "attrlist-zero", "attrlist-boucle"};
   uint8_t *buf = malloc(1 << 20);
   memset(buf, 0x5A, 1 << 20);
   int ko = 0;

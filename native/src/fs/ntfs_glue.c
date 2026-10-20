@@ -10,9 +10,9 @@
  *
  * Politique d'écriture (§ 4.2 de la spec), décidée sur un premier montage en lecture seule, volume lisible
  * dans tous les cas : drapeaux de $Volume (sale, chkdsk en cours… : FL_RO_DIRTY), Windows en veille
- * prolongée ou en démarrage rapide (hiberfil.sys : FL_RO_HIBER), $LogFile non vide (FL_RO_LOGFILE),
- * version autre que 3.0 / 3.1 (FL_RO_VERSION), secteur NTFS plus petit que celui du disque
- * (FL_RO_SECTOR). Si l'écriture est permise, le volume est démonté puis remonté en écriture, sans
+ * prolongée ou en démarrage rapide (hiberfil.sys, ou $LogFile en version 2.0 : FL_RO_HIBER), $LogFile
+ * non vide (FL_RO_LOGFILE), version autre que 3.0 / 3.1 (FL_RO_VERSION), secteur NTFS plus petit que celui
+ * du disque (FL_RO_SECTOR), volume plus grand que le disque (FL_RO_TAILLE). Si l'écriture est permise, le volume est démonté puis remonté en écriture, sans
  * NTFS_MNT_RECOVER : un $LogFile devenu non vide entre-temps fait échouer ce montage, et la colle retombe
  * en lecture seule (FL_RO_LOGFILE). Monter puis démonter sans rien modifier n'écrit rien.
  *
@@ -158,20 +158,23 @@ static uint16_t rd16(const uint8_t *p) { return (uint16_t)(p[0] | p[1] << 8); }
 
 /* --- politique de lecture seule ---------------------------------------------------------------- */
 
-/* Vrai si $LogFile est vide ou indique un arrêt propre (comme ntfs_volume_check_logfile, qui est privée). */
-static bool logfile_clean(ntfs_volume *vol) {
+/* Raison de refuser l'écriture d'après $LogFile (NULL : vide ou arrêt propre), comme
+ * ntfs_volume_check_logfile, qui est privée : page de redémarrage 2.0 → métadonnées gardées en cache par
+ * Windows (démarrage rapide, veille) ; journal à rejouer ou illisible → FL_RO_LOGFILE. */
+static const char *logfile_reason(ntfs_volume *vol) {
   ntfs_inode *ni = ntfs_inode_open(vol, FILE_LogFile);
-  if (!ni) return false;
+  if (!ni) return FL_RO_LOGFILE;
   ntfs_attr *na = ntfs_attr_open(ni, AT_DATA, AT_UNNAMED, 0);
-  bool ok = false;
+  const char *why = FL_RO_LOGFILE;
   if (na) {
     RESTART_PAGE_HEADER *rp = NULL;
-    ok = ntfs_check_logfile(na, &rp) && ntfs_is_logfile_clean(na, rp);
+    if (ntfs_check_logfile(na, &rp) && ntfs_is_logfile_clean(na, rp)) why = NULL;
+    if (rp && rp->major_ver == const_cpu_to_le16(2) && rp->minor_ver == const_cpu_to_le16(0)) why = FL_RO_HIBER;
     free(rp);
     ntfs_attr_close(na);
   }
   ntfs_inode_close(ni);
-  return ok;
+  return why;
 }
 
 /* Raison de refuser l'écriture (NULL : écriture permise), sur un volume monté en lecture seule. */
@@ -180,9 +183,12 @@ static const char *write_policy(ntfs_volume *vol, uint32_t bps, const fl_bdev *d
                     VOLUME_REPAIR_OBJECT_ID | VOLUME_CHKDSK_UNDERWAY))
     return FL_RO_DIRTY;
   if (ntfs_volume_check_hiberfile(vol, 0) < 0) return FL_RO_HIBER; /* veille, ou fichier illisible */
-  if (!logfile_clean(vol)) return FL_RO_LOGFILE;
+  const char *why = logfile_reason(vol);
+  if (why) return why;
   if (vol->major_ver != 3 || vol->minor_ver > 1) return FL_RO_VERSION;
   if (bps < dev->sector_size) return FL_RO_SECTOR;
+  /* libntfs-3g ne compare pas : une écriture au-delà de la fin échouerait au milieu d'une opération */
+  if ((uint64_t)vol->nr_clusters * vol->cluster_size > fl_bdev_size_bytes(dev)) return FL_RO_TAILLE;
   return NULL;
 }
 
@@ -204,8 +210,10 @@ static int mount_locked(fl_bdev *dev, bool rw, ntfs_dev **dd, ntfs_volume **vol)
   /* Comme ntfs_mount() : sans ces caches, ntfs_inode_lookup_by_mbsname échoue (la colle ne s'en sert pas,
    * mais libntfs-3g, si). Volume laissé sensible à la casse : en mode insensible, ntfs_readdir rend les
    * noms en minuscules ; la colle cherche elle-même sans la casse en second essai (lookup). Fichiers
-   * cachés montrés, fichiers système non. */
+   * cachés montrés, fichiers système non. Compression désactivée (activée par défaut, DEFAULT_COMPRESSION) :
+   * un fichier créé dans un dossier compressé par Windows ne l'est pas, et reste modifiable. */
   ntfs_create_lru_caches(*vol);
+  NVolClearCompression(*vol);
   if (ntfs_set_shown_files(*vol, FALSE, TRUE, FALSE) || ntfs_volume_get_free_space(*vol)) {
     int e = errno;
     ntfs_umount(*vol, TRUE);

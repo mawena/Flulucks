@@ -12,11 +12,14 @@ Usage :
   ntfsjuge.py flags <img>                 drapeaux de $Volume ($VOLUME_INFORMATION), en hexadécimal
   ntfsjuge.py set-flags <img> <hex>       les remplace (dans $MFT et $MFTMirr)
   ntfsjuge.py set-logfile-sale <img>      $LogFile laissé « ouvert » par Windows (coupure)
+  ntfsjuge.py set-logfile-rapide <img>    $LogFile propre en version 2.0 (démarrage rapide de Windows)
   ntfsjuge.py set-chiffre <img> <chemin>  marque le fichier comme chiffré (EFS)
+  ntfsjuge.py set-compresse <img> <chemin> marque le dossier comme compressé (FILE_ATTR_COMPRESSED)
   ntfsjuge.py locate <img> <chemin>       décalage (octets) de l'enregistrement MFT du fichier
   ntfsjuge.py abime <img> <cas>           défaut posé exprès (bitmap, miroir, liens, nom) pour les tests
   ntfsjuge.py hostile <img> <cas>         cas hostile fabriqué (runlist-hors, runlist-mft, base-soi,
-                                          attr-longueur, lznt1, index-zero, index-boucle, utf16)
+                                          attr-longueur, lznt1, index-zero, index-boucle, utf16 ;
+                                          sur une image à /liste.bin : attrlist-zero, attrlist-boucle)
 
 Manifeste : une ligne par entrée, triée par chemin (octets UTF-8), séparée par des tabulations : type
 (d dossier, f fichier, l lien symbolique ou jonction, o autre point d'analyse), taille, condensat (« - »
@@ -38,7 +41,7 @@ NS_POSIX, NS_WIN32, NS_DOS, NS_BOTH = 0, 1, 2, 3
 AT_STD, AT_LIST, AT_FN, AT_VOLINFO, AT_DATA = 0x10, 0x20, 0x30, 0x70, 0x80
 AT_IROOT, AT_IALLOC, AT_BITMAP, AT_REPARSE = 0x90, 0xA0, 0xB0, 0xC0
 TAG_SYMLINK, TAG_MOUNT = 0xA000000C, 0xA0000003
-FA_READONLY, FA_REPARSE, FA_ENCRYPTED = 0x1, 0x400, 0x4000
+FA_READONLY, FA_REPARSE, FA_COMPRESSED, FA_ENCRYPTED = 0x1, 0x400, 0x800, 0x4000
 
 
 class Bad(Exception):
@@ -719,17 +722,21 @@ class Ntfs:
             struct.pack_into("<H", rec, self.attr_value_offset(rec, AT_VOLINFO) + 10, flags)
         self.patch_record(3, fn)
 
-    def set_logfile_dirty(self):
+    def set_logfile_dirty(self, rapide=False):
+        """Pages de redémarrage 1.1 sans VOLUME_IS_CLEAN ; rapide : 2.0 marquées propres (Windows a gardé ses
+        métadonnées en cache pour le démarrage rapide)."""
         s = self.stream(2, AT_DATA)
         if not s or s["res"] is not None:
             raise Bad("$LogFile sans $DATA non résident")
         size = s["size"]
         page = bytearray(4096)
         page[0:4] = b"RSTR"
-        struct.pack_into("<HHQIIHhh", page, 4, 30, 9, 0, 4096, 4096, 48, 1, 1)
+        minor, major = (0, 2) if rapide else (1, 1)
+        struct.pack_into("<HHQIIHhh", page, 4, 30, 9, 0, 4096, 4096, 48, minor, major)
         ra = 48
         bits = size.bit_length()
-        struct.pack_into("<QHHHHIHHqIHHI", page, ra, 1000, 1, 0xFFFF, 0, 0, 67 - bits, 48 + 160, 48, size,
+        clean = 0x0002 if rapide else 0
+        struct.pack_into("<QHHHHIHHqIHHI", page, ra, 1000, 1, 0xFFFF, 0, clean, 67 - bits, 48 + 160, 48, size,
                          0, 48, 64, 1)
         cr = ra + 48
         struct.pack_into("<QQHHH", page, cr, 1000, 1000, 0xFFFF, 0xFFFF, 0)
@@ -754,6 +761,12 @@ class Ntfs:
             struct.pack_into("<I", rec, v + 32, u32(rec, v + 32) | FA_ENCRYPTED)
             a = self.attr_offset(rec, AT_DATA)
             struct.pack_into("<H", rec, a + 12, u16(rec, a + 12) | 0x4000)
+        self.patch_record(n, fn)
+
+    def set_compressed(self, n):
+        def fn(rec):
+            v = self.attr_value_offset(rec, AT_STD)
+            struct.pack_into("<I", rec, v + 32, u32(rec, v + 32) | FA_COMPRESSED)
         self.patch_record(n, fn)
 
     def damage(self, case):
@@ -881,6 +894,25 @@ class Ntfs:
                     break
             else:
                 raise Bad("nom introuvable dans l'index de la racine")
+        elif case in ("attrlist-zero", "attrlist-boucle"):
+            n = self.find("/liste.bin")
+            st = self.stream(n, AT_LIST)
+            if not st or st["res"] is not None or len(st["runs"]) != 1 or st["runs"][0][1] is None:
+                raise Bad("liste d'attributs de /liste.bin : non résidente en un seul run attendue")
+            off = st["runs"][0][1] * self.cs
+            lst = bytearray(self.read(off, st["size"]))
+            if case == "attrlist-zero":  # deuxième entrée de longueur nulle
+                struct.pack_into("<H", lst, u16(lst, 4) + 4, 0)
+            else:  # toutes les entrées renvoient à la base
+                p, autres = 0, 0
+                while p + 26 <= len(lst) and u16(lst, p + 4):
+                    if u64(lst, p + 16) & 0xFFFFFFFFFFFF != n:
+                        autres += 1
+                    struct.pack_into("<Q", lst, p + 16, n | self.records[n]["seq"] << 48)
+                    p += u16(lst, p + 4)
+                if not autres:
+                    raise Bad("liste d'attributs sans enregistrement d'extension")
+            self.write(off, bytes(lst))
         else:
             raise Bad("cas hostile inconnu : %s" % case)
 
@@ -895,8 +927,10 @@ def main(argv):
         print(__doc__, file=sys.stderr)
         return 2
     cmd, path = argv[1], argv[2]
+    fs = None
     try:
-        writable = cmd in ("set-flags", "set-logfile-sale", "set-chiffre", "abime", "hostile")
+        writable = cmd in ("set-flags", "set-logfile-sale", "set-logfile-rapide", "set-chiffre", "set-compresse",
+                           "abime", "hostile")
         fs = Ntfs(path, writable)
         if cmd == "check":
             err = fs.check()
@@ -921,8 +955,12 @@ def main(argv):
             fs.set_volume_flags(int(argv[3], 16))
         elif cmd == "set-logfile-sale":
             fs.set_logfile_dirty()
+        elif cmd == "set-logfile-rapide":
+            fs.set_logfile_dirty(rapide=True)
         elif cmd == "set-chiffre":
             fs.set_encrypted(fs.find(argv[3]))
+        elif cmd == "set-compresse":
+            fs.set_compressed(fs.find(argv[3]))
         elif cmd == "abime":
             fs.damage(argv[3])
         elif cmd == "hostile":
@@ -935,6 +973,9 @@ def main(argv):
     except Bad as e:
         print("ntfsjuge : %s : %s" % (path, e), file=sys.stderr)
         return 3
+    finally:
+        if fs:  # écritures vidées avant la sortie (sinon perdues si le fichier n'est pas finalisé)
+            fs.f.close()
     return 0
 
 

@@ -2,13 +2,15 @@
  * phase 5. PC seulement, sans root : libntfs-3g directement, avec ses propres opérations de périphérique
  * sur un descripteur de fichier (indépendant de la colle du moteur).
  *
- * Usage : ntfs-remplir <img> <dossier> [--speciaux] [--hiber] [--casse]
+ * Usage : ntfs-remplir <img> <dossier> [--speciaux] [--hiber] [--casse] [--attrlist]
  *   <dossier>    copié à la racine : dossiers, fichiers ordinaires, mtime de la source (atime, ctime et
  *                date de création identiques) ; entrées triées par nom (image reproductible).
  *   --speciaux   lien dur, flux nommé, fichier compressé, fichier creux de 5 Gio, lien symbolique, jonction,
  *                point d'analyse inconnu, nom de 600 octets UTF-8 (voir le plan, T1 Step 2).
  *   --hiber      /hiberfil.sys de 64 Kio commençant par « hibr » (Windows en veille prolongée).
  *   --casse      /Casse.txt et /casse.txt (noms qui ne diffèrent que par la casse, espace POSIX).
+ *   --attrlist   /liste.bin, 40 flux nommés de 100 octets : trop pour un enregistrement MFT, d'où une liste
+ *                d'attributs ($ATTRIBUTE_LIST) et des enregistrements d'extension (cas hostiles de T8).
  * Sortie 0 si tout est écrit, 1 sinon (message sur la sortie d'erreur). */
 
 #define _GNU_SOURCE
@@ -349,16 +351,37 @@ static int speciaux(ntfs_volume *vol, ntfs_inode *root) {
   return simple_file(root, nom, "long\n", 5);
 }
 
+/* /liste.bin : flux nommés f00 à f39 de 100 octets, plus une donnée principale. */
+static int attrlist(ntfs_inode *root) {
+  if (simple_file(root, "liste.bin", "liste\n", 6)) return -1;
+  ntfs_inode *ni = open_path(root->vol, "/liste.bin");
+  if (!ni) return fail("ouverture de", "liste.bin");
+  char val[100];
+  int rc = 0;
+  for (int i = 0; !rc && i < 40; i++) {
+    char nom[4] = {'f', (char)('0' + i / 10), (char)('0' + i % 10), 0};
+    memset(val, 'a' + i % 26, sizeof val);
+    ntfschar *sn = NULL;
+    int sl = ntfs_mbstoucs(nom, &sn);
+    if (sl < 0 || ntfs_attr_add(ni, AT_DATA, sn, (u8)sl, (u8 *)val, sizeof val)) rc = fail("flux nommé", nom);
+    free(sn);
+  }
+  if (!rc && !NInoAttrList(ni)) rc = fail("pas de liste d'attributs pour", "liste.bin");
+  if (ntfs_inode_close_in_dir(ni, root)) rc = fail("fermeture de", "liste.bin");
+  return rc;
+}
+
 int main(int argc, char **argv) {
   if (argc < 3) {
-    fprintf(stderr, "usage : ntfs-remplir <img> <dossier> [--speciaux] [--hiber] [--casse]\n");
+    fprintf(stderr, "usage : ntfs-remplir <img> <dossier> [--speciaux] [--hiber] [--casse] [--attrlist]\n");
     return 2;
   }
-  bool sp = false, hiber = false, casse = false;
+  bool sp = false, hiber = false, casse = false, alist = false;
   for (int i = 3; i < argc; i++) {
     if (!strcmp(argv[i], "--speciaux")) sp = true;
     else if (!strcmp(argv[i], "--hiber")) hiber = true;
     else if (!strcmp(argv[i], "--casse")) casse = true;
+    else if (!strcmp(argv[i], "--attrlist")) alist = true;
     else {
       fprintf(stderr, "ntfs-remplir : option inconnue %s\n", argv[i]);
       return 2;
@@ -393,6 +416,7 @@ int main(int argc, char **argv) {
     }
   }
   if (!rc && casse) rc = simple_file(root, "Casse.txt", "A\n", 2) || simple_file(root, "casse.txt", "b\n", 2);
+  if (!rc && alist) rc = attrlist(root);
   if (root && ntfs_inode_close(root)) rc = fail("fermeture de", "/");
   if (ntfs_umount(vol, FALSE)) rc = fail("démontage de", argv[1]);
   return rc ? 1 : 0;

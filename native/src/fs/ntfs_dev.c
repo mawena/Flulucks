@@ -232,15 +232,17 @@ static int read_small(ntfs_dev *d, uint64_t lba, uint32_t n, uint8_t *out) {
     return FL_OK;
   }
   int rc = fl_bdev_read(d->bd, lba, n, out);
-  for (uint32_t k = 0; rc == FL_OK && k < n; k++) {
+  if (rc != FL_OK) return rc;
+  /* Secteurs en attente recopiés d'abord (plus récents que le disque) : faire de la place ensuite peut
+   * écrire et retirer ceux de la suite de la lecture, que out doit déjà contenir. */
+  for (uint32_t j = lower(d, lba); j < d->n && d->tab[j].lba < lba + n; j++)
+    memcpy(out + (size_t)(d->tab[j].lba - lba) * ss, sec_data(d, j), ss);
+  for (uint32_t k = 0; k < n; k++) {
     uint32_t j = lower(d, lba + k);
-    if (j < d->n && d->tab[j].lba == lba + k) {
-      memcpy(out + (size_t)k * ss, sec_data(d, j), ss); /* en attente : plus récent que le disque */
-    } else if (room(d) == FL_OK) {
+    if ((j >= d->n || d->tab[j].lba != lba + k) && room(d) == FL_OK)
       insert(d, lower(d, lba + k), lba + k, out + (size_t)k * ss, false);
-    }
   }
-  return rc;
+  return FL_OK;
 }
 
 /* Écriture immédiate de [p, p + n) à off (mode direct : rien n'attend) ; secteurs de bord relus puis
@@ -400,7 +402,8 @@ static s64 d_pwrite(struct ntfs_device *dev, const void *buf, s64 count, s64 off
   }
   uint64_t size = fl_bdev_size_bytes(d->bd);
   if ((uint64_t)off > size || (uint64_t)count > size - (uint64_t)off) {
-    errno = EINVAL;
+    fail(d, FL_EIO); /* volume plus grand que le disque : l'opération en cours resterait à moitié faite */
+    errno = EIO;
     return -1;
   }
   if (count == 0) return 0;

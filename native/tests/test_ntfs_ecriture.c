@@ -321,6 +321,34 @@ static void test_ntfs_compresse_lecture_seule(void) {
   TT_ASSERT_EQ(diff, 0);
 }
 
+/* Dossier compressé par Windows : un fichier créé dedans n'est pas compressé (compression désactivée), donc
+ * reste modifiable. */
+static void test_ntfs_creer_dans_dossier_compresse(void) {
+  vol v;
+  int rc = ouvrir("ntfs-dossier-compresse.img", 512, NULL, &v);
+  fl_file *f = NULL;
+  if (rc == FL_OK) rc = fl_fs_open(v.fs, "/mille/nouveau.txt", FL_O_RDWR | FL_O_CREAT, &f);
+  int64_t w = rc == FL_OK ? fl_file_pwrite(f, "abc", 3, 0) : rc;
+  if (f) fl_file_close(f);
+  f = NULL;
+  int o = rc == FL_OK ? fl_fs_open(v.fs, "/mille/nouveau.txt", FL_O_RDWR, &f) : rc;
+  if (f) fl_file_close(f);
+  char b[3] = {0};
+  int r = rc == FL_OK ? relire(v.fs, "/mille/nouveau.txt", b, 3) : rc;
+  int u = fermer_disque(&v);
+  char out[4096];
+  int j = fu_ntfsjuge(out, sizeof out, "check", v.copie, NULL);
+  if (j) fprintf(stderr, "%s\n", out);
+  liberer(&v);
+  TT_ASSERT_EQ(rc, FL_OK);
+  TT_ASSERT_EQ(w, 3);
+  TT_ASSERT_EQ(o, FL_OK);
+  TT_ASSERT_EQ(r, FL_OK);
+  TT_ASSERT(!memcmp(b, "abc", 3));
+  TT_ASSERT_EQ(u, FL_OK);
+  TT_ASSERT_EQ(j, 0);
+}
+
 static int cb_taille(void *ctx, const fl_dirent *e) {
   if (!strcmp(e->name, "p.bin")) *(uint64_t *)ctx = e->st.size;
   return 0;
@@ -742,6 +770,7 @@ int main(void) {
   TT_RUN(test_ntfs_drapeau_sale);
   TT_RUN(test_ntfs_disque_plein);
   TT_RUN(test_ntfs_compresse_lecture_seule);
+  TT_RUN(test_ntfs_creer_dans_dossier_compresse);
   TT_RUN(test_ntfs_partage_lecteur_ecrivain);
   TT_RUN(test_ntfs_ecriture_erreur_io);
   TT_RUN(test_ntfs_mkdir_rmdir);

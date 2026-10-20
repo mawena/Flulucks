@@ -23,5 +23,6 @@
 #define FL_RO_HIBER "Windows en veille prolongée ou en démarrage rapide : arrêtez complètement Windows avant d'y écrire"
 #define FL_RO_LOGFILE "disque mal fermé par Windows : rebranchez-le sous Windows, puis éjectez-le proprement"
 #define FL_RO_VERSION "version de NTFS non prise en charge en écriture"
+#define FL_RO_TAILLE "volume plus grand que le disque : disque cloné ou capacité mal annoncée, écriture désactivée"
 
 #endif
