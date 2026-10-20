@@ -65,5 +65,11 @@ void tm_set_fat_attrs(tm *m);
 /* Manifeste du modèle comparé, octet pour octet, à celui de fatjuge.py (hors moteur) sur `img`.
  * Nombre de lignes différentes (dix premières sur stderr), ou -1 si le juge est inutilisable. */
 int tm_check_fat_judge(const tm *m, const char *img);
+/* NTFS (phase 5) : mêmes droits que FAT (fichiers 0100644, dossiers 040755, uid et gid 0). */
+void tm_set_ntfs_attrs(tm *m);
+/* ntfsjuge.py check (cohérence, hors moteur) puis manifeste de ntfsjuge.py comparé au modèle : nombre de
+ * lignes différentes, plus 1 si check a trouvé un défaut (défauts sur stderr), ou -1 si le juge est
+ * inutilisable. */
+int tm_check_ntfs_judge(const tm *m, const char *img);
 
 #endif

@@ -3,10 +3,12 @@
 
 make_tree.py --fat <dossier> : arborescence valide sur FAT (tree-fat/, phase 4), sans nom hors du plan
 multilingue de base : mtools 4.0 ne sait pas les écrire.
-make_tree.py --exfat <dossier> : la même, plus « 😀.bin » (tree-exfat/, remplie par fatjuge.py)."""
+make_tree.py --exfat <dossier> : la même, plus « 😀.bin » (tree-exfat/, remplie par fatjuge.py).
+make_tree.py --ntfs <dossier> : la même que --exfat, plus « été ☀/dedans.txt » (tree-ntfs/, phase 5, remplie
+par ntfs-remplir)."""
 import os, random, sys
 
-FAT = sys.argv[1] in ("--fat", "--exfat")
+FAT = sys.argv[1] in ("--fat", "--exfat", "--ntfs")
 root = sys.argv[2] if FAT else sys.argv[1]
 os.makedirs(root, exist_ok=True)
 
@@ -37,8 +39,10 @@ if FAT:
         "nom long 2.txt": b"2\n",
         "/".join("p%d" % i for i in range(1, 21)) + "/fond.txt": b"profond\n",
     }
-    if sys.argv[1] == "--exfat":
+    if sys.argv[1] in ("--exfat", "--ntfs"):
         noms["😀.bin"] = b"\xf0\x9f\x98\x80\n"
+    if sys.argv[1] == "--ntfs":
+        noms["été ☀/dedans.txt"] = b"dossier accentu\xc3\xa9\n"
     for i in range(1000):
         noms["mille/f%04d.txt" % i] = ("f%04d\n" % i).encode()
     assert len(("é" * 125 + "n.txt").encode()) == 255

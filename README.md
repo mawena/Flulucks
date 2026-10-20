@@ -1,19 +1,19 @@
 # FluLuks
 
 FluLuks est une application Android qui ouvre les **disques externes chiffrés avec LUKS** et branchés en
-USB-C, **sans root**, ainsi que les clés et disques en clair formatés en ext4, FAT ou exFAT. Le contenu du disque apparaît dans l'application **Fichiers** d'Android : on ouvre
+USB-C, **sans root**, ainsi que les clés et disques en clair formatés en ext4, FAT, exFAT ou NTFS. Le contenu du disque apparaît dans l'application **Fichiers** d'Android : on ouvre
 une vidéo dans VLC, un PDF ou une photo dans les applications habituelles.
 
 Elle est née d'un besoin simple : utiliser sur un téléphone non rooté (un Pixel 4 XL) le disque
 LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permettait.
 
-> **État actuel : version 0.3.0, lecture et écriture sur ext4, FAT et exFAT.** L'écriture a été vérifiée sur PC
-> (batteries de non-corruption jugées par `e2fsck`, `debugfs` et le noyau Linux, coupures simulées) et
-> sur le téléphone avec des images, mais **pas encore sur un vrai disque USB** : faites une sauvegarde
-> avant d'écrire sur un disque qui compte, ou activez « Ouvrir les disques en lecture seule ». Voir les
-> [limites](#limites-actuelles).
+> **État actuel : version 0.4.0, lecture et écriture sur ext4, FAT, exFAT et NTFS.** L'écriture a été
+> vérifiée sur PC (batteries de non-corruption jugées par des outils indépendants et le noyau Linux,
+> coupures simulées) et sur le téléphone avec des images. FAT, exFAT et NTFS ont été essayés sur une vraie
+> clé ou un vrai disque, **pas encore ext4** : faites une sauvegarde avant d'écrire sur un disque qui
+> compte, ou activez « Ouvrir les disques en lecture seule ». Voir les [limites](#limites-actuelles).
 
-## Ce que fait la version 0.3.0
+## Ce que fait la version 0.4.0
 
 - **Détecte** un disque USB de stockage de masse branché en USB-C, et demande la permission d'accès.
 - **Lit les tables de partitions** GPT et MBR (partitions étendues comprises), ainsi qu'un disque sans
@@ -39,10 +39,19 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
     pour ce disque ». exFAT n'a pas cette limite.
   - Pendant les écritures, le volume est marqué « en cours d'utilisation » ; une clé arrachée sans
     « Éjecter » est reconnue à l'ouverture suivante.
+- **Lit et écrit NTFS** (nouveau en 0.4.0), en clair ou dans LUKS : disques formatés sous Windows, avec
+  libntfs-3g, la bibliothèque du pilote ntfs-3g de Linux.
+  - Les fichiers système de NTFS (`$MFT`, `$Bitmap`…) sont cachés ; les noms y sont insensibles à la casse,
+    comme sous Windows, et les noms interdits par Windows (`aux`, `nul`, `con.txt`…) sont refusés.
+  - Le volume est marqué « à vérifier » pendant les écritures et ne l'est plus après « Éjecter » : un disque
+    arraché en pleine écriture est vérifié par Windows au branchement suivant.
+  - Un disque NTFS n'est ouvert en écriture que s'il a été bien arrêté par Windows (voir les
+    [limites](#limites-actuelles)).
 - **Lecture seule quand il le faut**, avec la raison affichée : interrupteur « Ouvrir les disques en
   lecture seule », disque protégé en écriture, journal à rejouer, système de fichiers marqué en erreur,
   somme de contrôle fausse, option ext4 non prise en charge en écriture, disque FAT ou exFAT mal
-  éjecté, ou erreur d'écriture en cours de session.
+  éjecté, disque NTFS mal fermé ou laissé par Windows en veille prolongée, ou erreur d'écriture en cours
+  de session.
 - **Expose chaque volume ouvert** dans l'application Fichiers, avec accès aléatoire : l'avance rapide
   marche dans VLC.
 - **Éjecte proprement** depuis l'application ou depuis la notification : écriture des données en
@@ -67,7 +76,26 @@ Mesures sur un Pixel 4 XL avec le vrai disque (LUKS2, Argon2id à 1 Gio de mémo
 - **FAT ou exFAT mal éjecté** : une clé débranchée sans « Éjecter » (ou retirée d'un ordinateur sans
   éjection) s'ouvre en lecture seule, jusqu'à sa vérification sur un ordinateur (chkdsk sous Windows,
   `fsck.fat` ou `fsck.exfat` sous Linux). FluLuks ne répare pas un système de fichiers FAT abîmé.
-- **NTFS** est détecté mais pas encore pris en charge (phase 5).
+- **Écriture NTFS** : vérifiée sur PC (un lecteur NTFS indépendant écrit pour les tests, `ntfsfix -n`,
+  coupures simulées, images hostiles), sur le téléphone avec des images, puis essayée sur un vrai disque.
+  La relecture par le pilote ntfs3 du noyau Linux (script fourni) reste à faire. Sauvegardez avant d'écrire
+  sur un disque Windows important.
+- **NTFS en lecture seule** quand Windows n'a pas fermé le volume proprement :
+  - Windows en veille prolongée ou en **démarrage rapide** (réglage par défaut de Windows 10 et 11) :
+    arrêtez complètement Windows (Maj + Arrêter) avant d'y écrire ;
+  - disque débranché de Windows sans éjection, journal `$LogFile` à rejouer, ou chkdsk demandé :
+    rebranchez-le sous Windows, puis éjectez-le proprement ;
+  - version de NTFS autre que 3.0 ou 3.1, secteurs NTFS plus petits que ceux du disque, ou volume plus grand
+    que le disque (disque cloné sur un plus petit).
+- **Limites NTFS** :
+  - fichiers **compressés** par Windows : lus, mais pas modifiés (« Fichier non modifiable ici ») ;
+    aucun fichier créé par FluLuks n'est compressé ;
+  - fichiers **chiffrés** par Windows (EFS) : listés, mais ni lus ni modifiés ;
+  - un nom de plus de 255 octets en UTF-8 n'est pas listé ;
+  - les fichiers créés n'ont pas de droits Windows particuliers (« Tout le monde ») ;
+  - le journal des modifications `$UsnJrnl` n'est pas tenu à jour (comme ntfs-3g) : un logiciel de
+    sauvegarde Windows qui s'en sert peut rater des changements faits sur le téléphone ;
+  - liens symboliques et jonctions : listés, mais pas suivis.
 - **LVM, BitLocker, btrfs, XFS…** sont signalés comme « non pris en charge ».
 - **Boîtiers USB** : seuls ceux qui proposent le protocole *Bulk-Only Transport* fonctionnent, ce qui est
   le cas de la plupart. Un boîtier en UAS seul est refusé avec un message clair.
@@ -164,6 +192,9 @@ cmake --build build/native
 ctest --test-dir build/native --output-on-failure -LE lent    # environ 10 min
 ctest --test-dir build/native --output-on-failure -L lent     # batteries longues, environ 1 h 40
 sudo tools/fixtures/verify_rw_with_kernel.sh build/native/batterie   # images écrites, jugées par le noyau
+FL_KEEP=1 ctest --test-dir build/native -R test_ntfs_batterie        # garde les images NTFS écrites…
+sudo tools/fixtures/verify_ntfs_with_kernel.sh build/native/tmp/ntfs-batterie-<type>.img \
+  build/native/tmp/ntfs-batterie-<type>.manifest                   # …et les fait relire par ntfs3
 
 # moteur natif sur le téléphone (écrit seulement dans /data/local/tmp/fluluks/)
 tools/android/run_native_tests.sh <numéro-adb>
@@ -185,7 +216,7 @@ Plus de détails sur le moteur, l'outil `fluluks-cli` et la vérification par le
 
 | Dossier | Contenu |
 |---|---|
-| `native/` | Moteur C11, couche JNI, tests natifs et correctifs lwext4 |
+| `native/` | Moteur C11, couche JNI, tests natifs, lwext4, FatFs, libntfs-3g et leurs correctifs |
 | `android/app/src/main/kotlin/` | USB, gestionnaire de volumes, service, DocumentsProvider, pont Pigeon |
 | `lib/`, `pigeons/` | Interface Flutter et définition du pont |
 | `tools/` | Génération des images de test, scripts téléphone et clé USB de test |
@@ -207,7 +238,7 @@ Le dépôt suit git flow :
 | 2 | Android en lecture : « mon disque dans VLC » | **v0.1.0** |
 | 3 | ext4 en écriture (essai sur un vrai disque à faire) | **v0.2.1** |
 | 4 | FAT16 / FAT32 / exFAT | **v0.3.0** |
-| 5 | NTFS | v0.4.0 |
+| 5 | NTFS | **v0.4.0** |
 | 6 | Finitions : explorateur intégré, copies avec progression, réglages, robustesse | v1.0.0 |
 
 Suivi détaillé, étape par étape : [docs/superpowers/plans/2026-10-17-fluluks-feuille-de-route.md](docs/superpowers/plans/2026-10-17-fluluks-feuille-de-route.md).
@@ -215,5 +246,9 @@ Conception : [docs/superpowers/specs/2026-10-17-fluluks-design.md](docs/superpow
 
 ## Licence
 
-Aucune licence n'est encore choisie. Une partie de lwext4 est sous GPL, de même que libntfs-3g, prévue
-pour la phase 5. FatFs est sous une licence de type BSD à une clause, compatible avec la GPL. L'application dans son ensemble devra donc être distribuée sous GPL si elle est publiée.
+Aucune licence n'est encore choisie pour le code de FluLuks. Mais l'application est liée à libntfs-3g
+(GPL version 2 ou ultérieure, depuis la phase 5) et à une partie de lwext4 sous GPL : distribuée, elle doit
+l'être sous GPL, avec ses sources. FatFs est sous une licence de type BSD à une clause, compatible avec la
+GPL. Les licences des bibliothèques sont dans `native/third_party/` (`ntfs-3g/COPYING`,
+`fatfs/LICENSE.txt`…) ; leurs correctifs sont décrits dans
+[native/third_party/PATCHES.md](native/third_party/PATCHES.md).

@@ -6,7 +6,10 @@ OUT="${1:?usage: make_fixtures.sh <dossier-sortie>}"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 
-STAMP="$(cat "$HERE"/make_tree.py "$HERE"/luks_encrypt.py "$HERE"/craft.py "$HERE"/fatjuge.py "$HERE"/make_fixtures.sh | sha256sum | cut -d' ' -f1)"
+# ntfs-remplir (phase 5) : construit avec le moteur (cible CMake ntfs-remplir), chemin donné par CTest.
+REMPLIR="${NTFS_REMPLIR:?NTFS_REMPLIR : chemin de ntfs-remplir (cible CMake)}"
+STAMP="$(cat "$HERE"/make_tree.py "$HERE"/luks_encrypt.py "$HERE"/craft.py "$HERE"/fatjuge.py "$HERE"/ntfsjuge.py \
+  "$HERE"/make_fixtures.sh "$REMPLIR" | sha256sum | cut -d' ' -f1)"
 if [ -f "$OUT/.stamp" ] && [ "$(cat "$OUT/.stamp")" = "$STAMP" ]; then
   echo "fixtures à jour"; exit 0
 fi
@@ -346,6 +349,42 @@ PLAIN=fat32-arbre.img make_luks luks2-fat32 xts-plain64 512 64 --type luks2 --ci
   --key-size 512 --sector-size 512 --pbkdf pbkdf2 --hash sha256 --pbkdf-force-iterations 1000
 mv work/luks2-fat32.luks luks2-fat32.img
 unset TZ
+
+# --- NTFS (phase 5, T1) ---------------------------------------------------
+# tree-ntfs/ (arbre FAT + « 😀.bin » + « été ☀/ ») posée par ntfs-remplir (libntfs-3g seule, sans la colle
+# du moteur), jugée par ntfsjuge.py (lecteur indépendant de libntfs-3g) et ntfsfix -n. Horodatages en
+# UTC dans NTFS : pas de TZ.
+$PY "$HERE/make_tree.py" --ntfs "$OUT/tree-ntfs"
+mkdir -p work/ntfs-vide-src
+mkntfs_img() { local img="$1" size="$2"; shift 2; truncate -s "$size" "$img"; mkntfs -F -f -q "$@" "$img" >/dev/null 2>&1; }
+NJ() { $PY "$HERE/ntfsjuge.py" "$@"; }
+mkntfs_img ntfs-arbre.img 64M -s 512 -c 4096 -L FLUNTFS;      "$REMPLIR" ntfs-arbre.img tree-ntfs --speciaux
+mkntfs_img ntfs-4k.img 64M -s 4096 -c 4096 -L FLUNTFS4K;      "$REMPLIR" ntfs-4k.img tree-ntfs
+mkntfs_img ntfs-vide.img 300M -s 512 -c 4096 -L FLUVIDE
+mkntfs_img ntfs-512-sur-4k.img 32M -s 512 -c 4096 -L FLU512
+mkntfs_img ntfs-hiber.img 32M -s 512 -c 4096 -L FLUHIBER;     "$REMPLIR" ntfs-hiber.img work/ntfs-vide-src --hiber
+mkntfs_img ntfs-casse.img 32M -s 512 -c 4096 -L FLUCASSE;     "$REMPLIR" ntfs-casse.img work/ntfs-vide-src --casse
+mkntfs_img ntfs-attrlist.img 32M -s 512 -c 4096 -L FLULISTE;   "$REMPLIR" ntfs-attrlist.img work/ntfs-vide-src --attrlist
+for i in ntfs-arbre ntfs-4k ntfs-vide ntfs-512-sur-4k ntfs-hiber ntfs-casse ntfs-attrlist; do NJ check "$i.img"; done
+for i in ntfs-arbre ntfs-4k ntfs-vide ntfs-512-sur-4k ntfs-casse ntfs-attrlist; do ntfsfix -n "$i.img" >/dev/null; done
+cp ntfs-arbre.img ntfs-sale.img;    NJ set-flags ntfs-sale.img 0x0001
+cp ntfs-arbre.img ntfs-chkdsk.img;  NJ set-flags ntfs-chkdsk.img 0x4000
+cp ntfs-arbre.img ntfs-journal.img; NJ set-logfile-sale ntfs-journal.img
+cp ntfs-arbre.img ntfs-rapide.img;  NJ set-logfile-rapide ntfs-rapide.img
+cp ntfs-arbre.img ntfs-chiffre.img; NJ set-chiffre ntfs-chiffre.img /abc.txt
+cp ntfs-arbre.img ntfs-dossier-compresse.img; NJ set-compresse ntfs-dossier-compresse.img /mille
+mkntfs_img ntfs-tronque.img 32M -s 512 -c 4096 -L FLUTRONQ; truncate -s 28M ntfs-tronque.img  # volume > disque
+# ntfs-hostile-<cas>.img : cas hostiles fabriqués (test_ntfs_hostile, T8).
+for c in runlist-hors runlist-mft base-soi attr-longueur lznt1 index-zero index-boucle utf16; do
+  cp ntfs-arbre.img "ntfs-hostile-$c.img"; NJ hostile "ntfs-hostile-$c.img" "$c"
+done
+for c in attrlist-zero attrlist-boucle; do
+  cp ntfs-attrlist.img "ntfs-hostile-$c.img"; NJ hostile "ntfs-hostile-$c.img" "$c"
+done
+# luks2-ntfs.img : ntfs-arbre.img chiffrée (LUKS2, PBKDF2 rapide).
+PLAIN=ntfs-arbre.img make_luks luks2-ntfs xts-plain64 512 64 --type luks2 --cipher aes-xts-plain64 \
+  --key-size 512 --sector-size 512 --pbkdf pbkdf2 --hash sha256 --pbkdf-force-iterations 1000
+mv work/luks2-ntfs.luks luks2-ntfs.img
 
 rm -rf work
 echo "$STAMP" > .stamp

@@ -519,3 +519,47 @@ int64_t fu_fat_free(const char *img) {
   long long v = strtoll(out, &fin, 10);
   return fin != out && v >= 0 ? v : -1;
 }
+
+/* --- NTFS (phase 5) --------------------------------------------------------------------------- */
+
+int fu_ntfs_tools_available(void) {
+#ifdef __ANDROID__
+  return 0;
+#else
+  return dans_path("mkntfs") && dans_path("ntfsfix") && dans_path("python3");
+#endif
+}
+
+int fu_ntfsjuge(char *out, size_t cap, const char *cmd, const char *img, const char *arg) {
+  char *const argv[] = {(char *)"python3", (char *)"-I", (char *)FL_TOOLS_DIR "/fixtures/ntfsjuge.py", (char *)cmd,
+                        (char *)img, (char *)arg, NULL};
+  return fu_run(argv, out, cap);
+}
+
+int fu_ntfs_manifest(const char *img, const char *out_path) {
+  char out[4096];
+  int rc = fu_ntfsjuge(out, sizeof out, "manifest", img, out_path);
+  if (rc != 0) fprintf(stderr, "ntfsjuge manifest %s : %d\n%s", img, rc, out);
+  return rc == 0 || rc == 3 ? rc : -1;
+}
+
+int64_t fu_ntfs_free(const char *img) {
+  char out[256];
+  if (fu_ntfsjuge(out, sizeof out, "free", img, NULL) != 0) return -1;
+  char *fin;
+  long long v = strtoll(out, &fin, 10);
+  return fin != out && v >= 0 ? v : -1;
+}
+
+int fu_ntfs_flags(const char *img) {
+  char out[256];
+  if (fu_ntfsjuge(out, sizeof out, "flags", img, NULL) != 0) return -1;
+  char *fin;
+  long v = strtol(out, &fin, 16);
+  return fin != out && v >= 0 && v <= 0xFFFF ? (int)v : -1;
+}
+
+int fu_ntfsfix_n(const char *img, char *out, size_t cap) {
+  char *const argv[] = {(char *)"ntfsfix", (char *)"-n", (char *)img, NULL};
+  return fu_run(argv, out, cap);
+}

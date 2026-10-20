@@ -45,6 +45,8 @@ set(FL_SOURCES
   src/fs/wbuf.c
   src/fs/fat_diskio.c
   src/fs/fat_glue.c
+  src/fs/ntfs_dev.c
+  src/fs/ntfs_glue.c
   src/usb/bot.c
   src/usb/scsi.c
   src/usb/usb_bdev.c
@@ -57,7 +59,7 @@ endif()
 add_library(fluluks STATIC ${FL_SOURCES})
 target_include_directories(fluluks PUBLIC include PRIVATE src)
 target_compile_options(fluluks PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 fl_fatfs Threads::Threads)
+target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 fl_fatfs fl_ntfs3g Threads::Threads)
 if(ANDROID)
   target_link_libraries(fluluks PUBLIC log) # fl_ext4_policy_log (logcat)
 endif()
@@ -67,6 +69,10 @@ if(NOT ANDROID)
   target_link_libraries(fluluks-cli PRIVATE fluluks)
   target_include_directories(fluluks-cli PRIVATE src) # fs/ext4_policy.h (diagnostic)
   target_compile_options(fluluks-cli PRIVATE -Wall -Wextra -Werror)
+  # Remplissage des images NTFS de test (phase 5), par libntfs-3g seule : make_fixtures.sh (NTFS_REMPLIR).
+  add_executable(ntfs-remplir tools/ntfs_remplir.c)
+  target_link_libraries(ntfs-remplir PRIVATE fl_ntfs3g)
+  target_compile_options(ntfs-remplir PRIVATE -Wall -Wextra -Werror)
 endif()
 
 if(ANDROID)
@@ -80,6 +86,9 @@ if(FL_TESTS)
   add_test(NAME generate_fixtures
            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../tools/fixtures/make_fixtures.sh ${CMAKE_BINARY_DIR}/fixtures)
   set_tests_properties(generate_fixtures PROPERTIES FIXTURES_SETUP fx)
+  if(NOT ANDROID)
+    set_tests_properties(generate_fixtures PROPERTIES ENVIRONMENT "NTFS_REMPLIR=$<TARGET_FILE:ntfs-remplir>")
+  endif()
 
   # fl_add_test(nom [LABELS l...]) : compile tests/<nom>.c, lie à fluluks, enregistre dans CTest.
   function(fl_add_test name)
@@ -122,8 +131,13 @@ if(FL_TESTS)
   fl_add_test(test_ext4)
   fl_add_test(test_fat)
   target_link_libraries(test_fat PRIVATE fl_testsupport)
+  fl_add_test(test_ntfs)
+  target_link_libraries(test_ntfs PRIVATE fl_testsupport)
   fl_add_test(test_fat_hostile)
   set_tests_properties(test_fat_hostile PROPERTIES TIMEOUT 600)
+  fl_add_test(test_ntfs_dev)
+  fl_add_test(test_ntfs_hostile)
+  set_tests_properties(test_ntfs_hostile PROPERTIES TIMEOUT 600)
   fl_add_test(test_cache)
   fl_add_test(test_crc32c)
   add_test(NAME test_crc32c_debit COMMAND test_crc32c debit)
@@ -140,6 +154,17 @@ if(FL_TESTS)
   target_link_libraries(test_ext4_tampon PRIVATE fl_testsupport)
   fl_add_test(test_fat_banc LABELS ecriture)
   target_link_libraries(test_fat_banc PRIVATE fl_testsupport)
+  fl_add_test(test_ntfs_banc LABELS ecriture)
+  target_link_libraries(test_ntfs_banc PRIVATE fl_testsupport)
+  fl_add_test(test_ntfs_ecriture LABELS ecriture)
+  target_link_libraries(test_ntfs_ecriture PRIVATE fl_testsupport)
+  fl_add_test(test_ntfs_coupure LABELS ecriture)
+  target_link_libraries(test_ntfs_coupure PRIVATE fl_testsupport)
+  fl_add_test(test_ntfs_batterie LABELS ecriture)
+  target_link_libraries(test_ntfs_batterie PRIVATE fl_testsupport)
+  add_test(NAME test_ntfs_batterie_lent COMMAND test_ntfs_batterie lent)
+  set_tests_properties(test_ntfs_batterie_lent PROPERTIES LABELS lent SKIP_RETURN_CODE 77
+    ENVIRONMENT "FL_FIXTURES=${CMAKE_BINARY_DIR}/fixtures" FIXTURES_REQUIRED fx)
   fl_add_test(test_fat_ecriture LABELS ecriture)
   target_link_libraries(test_fat_ecriture PRIVATE fl_testsupport)
   fl_add_test(test_fat_batterie LABELS ecriture)
