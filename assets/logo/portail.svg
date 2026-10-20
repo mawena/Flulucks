@@ -25,7 +25,6 @@
   <!-- rabat du dossier -->
   <path fill="#C7CCFF" d="M116 206 L396 206 L396 224 L116 224 Z" opacity="0.55"/>
   <!-- serrure -->
-  <circle cx="256" cy="286" r="36" fill="url(#serrure)"/>
-  <path fill="url(#serrure)" d="M240 306 L272 306 L284 370 Q285 378 277 378 L235 378 Q227 378 228 370 Z"/>
+  <path fill="url(#serrure)" d="M240 318.25 A36 36 0 1 1 272 318.25 L284 370 Q285 378 277 378 L235 378 Q227 378 228 370 Z"/>
   </g>
 </svg>

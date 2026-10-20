@@ -2,7 +2,7 @@
 class Fr {
   Fr._();
 
-  static const title = 'FluLuks';
+  static const title = 'Portail';
   static const emptyList = 'Branchez un disque USB-C';
   static const grantAccess = "Autoriser l'accès";
   static const unlock = 'Déverrouiller';

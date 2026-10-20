@@ -231,7 +231,7 @@ dans le même commit que le travail.
 ### Phase 6 — Portail : nom, logo et gestionnaire de fichiers ([plan](2026-10-20-phase6-portail.md))
 - [x] Plan de la phase 6 écrit *(spec § 11 : nom Portail, logo dossier-bouclier, gestionnaire de fichiers
       complet avec accès à tous les fichiers)*
-- [ ] T1 — Nom « Portail » et logo
+- [x] T1 — Nom « Portail » et logo *(icône adaptative avec silhouette monochrome, icône de notification ; rendu vérifié sur le Pixel)*
 - [ ] T2 — Sources de fichiers (téléphone, carte SD, disques) et accès au téléphone
 - [ ] T3 — Lister, créer, renommer, supprimer, ouvrir avec, partager
 - [ ] T4 — Copier et déplacer entre stockages

@@ -1,6 +1,6 @@
-# FluLuks
+# Portail
 
-FluLuks est une application Android qui ouvre les **disques externes chiffrés avec LUKS** et branchés en
+Portail (anciennement FluLuks) est une application Android qui ouvre les **disques externes chiffrés avec LUKS** et branchés en
 USB-C, **sans root**, ainsi que les clés et disques en clair formatés en ext4, FAT, exFAT ou NTFS. Le contenu du disque apparaît dans l'application **Fichiers** d'Android : on ouvre
 une vidéo dans VLC, un PDF ou une photo dans les applications habituelles.
 

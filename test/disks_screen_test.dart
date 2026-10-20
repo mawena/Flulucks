@@ -17,7 +17,7 @@ Future<(AppState, FakeHostApi)> pump(WidgetTester tester, FakeHostApi api) async
 void main() {
   testWidgets('liste vide', (tester) async {
     await pump(tester, FakeHostApi());
-    expect(find.text('FluLuks'), findsOneWidget);
+    expect(find.text('Portail'), findsOneWidget);
     expect(find.text('Branchez un disque USB-C'), findsOneWidget);
   });
 
