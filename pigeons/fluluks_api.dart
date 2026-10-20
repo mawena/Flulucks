@@ -173,6 +173,8 @@ abstract class FluLuksHostApi {
   @async
   SearchResultMsg search(String sourceId, String path, String query, bool showHidden);
   void cancelSearch();
+  @async
+  Uint8List? thumbnail(String sourceId, String path, int sizePx);
 }
 
 @FlutterApi()

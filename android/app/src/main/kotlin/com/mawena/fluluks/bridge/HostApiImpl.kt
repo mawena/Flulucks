@@ -12,6 +12,7 @@ import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.FilesException
 import com.mawena.fluluks.files.Search
 import com.mawena.fluluks.files.Sources
+import com.mawena.fluluks.files.Thumbnails
 import com.mawena.fluluks.files.TransferState
 import com.mawena.fluluks.files.Transfers
 import com.mawena.fluluks.volumes.DiskState
@@ -194,6 +195,9 @@ class HostApiImpl(
         }
 
     override fun cancelSearch() = Search.cancel()
+
+    override fun thumbnail(sourceId: String, path: String, sizePx: Long, callback: (Result<ByteArray?>) -> Unit) =
+        io(callback) { Thumbnails.get(sourceId, path, sizePx.toInt()) }
 
     /** Travail du gestionnaire de fichiers hors du fil principal ; réponse sur le fil principal. */
     private fun <T> io(callback: (Result<T>) -> Unit, block: () -> T) {

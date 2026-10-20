@@ -148,6 +148,9 @@ class LocalSource(
         return DocumentIds.child(tp, n)
     }
 
+    /** Fichier ordinaire sous la racine (vignettes de vidéos, par chemin), ou null. */
+    internal fun localFile(path: String): File? = file(path).takeIf { it.isFile }
+
     override fun openRead(path: String): InputStream {
         val f = file(path)
         if (!f.isFile) throw FileNotFoundException("Ce n'est pas un fichier ordinaire")

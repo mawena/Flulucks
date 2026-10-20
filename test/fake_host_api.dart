@@ -175,4 +175,14 @@ class FakeHostApi implements HostApi {
 
   @override
   Future<void> cancelSearch() async => searchCancels++;
+
+  /// Octets rendus par [thumbnail] selon le chemin (null : pas de vignette).
+  final thumbs = <String, Uint8List>{};
+  final thumbRequests = <String>[];
+
+  @override
+  Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx) async {
+    thumbRequests.add(path);
+    return thumbs[path];
+  }
 }

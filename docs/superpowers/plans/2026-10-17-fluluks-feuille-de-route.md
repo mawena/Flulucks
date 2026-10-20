@@ -236,7 +236,7 @@ dans le même commit que le travail.
 - [x] T3 — Lister, créer, renommer, supprimer, ouvrir avec, partager *(FileProvider pour le téléphone ; tests instrumentés à passer sur le Pixel)*
 - [x] T4 — Copier et déplacer entre stockages *(noms assainis vers les disques et la carte SD ; essai 8 Mio à passer sur le Pixel)*
 - [x] T5 — Recherche *(sans casse ni accents, 500 résultats et profondeur 64 au plus)*
-- [ ] T6 — Vignettes des photos et vidéos
+- [x] T6 — Vignettes des photos et vidéos *(cache de 32 Mio en mémoire seulement, vidé à l'éjection ; essai réel à passer sur le Pixel)*
 - [ ] T7 — Tri, affichage et favoris
 - [ ] T8 — Écran d'accueil et Réglages
 - [ ] T9 — Explorateur

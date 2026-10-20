@@ -21,6 +21,7 @@ import com.mawena.fluluks.engine.EngineError
 import com.mawena.fluluks.engine.NativeEngine
 import com.mawena.fluluks.engine.ScanResult
 import com.mawena.fluluks.engine.VolumeStat
+import com.mawena.fluluks.files.Thumbnails
 import com.mawena.fluluks.service.VolumeService
 import com.mawena.fluluks.usb.UsbDisks
 import org.json.JSONException
@@ -531,6 +532,7 @@ object VolumeManager {
         pendingSync.remove(volumeId)?.invoke()
         writeGen.remove(volumeId); syncedGen.remove(volumeId)
         activity.remove(volumeId)
+        Thumbnails.drop(volumeId) // vignettes du disque oubliées avec lui
     }
 
     /** Débranchement : démontage de force (le disque n'est plus là). */
