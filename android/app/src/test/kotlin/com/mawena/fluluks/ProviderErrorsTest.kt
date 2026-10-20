@@ -28,6 +28,14 @@ class ProviderErrorsTest {
         assertEquals("Document introuvable ou illisible", ProviderErrors.message(EngineError.FL_EINVAL, "queryDocument"))
     }
 
+    @Test fun enotsupMessage() {
+        for (op in listOf("openDocument", "copyDocument", "queryDocument"))
+            assertEquals(
+                "Fichier non modifiable ici : compressé ou chiffré par Windows, ou à l'ancien format ext3",
+                ProviderErrors.message(EngineError.FL_ENOTSUP, op),
+            )
+    }
+
     @Test fun otherMessagesUnchanged() {
         assertEquals("Disque plein", ProviderErrors.message(EngineError.FL_ENOSPC, "openDocument"))
         assertEquals("Un élément porte déjà ce nom", ProviderErrors.message(EngineError.FL_EEXIST, "renameDocument"))
