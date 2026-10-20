@@ -240,7 +240,7 @@ dans le même commit que le travail.
 - [x] T7 — Tri, affichage et favoris *(favoris par clé stable, résolus vers le volume ouvert)*
 - [x] T8 — Écran d'accueil et Réglages *(capture sur le Pixel lors des essais de T11)*
 - [x] T9 — Explorateur *(liste et grille, vignettes, tri, sélection, presse-papiers, barre de copie ; captures lors des essais de T11)*
-- [ ] T10 — Écran de recherche
+- [x] T10 — Écran de recherche *(400 ms après la dernière frappe, recherche précédente annulée)*
 - [ ] *(utilisateur)* T11 — Essais sur le Pixel
 - [ ] T12 — Documentation
 - [ ] Fusion `feature/portail` → `develop`

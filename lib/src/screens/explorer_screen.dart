@@ -8,6 +8,7 @@ import '../strings_fr.dart';
 import '../widgets/clipboard_bar.dart';
 import '../widgets/thumb.dart';
 import '../widgets/transfer_bar.dart';
+import 'search_screen.dart';
 
 /// Ouvre l'explorateur sur [sourceId] (à la racine, ou sur [path]).
 Future<void> openExplorer(BuildContext context, AppState state, String sourceId, {String path = '/'}) =>
@@ -261,6 +262,13 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     return AppBar(
       title: Text(_path == '/' ? label : nameOf(_path)),
       actions: [
+        IconButton(
+          tooltip: Fr.search,
+          icon: const Icon(Icons.search),
+          onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+            builder: (_) => SearchScreen(state: state, sourceId: widget.sourceId, path: _path),
+          )),
+        ),
         IconButton(
           tooltip: fav == null ? Fr.addFavorite : Fr.removeFavorite,
           icon: Icon(fav == null ? Icons.star_border : Icons.star),
