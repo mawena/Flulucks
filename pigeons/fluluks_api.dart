@@ -93,6 +93,22 @@ class SourceMsg {
   String roReason;
 }
 
+/// Élément d'un dossier. `type` : `dir`, `file`, `link` ou `other` ; `mtime` en secondes UTC.
+class EntryMsg {
+  EntryMsg({
+    required this.name,
+    required this.path,
+    required this.type,
+    required this.size,
+    required this.mtime,
+  });
+  String name;
+  String path;
+  String type;
+  int size;
+  int mtime;
+}
+
 @HostApi()
 abstract class FluLuksHostApi {
   List<DiskMsg> listDisks();
@@ -111,6 +127,16 @@ abstract class FluLuksHostApi {
   List<SourceMsg> listSources();
   bool hasAllFilesAccess();
   void requestAllFilesAccess();
+  @async
+  List<EntryMsg> listDir(String sourceId, String path, bool showHidden);
+  @async
+  String createFolder(String sourceId, String parent, String name);
+  @async
+  String rename(String sourceId, String path, String newName);
+  @async
+  void deleteEntries(String sourceId, List<String> paths);
+  void openWith(String sourceId, String path);
+  void share(String sourceId, List<String> paths);
 }
 
 @FlutterApi()

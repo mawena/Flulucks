@@ -5,7 +5,11 @@ import android.content.Context
 import android.content.Intent
 import android.provider.DocumentsContract
 import com.mawena.fluluks.engine.EngineError
+import com.mawena.fluluks.engine.FileType
 import com.mawena.fluluks.files.DiskSource
+import com.mawena.fluluks.files.Entry
+import com.mawena.fluluks.files.Files
+import com.mawena.fluluks.files.FilesException
 import com.mawena.fluluks.files.Sources
 import com.mawena.fluluks.volumes.DiskState
 import com.mawena.fluluks.volumes.VolumeManager
@@ -18,6 +22,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Pont Pigeon. Toutes les réponses et tous les appels FlutterApi se font sur le fil principal
@@ -148,6 +153,42 @@ class HostApiImpl(
 
     override fun requestAllFilesAccess() = guarded { Sources.requestAllFilesAccess() }
 
+    override fun listDir(sourceId: String, path: String, showHidden: Boolean, callback: (Result<List<EntryMsg>>) -> Unit) =
+        io(callback) { Files.list(sourceId, path, showHidden).map(::entryMsg) }
+
+    override fun createFolder(sourceId: String, parent: String, name: String, callback: (Result<String>) -> Unit) =
+        io(callback) { Files.createFolder(sourceId, parent, name) }
+
+    override fun rename(sourceId: String, path: String, newName: String, callback: (Result<String>) -> Unit) =
+        io(callback) { Files.rename(sourceId, path, newName) }
+
+    override fun deleteEntries(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit) =
+        io(callback) { Files.delete(sourceId, paths) }
+
+    override fun openWith(sourceId: String, path: String) = guarded {
+        val chooser = Files.viewIntent(sourceId, path)
+        if (!Files.hasViewer(context, chooser)) throw FlutterError(EngineError.FL_ENOTSUP.toString(), Files.MSG_NO_VIEWER)
+        context.startActivity(chooser)
+    }
+
+    override fun share(sourceId: String, paths: List<String>) = guarded {
+        context.startActivity(Files.shareIntent(sourceId, paths))
+    }
+
+    /** Travail du gestionnaire de fichiers hors du fil principal ; réponse sur le fil principal. */
+    private fun <T> io(callback: (Result<T>) -> Unit, block: () -> T) {
+        scope.launch {
+            val result = try {
+                Result.success(withContext(Dispatchers.IO) { block() })
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Result.failure(toFlutterError(e))
+            }
+            callback(result)
+        }
+    }
+
     private inline fun <T> guardedValue(block: () -> T): T {
         try {
             return block()
@@ -169,9 +210,12 @@ class HostApiImpl(
         }
     }
 
-    private fun toFlutterError(e: Throwable): FlutterError =
-        if (e is EngineError) FlutterError(e.code.toString(), e.message)
-        else FlutterError(EngineError.FL_EIO.toString(), "Erreur inattendue : l'opération a échoué")
+    private fun toFlutterError(e: Throwable): FlutterError = when (e) {
+        is EngineError -> FlutterError(e.code.toString(), e.message)
+        is FilesException -> FlutterError(e.code.toString(), e.message)
+        is ActivityNotFoundException -> FlutterError(EngineError.FL_ENOTSUP.toString(), Files.MSG_NO_VIEWER)
+        else -> FlutterError(EngineError.FL_EIO.toString(), "Erreur inattendue : l'opération a échoué")
+    }
 
     companion object {
         const val MSG_NO_PARTITION = "Aucune partition reconnue"
@@ -199,6 +243,16 @@ class HostApiImpl(
                     volumeId = volumes.firstOrNull { it.diskId == d.id && it.partIndex == p.index }?.id,
                 )
             } ?: emptyList(),
+        )
+
+        internal fun entryMsg(e: Entry) = EntryMsg(
+            name = e.name, path = e.path, size = e.size, mtime = e.mtime,
+            type = when (e.type) {
+                FileType.DIR -> "dir"
+                FileType.FILE -> "file"
+                FileType.SYMLINK -> "link"
+                FileType.OTHER -> "other"
+            },
         )
 
         private fun volumeMsg(v: VolumeState) = VolumeMsg(

@@ -39,6 +39,12 @@ class DiskSource(override val id: String, private val engine: Engine = NativeEng
         return h
     }
 
+    /** Activité d'un flux ; un volume fermé entre-temps arrête la lecture ou l'écriture. */
+    private fun touch() {
+        if (VolumeManager.volume(id) == null) throw DiskIOException(EngineError.FL_ENODEV, "openDocument")
+        VolumeManager.noteActivity(id)
+    }
+
     override val stableKey: String
         get() = state().partUuid.let { if (it.isBlank()) "disk:${state().diskId}#${state().partIndex}" else "disk:$it" }
     override val label: String get() = state().title
@@ -52,6 +58,9 @@ class DiskSource(override val id: String, private val engine: Engine = NativeEng
 
     /** Les noms uniques passent par stat, que le moteur résout selon le système de fichiers. */
     override val caseInsensitive = false
+
+    /** Assainir vers ext4 ne coûte rien et évite un échec sur FAT et NTFS. */
+    override val restrictedNames = true
 
     private fun requireWritable() {
         readOnlyReason?.let { throw FileNotFoundException(ProviderErrors.readOnly(it)) }
@@ -104,6 +113,11 @@ class DiskSource(override val id: String, private val engine: Engine = NativeEng
         write(WriteOps.parentOf(p)) { it.delete(p) }
     }
 
+    override fun deleteAll(paths: List<String>) {
+        val ps = paths.map(PathRules::require)
+        write(*ps.map(WriteOps::parentOf).distinct().toTypedArray()) { w -> ps.forEach(w::delete) }
+    }
+
     override fun move(path: String, targetParent: String): String {
         val p = PathRules.require(path)
         val t = PathRules.require(targetParent)
@@ -114,7 +128,7 @@ class DiskSource(override val id: String, private val engine: Engine = NativeEng
     override fun openRead(path: String): InputStream {
         val h = handle()
         val f = EngineError.check(engine.openFile(h, b(PathRules.require(path)), OpenFlags.RDONLY))
-        return EngineInputStream(engine, f) { VolumeManager.noteActivity(id) }
+        return EngineInputStream(engine, f) { touch() }
     }
 
     override fun createFile(parent: String, name: String): Pair<String, OutputStream> {
@@ -124,7 +138,7 @@ class DiskSource(override val id: String, private val engine: Engine = NativeEng
             val created = w.create(p, name, dir = false)
             created to EngineError.check(engine.openFile(h, b(created), OpenFlags.RDWR or OpenFlags.TRUNC))
         }
-        return path to EngineOutputStream(engine, f, onChunk = { VolumeManager.noteActivity(id) }) {
+        return path to EngineOutputStream(engine, f, onChunk = ::touch) {
             VolumeManager.noteWrite(id)
             VolumeManager.notifyChanged(id, p)
         }

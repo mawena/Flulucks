@@ -31,6 +31,9 @@ class LocalSource(
         get() = if (root.canWrite()) null else "stockage en lecture seule"
     override val caseInsensitive = true
 
+    /** Carte SD (FAT, exFAT) : noms limités ; stockage interne : tout sauf « / » et NUL. */
+    override val restrictedNames = id != Sources.PHONE
+
     private val canonRoot: File by lazy { root.canonicalFile }
 
     private fun file(path: String): File {

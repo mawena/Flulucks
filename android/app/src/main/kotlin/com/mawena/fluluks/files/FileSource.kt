@@ -40,6 +40,9 @@ interface FileSource {
     /** Noms insensibles à la casse (FAT, NTFS, stockage du téléphone). */
     val caseInsensitive: Boolean
 
+    /** Noms limités comme sur FAT et NTFS (`: * ? " < > | \`…) : les copies y assainissent les noms. */
+    val restrictedNames: Boolean
+
     fun list(path: String): List<Entry>
     fun stat(path: String): Entry?
 
@@ -54,6 +57,9 @@ interface FileSource {
 
     /** Supprime un fichier, ou un dossier et tout son contenu. */
     fun delete(path: String)
+
+    /** Supprime chaque élément de [paths] ; un disque ne note qu'une écriture pour tout le lot. */
+    fun deleteAll(paths: List<String>) = paths.forEach(::delete)
 
     /** Déplace sous [targetParent], dans la même source (nom unique en cas de conflit) ; rend le nouveau chemin. */
     fun move(path: String, targetParent: String): String

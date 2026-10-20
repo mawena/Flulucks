@@ -233,7 +233,7 @@ dans le même commit que le travail.
       complet avec accès à tous les fichiers)*
 - [x] T1 — Nom « Portail » et logo *(icône adaptative avec silhouette monochrome, icône de notification ; rendu vérifié sur le Pixel)*
 - [x] T2 — Sources de fichiers (téléphone, carte SD, disques) et accès au téléphone *(verrou d'écriture partagé avec le provider ; provider 36/36 sur le Pixel)*
-- [ ] T3 — Lister, créer, renommer, supprimer, ouvrir avec, partager
+- [x] T3 — Lister, créer, renommer, supprimer, ouvrir avec, partager *(FileProvider pour le téléphone ; tests instrumentés à passer sur le Pixel)*
 - [ ] T4 — Copier et déplacer entre stockages
 - [ ] T5 — Recherche
 - [ ] T6 — Vignettes des photos et vidéos

@@ -16,6 +16,12 @@ abstract class HostApi {
   Future<List<SourceMsg>> listSources();
   Future<bool> hasAllFilesAccess();
   Future<void> requestAllFilesAccess();
+  Future<List<EntryMsg>> listDir(String sourceId, String path, bool showHidden);
+  Future<String> createFolder(String sourceId, String parent, String name);
+  Future<String> rename(String sourceId, String path, String newName);
+  Future<void> deleteEntries(String sourceId, List<String> paths);
+  Future<void> openWith(String sourceId, String path);
+  Future<void> share(String sourceId, List<String> paths);
 }
 
 /// Implémentation réelle : délègue au client Pigeon généré.
@@ -49,4 +55,18 @@ class PigeonHostApi implements HostApi {
   Future<bool> hasAllFilesAccess() => _api.hasAllFilesAccess();
   @override
   Future<void> requestAllFilesAccess() => _api.requestAllFilesAccess();
+  @override
+  Future<List<EntryMsg>> listDir(String sourceId, String path, bool showHidden) =>
+      _api.listDir(sourceId, path, showHidden);
+  @override
+  Future<String> createFolder(String sourceId, String parent, String name) =>
+      _api.createFolder(sourceId, parent, name);
+  @override
+  Future<String> rename(String sourceId, String path, String newName) => _api.rename(sourceId, path, newName);
+  @override
+  Future<void> deleteEntries(String sourceId, List<String> paths) => _api.deleteEntries(sourceId, paths);
+  @override
+  Future<void> openWith(String sourceId, String path) => _api.openWith(sourceId, path);
+  @override
+  Future<void> share(String sourceId, List<String> paths) => _api.share(sourceId, paths);
 }

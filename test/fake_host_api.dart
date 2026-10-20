@@ -112,4 +112,41 @@ class FakeHostApi implements HostApi {
 
   @override
   Future<void> requestAllFilesAccess() async => accessRequests++;
+
+  /// Contenu des dossiers, par `sourceId` puis chemin ; un chemin dans [protectedDirs] est refusé.
+  final dirs = <String, Map<String, List<EntryMsg>>>{};
+  final protectedDirs = <String>{};
+  final calls = <String>[];
+
+  @override
+  Future<List<EntryMsg>> listDir(String sourceId, String path, bool showHidden) async {
+    calls.add('listDir $sourceId $path $showHidden');
+    if (protectedDirs.contains(path)) {
+      throw PlatformException(code: '-1', message: 'Dossier protégé par Android');
+    }
+    final l = dirs[sourceId]?[path] ?? const <EntryMsg>[];
+    return showHidden ? l : l.where((e) => !e.name.startsWith('.')).toList();
+  }
+
+  @override
+  Future<String> createFolder(String sourceId, String parent, String name) async {
+    calls.add('createFolder $sourceId $parent $name');
+    return parent == '/' ? '/$name' : '$parent/$name';
+  }
+
+  @override
+  Future<String> rename(String sourceId, String path, String newName) async {
+    calls.add('rename $sourceId $path $newName');
+    return '${path.substring(0, path.lastIndexOf('/'))}/$newName';
+  }
+
+  @override
+  Future<void> deleteEntries(String sourceId, List<String> paths) async =>
+      calls.add('delete $sourceId ${paths.join(',')}');
+
+  @override
+  Future<void> openWith(String sourceId, String path) async => calls.add('openWith $sourceId $path');
+
+  @override
+  Future<void> share(String sourceId, List<String> paths) async => calls.add('share $sourceId ${paths.join(',')}');
 }
