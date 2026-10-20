@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="fond" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4F46E5"/>
+      <stop offset="1" stop-color="#9333EA"/>
+    </linearGradient>
+    <linearGradient id="bouclier" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#DDE1FF"/>
+    </linearGradient>
+    <linearGradient id="serrure" gradientUnits="userSpaceOnUse" x1="0" y1="250" x2="0" y2="378">
+      <stop offset="0" stop-color="#4338CA"/>
+      <stop offset="1" stop-color="#6D28D9"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#fond)"/>
+  <circle cx="380" cy="120" r="150" fill="#FFFFFF" opacity="0.08"/>
+  <g transform="translate(0,-26)">
+  <!-- ombre portée -->
+  <path transform="translate(0,14)" opacity="0.22" fill="#1E1B4B"
+        d="M116 176 Q116 156 136 156 L214 156 L242 184 L376 184 Q396 184 396 204 L396 268 C396 358 338 410 256 442 C174 410 116 358 116 268 Z"/>
+  <!-- dossier-bouclier -->
+  <path fill="url(#bouclier)"
+        d="M116 176 Q116 156 136 156 L214 156 L242 184 L376 184 Q396 184 396 204 L396 268 C396 358 338 410 256 442 C174 410 116 358 116 268 Z"/>
+  <!-- rabat du dossier -->
+  <path fill="#C7CCFF" d="M116 206 L396 206 L396 224 L116 224 Z" opacity="0.55"/>
+  <!-- serrure -->
+  <circle cx="256" cy="286" r="36" fill="url(#serrure)"/>
+  <path fill="url(#serrure)" d="M240 306 L272 306 L284 370 Q285 378 277 378 L235 378 Q227 378 228 370 Z"/>
+  </g>
+</svg>

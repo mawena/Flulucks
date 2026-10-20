@@ -228,10 +228,28 @@ dans le même commit que le travail.
       cas hostile « liste d'attributs » ; corrigés, suite rapide 34/34, Pixel 15/15)*
 - [x] Version `v0.4.0`
 
-### Phase 6 — Finitions et robustesse
-- [ ] Plan de la phase 6 écrit
-- [ ] *(explorateur intégré complet, copies avec progression, réglages, verrouillage automatique,
-      débranchement inattendu, performances)*
+### Phase 6 — Portail : nom, logo et gestionnaire de fichiers ([plan](2026-10-20-phase6-portail.md))
+- [x] Plan de la phase 6 écrit *(spec § 11 : nom Portail, logo dossier-bouclier, gestionnaire de fichiers
+      complet avec accès à tous les fichiers)*
+- [ ] T1 — Nom « Portail » et logo
+- [ ] T2 — Sources de fichiers (téléphone, carte SD, disques) et accès au téléphone
+- [ ] T3 — Lister, créer, renommer, supprimer, ouvrir avec, partager
+- [ ] T4 — Copier et déplacer entre stockages
+- [ ] T5 — Recherche
+- [ ] T6 — Vignettes des photos et vidéos
+- [ ] T7 — Tri, affichage et favoris
+- [ ] T8 — Écran d'accueil et Réglages
+- [ ] T9 — Explorateur
+- [ ] T10 — Écran de recherche
+- [ ] *(utilisateur)* T11 — Essais sur le Pixel
+- [ ] T12 — Documentation
+- [ ] Fusion `feature/portail` → `develop`
+- [ ] Version `v0.5.0`
+
+### Phase 7 — Robustesse et performances
+- [ ] Plan de la phase 7 écrit
+- [ ] *(verrouillage automatique, débranchement inattendu, performances du § 5, essai d'ext4 en écriture
+      sur le vrai disque)*
 - [ ] Version `v1.0.0`
 
 ---
