@@ -122,4 +122,19 @@ class FilesTest {
         VolumeManager.eject(volId)
         assertEquals("Volume fermé", refused { Files.list(volId, "/", false) }.message)
     }
+
+    /** Récupéré de feature/portail-save : messages français, jamais le détail d'une exception inattendue. */
+    @Test fun errorMessagesAreFrenchAndNeverLeakDetails() {
+        assertEquals("Disque plein", Files.toFilesException(EngineError(EngineError.FL_ENOSPC), "createDocument").message)
+        assertEquals("Nom non autorisé sur ce disque",
+            Files.toFilesException(EngineError(EngineError.FL_EINVAL), "renameDocument").message)
+        assertEquals("Dossier introuvable",
+            Files.toFilesException(java.io.FileNotFoundException("Dossier introuvable"), "queryDocument").message)
+        for (x in listOf(IllegalStateException("/storage/emulated/0/secret.jpg"), java.io.IOException("/secret"),
+            RuntimeException("secret"))) {
+            val m = Files.toFilesException(x, "queryDocument").message!!
+            assertEquals(Files.MSG_GENERIC, m)
+            assertFalse(m.contains("secret"))
+        }
+    }
 }
