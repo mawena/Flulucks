@@ -259,7 +259,8 @@ dans le même commit que le travail.
 - [x] T5 — Débranchement pendant une écriture : conseil selon le système de fichiers (ext4, FAT/exFAT, NTFS)
 - [x] T6 — Copies : résultat visible sur l'accueil, montré une fois, avec le débit
 - [x] T7 — Copies : nom temporaire pendant l'écriture (« .nom.portail-partiel »), noms longs rendus uniques
-- [ ] Performances du § 5 mesurées sur le Pixel (listage de 1 000 fichiers, copies téléphone ↔ disque)
+- [x] T9 — Performances du § 5 mesurées sur le Pixel, sur image *(listage de 1 000 fichiers : 25 ms disque, 276 ms
+      téléphone ; lecture par le provider : 241 Mo/s ; copies 64 Mio : 118 Mo/s vers le disque, 96 Mo/s retour)*
 - [ ] *(utilisateur)* Essai d'ext4 en écriture sur le vrai disque *(tâche 13 de la phase 3)*
 - [x] T8 — Points mineurs de la relecture de la phase 6 *(nom assaini de 255 octets, barre de copie qui rejoue
       le dernier résultat, « Ouvrir avec » et « Partager » sur le fil principal, vignette gardée après
