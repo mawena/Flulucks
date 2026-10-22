@@ -8,11 +8,11 @@ vrai disque. Avant chaque formatage, vérifiez le nom et la taille affichés dan
 
 ## 1. PC : images montées par le noyau
 
-- [ ] Depuis la racine du dépôt, lancer : `sudo tools/fixtures/essais_phase8_pc.sh`
+- [x] Depuis la racine du dépôt, lancer : `sudo tools/fixtures/essais_phase8_pc.sh`
       Le script formate 10 disques image (sans root), les fait monter et écrire par le noyau, repasse
       l'outil de vérification de chaque système de fichiers, puis supprime les images. Il ne touche à aucun
       vrai disque. Compte rendu : `docs/superpowers/research/2026-10-22-essais-phase8/pc-<date>.txt`.
-- [ ] Attendu à la fin : `10 image(s), 0 échec(s)` puis `## fin : tout est vert`.
+- [x] Attendu à la fin : `10 image(s), 0 échec(s)` puis `## fin : tout est vert`.
 
 ## 2. Pixel : clé USB sacrifiée
 
