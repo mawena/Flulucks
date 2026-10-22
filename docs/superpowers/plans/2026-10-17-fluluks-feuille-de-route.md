@@ -144,9 +144,9 @@ dans le même commit que le travail.
         puis volume gelé en « w » — refus à l'ouverture —, dernier bloc logique, `fsync` réussi après gel,
         éjection après gel, accès hors verrou, nœud d'index vide (0008) ; découpe d'extents à 2 niveaux
         sur disque plein laissée en limite connue ; PC 20/20, JVM 48/48)*
-- [ ] *(utilisateur)* Clé sacrifiée branchable en USB-C (clé USB-C ou adaptateur OTG USB-A → USB-C)
-- [ ] *(utilisateur)* Sauvegarde complète du vrai disque avant toute écriture dessus
-- [ ] T13 — Essais sur le Pixel : clé sacrifiée, puis vrai disque *(non faits pour la 0.2.0 : pas de clé
+- [x] *(utilisateur)* Clé sacrifiée branchable en USB-C (clé USB-C ou adaptateur OTG USB-A → USB-C)
+- [x] *(utilisateur)* Sauvegarde complète du vrai disque avant toute écriture dessus
+- [x] T13 — Essais sur le Pixel : clé sacrifiée, puis vrai disque *(faits le 2026-10-22 avec les essais de la phase 7 ; non faits pour la 0.2.0 : pas de clé
       sacrifiée ni de sauvegarde du vrai disque pour l'instant ; version publiée à la demande de
       l'utilisateur, écriture par défaut, avec la mention « écriture non essayée sur un vrai disque » dans le
       README. Le vrai disque s'ouvre bien en écriture sur le Pixel depuis le correctif du journal de 1 Gio,
@@ -262,11 +262,13 @@ dans le même commit que le travail.
 - [x] T9 — Performances du § 5 mesurées sur le Pixel, sur image *(listage de 1 000 fichiers : 25 ms disque, 276 ms
       téléphone ; lecture par le provider : 241 Mo/s ; copies 64 Mio : 118 Mo/s vers le disque, 96 Mo/s retour)*
 - [x] Retour d'essai du 2026-10-22 : « Coller ici » disparaît une fois la copie lancée (comme après « Couper »)
-- [ ] *(utilisateur)* Essai d'ext4 en écriture sur le vrai disque *(tâche 13 de la phase 3)*
+- [x] *(utilisateur)* T10 — Essais sur le Pixel : ext4 en écriture sur le vrai disque *(tâche 13 de la phase 3 ;
+      `e2fsck -fn` propre)*, verrouillage automatique, débranchement d'une clé pendant une copie, divers
 - [x] T8 — Points mineurs de la relecture de la phase 6 *(nom assaini de 255 octets, barre de copie qui rejoue
       le dernier résultat, « Ouvrir avec » et « Partager » sur le fil principal, vignette gardée après
       l'éjection, favoris d'un disque chiffré en clair, clé USB vue comme carte SD, fichier partiel sous son
       vrai nom, détails de l'explorateur et de la recherche)*
+- [x] T11 — Documentation : README (robustesse, mesures, limite levée)
 - [ ] Version `v1.0.0`
 
 ### Phase 8 — Formatage des disques USB ([plan](2026-10-22-phase8-formatage.md))
