@@ -381,6 +381,7 @@ static void test_fermeture_fichier_pendant_lectures(void) { lecteurs(3); }
 
 typedef struct {
   int64_t disk, rc;
+  int idx; /* partition (tache_monter_idx) */
 } tache;
 
 /* Rendez-vous avec le crochet de fj_mount : le fil de montage s'arrête juste avant d'enregistrer son
@@ -451,7 +452,7 @@ static void test_handles_ebusy_fermeture(void) {
   int64_t d, v1 = monter_plain(&d);
   TT_ASSERT(v1 > 0);
   rv_atteint = rv_libere = 0;
-  tache monte = {d, 0}, ferme = {d, 0};
+  tache monte = {d, 0, 0}, ferme = {d, 0, 0};
   pthread_t ta, tb;
   fj_debug_set_mount_hook(crochet_montage, NULL);
   int a_ok = pthread_create(&ta, NULL, tache_monter, &monte) == 0;
@@ -845,6 +846,44 @@ static void test_format_par_jni(void) {
   unlink(img);
 }
 
+static void *tache_monter_idx(void *arg) {
+  tache *t = arg;
+  t->rc = fj_mount(t->disk, (uint32_t)t->idx, NULL, 0, true);
+  return NULL;
+}
+
+/* Un montage commencé avant le formatage (arrêté par le crochet après l'ouverture du volume, avant son
+ * enregistrement) : fj_format le voit et refuse, rien n'est écrit sous le volume en cours d'ouverture. */
+static void test_format_pendant_montage(void) {
+  char img[4200], contenu[32];
+  image_vierge(img, sizeof img, "format-montage.img");
+  int64_t d = fj_open_image(img, false);
+  TT_ASSERT(d > 0);
+  TT_ASSERT_EQ(fj_format(d, "{\"fs\":\"exfat\"}", NULL, 0, NULL, NULL), FL_OK);
+  int idx = partition_unique(d, contenu, sizeof contenu);
+  TT_ASSERT(idx >= 0);
+  rv_atteint = rv_libere = 0;
+  tache monte = {d, 0, idx};
+  pthread_t ta;
+  fj_debug_set_mount_hook(crochet_montage, NULL);
+  int a_ok = pthread_create(&ta, NULL, tache_monter_idx, &monte) == 0;
+  int ok_a = a_ok && attendre_crochet();
+  int fmt = ok_a ? fj_format(d, "{\"fs\":\"ntfs\"}", NULL, 0, NULL, NULL) : -9999;
+  liberer_montage();
+  if (a_ok) pthread_join(ta, NULL);
+  fj_debug_set_mount_hook(NULL, NULL);
+  TT_ASSERT(ok_a);
+  TT_ASSERT_EQ(fmt, FL_EBUSY);
+  TT_ASSERT(monte.rc > 0);
+  TT_ASSERT_EQ(partition_unique(d, contenu, sizeof contenu), idx);
+  TT_ASSERT_STR_EQ(contenu, "exFAT");
+  if (monte.rc > 0) TT_ASSERT_EQ(fj_unmount(monte.rc, false), FL_OK);
+  TT_ASSERT_EQ(fj_format(d, "{\"fs\":\"ntfs\"}", NULL, 0, NULL, NULL), FL_OK); /* plus rien en cours */
+  TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
+  TT_ASSERT_EQ(fj_debug_used(), 0);
+  unlink(img);
+}
+
 int main(void) {
   srand((unsigned)time(NULL));
   TT_RUN(test_scan_gpt_luks2);
@@ -866,6 +905,7 @@ int main(void) {
   TT_RUN(test_handles_ntfs);
   TT_RUN(test_handles_luks2_ntfs);
   TT_RUN(test_format_par_jni);
+  TT_RUN(test_format_pendant_montage);
   if (!tt_failures && g_saute) return 77; /* SKIP_RETURN_CODE de CTest */
   TT_MAIN_END();
 }

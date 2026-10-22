@@ -220,6 +220,7 @@ typedef struct {
   _Atomic uint64_t flushes;
   fl_bdev *dev;          /* cache au-dessus de counted : seul utilisé */
   bool formatting;       /* fj_format en cours (sous g_mu) : fj_mount refusé */
+  unsigned mounting;     /* fj_mount en cours (sous g_mu) : fj_format refusé */
 } jdisk;
 
 static int counted_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
@@ -487,6 +488,7 @@ int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t pas
   if (!d) return FL_EINVAL;
   pthread_mutex_lock(&g_mu);
   bool formatting = d->formatting;
+  if (!formatting) d->mounting++; /* jusqu'à l'enregistrement du volume, fj_format le voit */
   pthread_mutex_unlock(&g_mu);
   int64_t h;
   jvol *v = formatting ? NULL : calloc(1, sizeof *v);
@@ -505,6 +507,11 @@ int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t pas
       h = tab_put(T_VOL, disk, v);
       if (h < 0) vol_free(v);
     }
+  }
+  if (!formatting) {
+    pthread_mutex_lock(&g_mu);
+    d->mounting--;
+    pthread_mutex_unlock(&g_mu);
   }
   tab_release(disk, T_DISK);
   return h;
@@ -807,7 +814,7 @@ int fj_format(int64_t disk, const char *json, const void *pass, size_t passlen, 
   if (!d) return FL_EINVAL;
   if (rc == FL_OK) {
     pthread_mutex_lock(&g_mu);
-    if (d->formatting || live_children(disk, T_VOL) > 0) rc = FL_EBUSY;
+    if (d->formatting || d->mounting > 0 || live_children(disk, T_VOL) > 0) rc = FL_EBUSY;
     else d->formatting = true; /* plus aucun fj_mount sur ce disque jusqu'à la fin */
     pthread_mutex_unlock(&g_mu);
   }

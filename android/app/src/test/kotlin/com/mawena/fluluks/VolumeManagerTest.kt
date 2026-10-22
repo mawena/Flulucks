@@ -39,6 +39,7 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
     var lastFormatOpts: org.json.JSONObject? = null
     var lastFormatPass: ByteArray? = null
     var progressSeen: Int? = null
+    var duringFormat: (() -> Unit)? = null
     private var next = 100L
 
     override fun version() = "fake"
@@ -55,6 +56,7 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
         lastFormatPass = pass
         progress?.onProgress(50)
         progressSeen = VolumeManager.formatting.value
+        duringFormat?.invoke()
         progress?.onProgress(100)
         if (formatResult == 0) formatted = true
         return formatResult
@@ -590,5 +592,27 @@ class VolumeManagerTest {
         val e = formatErr(FormatOptions("btrfs", false, ""))
         assertEquals(EngineError.FL_EINVAL, e.code)
         assertEquals(0, engine.formatCalls)
+    }
+
+    /** Pendant le moteur (hors exécuteur), un montage du même disque est refusé avant le moteur, et un second
+     *  formatage refusé ne remet pas l'état du premier à zéro. */
+    @Test fun mountAndSecondFormatRefusedDuringFormat() = runBlocking {
+        var mountErr: EngineError? = null
+        var formatErr2: EngineError? = null
+        var stateAfter: Int? = null
+        engine.duringFormat = {
+            runBlocking {
+                try { VolumeManager.mountPlain(disk, 2) } catch (e: EngineError) { mountErr = e }
+                try { VolumeManager.format(disk, FormatOptions("ntfs", false, ""), null) } catch (e: EngineError) { formatErr2 = e }
+            }
+            stateAfter = VolumeManager.formatting.value
+        }
+        VolumeManager.format(disk, FormatOptions("exfat", false, ""), null)
+        assertEquals(VolumeManager.MSG_FORMAT_BUSY, mountErr?.message)
+        assertEquals(0, engine.mountCalls)
+        assertEquals(VolumeManager.MSG_FORMAT_BUSY, formatErr2?.message)
+        assertEquals(1, engine.formatCalls)
+        assertEquals(50, stateAfter)
+        assertEquals(null, VolumeManager.formatting.value)
     }
 }

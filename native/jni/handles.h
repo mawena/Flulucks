@@ -78,9 +78,10 @@ int fj_sync(int64_t vol);
 
 /* Formate tout le disque (phase 8). json : {"fs": "fat32"|"exfat"|"ext4"|"ntfs", "encrypted": bool,
  * "label": texte, "kdf_mem_kib": Kio d'Argon2 (1 Gio par défaut), "uid"/"gid": propriétaire de la racine
- * ext4 (1000 par défaut)}. FL_EBUSY si un volume du disque est ouvert (et, pendant le formatage, fj_mount
- * sur ce disque rend FL_EBUSY), FL_EROFS si le disque est en lecture seule, FL_EINVAL pour des options
- * invalides ; sinon le code de fl_format. progress (facultatif) : pourcentage croissant, depuis ce fil. */
+ * ext4 (1000 par défaut)}. FL_EBUSY si un volume du disque est ouvert ou en cours d'ouverture (et,
+ * pendant le formatage, fj_mount sur ce disque rend FL_EBUSY), FL_EROFS si le disque est en lecture seule,
+ * FL_EINVAL pour des options invalides ; sinon le code de fl_format. progress (facultatif) : pourcentage
+ * croissant, depuis ce fil. */
 int fj_format(int64_t disk, const char *json, const void *pass, size_t passlen, void (*progress)(int pct, void *arg),
               void *arg);
 

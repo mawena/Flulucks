@@ -173,6 +173,8 @@ object VolumeManager {
     private val _formatting = MutableStateFlow<Int?>(null)
     /** Pourcentage du formatage en cours, null sinon. */
     val formatting: StateFlow<Int?> = _formatting.asStateFlow()
+    /** Disque en cours de formatage (exécuteur) : ses montages sont refusés jusqu'à la fin. */
+    private var formattingDisk: String? = null
 
     /** Écritures non encore synchronisées, par volume ; génération pour ne pas effacer une écriture
      * arrivée pendant la synchronisation. */
@@ -279,7 +281,7 @@ object VolumeManager {
         this.detachWarner = detachWarner
         pendingSync.values.forEach { it() }
         pendingSync.clear(); writeGen.clear(); syncedGen.clear()
-        _ejecting.value = false; _ejectError.value = null; _formatting.value = null
+        _ejecting.value = false; _ejectError.value = null; _formatting.value = null; formattingDisk = null
         diskEntries.clear(); mounts.clear(); mountOrder.clear()
         counter.set(0); imageCounter.set(0); sessionToken = newSessionToken()
         _disks.value = emptyList(); _volumes.value = emptyList()
@@ -432,6 +434,7 @@ object VolumeManager {
 
     private fun mountLocked(diskId: String, partIndex: Int, pass: ByteArray?, writable: Boolean): VolumeState {
         try {
+            if (formattingDisk == diskId) throw EngineError(EngineError.FL_EBUSY, MSG_FORMAT_BUSY)
             val existing = mounts.values.firstOrNull { it.state.diskId == diskId && it.state.partIndex == partIndex }
             if (existing != null) {
                 // Écriture demandée sur un volume ouvert en lecture seule par choix, ou lecture seule demandée
@@ -486,6 +489,7 @@ object VolumeManager {
      * [MSG_FORMAT_DETACHED]). [pass] est mis à zéro sur tous les chemins.
      */
     suspend fun format(diskId: String, o: FormatOptions, pass: ByteArray?) {
+        var mine = false // ce formatage-ci a pris l'état : lui seul le rend
         try {
             if (o.fs !in FORMAT_FS || (o.encrypted && (pass == null || pass.isEmpty()))) {
                 throw EngineError(EngineError.FL_EINVAL)
@@ -505,6 +509,8 @@ object VolumeManager {
                 if (entry != null && entry.handle <= 0 && entry.state.error == null) reopen(entry) // éjecté
                 if (entry == null || entry.handle <= 0) throw EngineError(EngineError.FL_ENODEV)
                 _formatting.value = 0
+                formattingDisk = diskId
+                mine = true
                 entry.handle
             }
             val opts = org.json.JSONObject()
@@ -516,7 +522,10 @@ object VolumeManager {
                     engine.format(handle, opts, pass) { pct -> _formatting.value = pct }
                 }
             } finally {
-                withContext(NonCancellable + dispatcher) { rescan(diskId) }
+                withContext(NonCancellable + dispatcher) {
+                    formattingDisk = null
+                    rescan(diskId)
+                }
             }
             if (rc < 0) {
                 throw when (rc) {
@@ -529,7 +538,7 @@ object VolumeManager {
             }
         } finally {
             pass?.fill(0) // le natif a déjà mis sa copie à zéro ; la nôtre aussi
-            _formatting.value = null
+            if (mine) _formatting.value = null
         }
     }
 
