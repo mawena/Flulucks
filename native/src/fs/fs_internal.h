@@ -61,6 +61,8 @@ typedef int (*fl_fs_mount_fn)(fl_bdev *dev, bool want_rw, fl_fs **out);
 int fl_ext4_mount(fl_bdev *dev, bool want_rw, fl_fs **out);
 /* FAT12, FAT16, FAT32 et exFAT par FatFs (fat_glue.c, phase 4). */
 int fl_fat_mount(fl_bdev *dev, bool want_rw, fl_fs **out);
+/* Formatage FAT32 ou exFAT de tout `dev` (phase 8, fat_glue.c). */
+int fl_fat_mkfs(fl_bdev *dev, bool exfat, const char *label);
 /* NTFS par libntfs-3g (ntfs_glue.c, phase 5). */
 int fl_ntfs_mount(fl_bdev *dev, bool want_rw, fl_fs **out);
 

@@ -18,6 +18,11 @@ typedef enum { FL_FMT_FAT32 = 1, FL_FMT_EXFAT, FL_FMT_EXT4, FL_FMT_NTFS } fl_fmt
  * effacés (anciens GPT). Rend la place de la partition, en secteurs de `d`. */
 int fl_part_write_single(fl_bdev *d, fl_fmt_fs fs, bool encrypted, uint64_t *first_lba, uint64_t *count);
 
+/* FAT32 ou exFAT (FatFs) sur tout `part`, sans table. Étiquette : 11 caractères au plus, ASCII seulement
+ * en FAT32 (mise en majuscules) ; sinon FL_EINVAL avant toute écriture. FL_ENOSPC si `part` est trop petit
+ * (FAT32 : 65 525 clusters au moins). */
+int fl_mkfs_fat(fl_bdev *part, bool exfat, const char *label);
+
 /* `len` octets d'aléa de /dev/urandom ; FL_EIO si la lecture échoue (jamais d'aléa faible). */
 int fl_random(void *buf, size_t len);
 

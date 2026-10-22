@@ -916,3 +916,77 @@ int fl_fat_mount(fl_bdev *dev, bool want_rw, fl_fs **out) {
   *out = fs;
   return FL_OK;
 }
+
+/* BS_VolLab (octet 71, 11 caractères complétés d'espaces) du secteur de démarrage FAT32 et de sa copie
+ * (BPB_BkBootSec, octet 50). */
+static int fat32_boot_label(fl_bdev *dev, const char *label) {
+  uint8_t *s = malloc(dev->sector_size);
+  if (!s) return FL_ENOMEM;
+  int rc = fl_bdev_read(dev, 0, 1, s);
+  uint32_t bk = rc == FL_OK ? le16(s + 50) : 0;
+  char lab[11];
+  memset(lab, ' ', sizeof lab);
+  memcpy(lab, label, strnlen(label, sizeof lab));
+  if (rc == FL_OK) {
+    memcpy(s + 71, lab, sizeof lab);
+    rc = fl_bdev_write(dev, 0, 1, s);
+  }
+  if (rc == FL_OK && bk > 0 && bk < 32) {
+    rc = fl_bdev_read(dev, bk, 1, s);
+    if (rc == FL_OK) {
+      memcpy(s + 71, lab, sizeof lab);
+      rc = fl_bdev_write(dev, bk, 1, s);
+    }
+  }
+  free(s);
+  return rc;
+}
+
+/* Formatage (phase 8) : `dev` est la partition entière (FM_SFD : pas de table de partitions écrite par
+ * FatFs), sur un emplacement libre et sous g_fat_lock comme un montage. Étiquette déjà validée par
+ * l'appelant. FL_ENOSPC si FatFs juge le volume trop petit pour le format demandé. */
+int fl_fat_mkfs(fl_bdev *dev, bool exfat, const char *label) {
+  if (dev->read_only) return FL_EROFS;
+  enum { WORK = 1 << 20 };
+  void *work = malloc(WORK);
+  if (!work) return FL_ENOMEM;
+  pthread_mutex_lock(&g_fat_lock);
+  int slot = -1;
+  for (int i = 0; i < FF_VOLUMES && slot < 0; i++)
+    if (!g_slot[i]) slot = i;
+  fat_disk *disk = NULL;
+  int rc = slot < 0 ? FL_EBUSY : fat_disk_attach((uint8_t)slot, dev, dev->sector_size, true, &disk);
+  if (rc == FL_OK) {
+    g_slot[slot] = true;
+    char drv[16];
+    snprintf(drv, sizeof drv, "%d:", slot);
+    MKFS_PARM opt = {
+        .fmt = (BYTE)((exfat ? FM_EXFAT : FM_FAT32) | FM_SFD),
+        .n_fat = (BYTE)(exfat ? 1 : 2), /* deux FAT en FAT32, comme Windows */
+        .align = (UINT)((1u << 20) / dev->sector_size), /* données alignées sur 1 Mio */
+    };
+    FRESULT r = f_mkfs(drv, &opt, work, WORK);
+    if (r == FR_OK && label && *label) {
+      FATFS ff;
+      r = f_mount(&ff, drv, 1);
+      if (r == FR_OK) {
+        char lab[128];
+        snprintf(lab, sizeof lab, "%s%s", drv, label);
+        r = f_setlabel(lab);
+        f_unmount(drv);
+      }
+    }
+    rc = r == FR_OK ? FL_OK : r == FR_MKFS_ABORTED ? FL_ENOSPC : fr_err(r);
+    int d = fat_disk_drain(disk);
+    /* FAT32 : f_setlabel n'écrit que l'entrée du dossier racine ; fsck.fat et Windows lisent aussi
+     * BS_VolLab du secteur de démarrage et de sa copie de secours. */
+    if (rc == FL_OK && d == FL_OK && !exfat && label && *label) d = fat32_boot_label(dev, label);
+    if (rc == FL_OK && d != FL_OK) rc = d;
+    if (rc == FL_OK) rc = fl_bdev_flush(dev);
+    fat_disk_detach(disk);
+    g_slot[slot] = false;
+  }
+  pthread_mutex_unlock(&g_fat_lock);
+  free(work);
+  return rc;
+}

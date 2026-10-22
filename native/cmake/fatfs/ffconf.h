@@ -1,7 +1,7 @@
 /* Configuration de FatFs R0.16 pour FluLuks (phase 4). Copie du ffconf.h d'amont : seules les valeurs
  * suivantes diffèrent (voir docs/superpowers/plans/2026-10-19-phase4-fat-exfat.md, Global Constraints) :
  * FF_USE_FASTSEEK 1, FF_USE_LABEL 1, FF_CODE_PAGE 437, FF_USE_LFN 3, FF_LFN_UNICODE 2, FF_VOLUMES 8,
- * FF_MAX_SS 4096, FF_LBA64 1, FF_FS_EXFAT 1, FF_FS_NOFSINFO 3. */
+ * FF_MAX_SS 4096, FF_LBA64 1, FF_FS_EXFAT 1, FF_FS_NOFSINFO 3 ; FF_USE_MKFS 1 (phase 8, formatage). */
 /*---------------------------------------------------------------------------/
 /  Configurations of FatFs Module
 /---------------------------------------------------------------------------*/
@@ -34,7 +34,7 @@
 /  f_findnext(). (0:Disable, 1:Enable 2:Enable with matching altname[] too) */
 
 
-#define FF_USE_MKFS		0
+#define FF_USE_MKFS		1
 /* This option switches f_mkfs(). (0:Disable or 1:Enable) */
 
 
