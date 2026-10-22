@@ -252,14 +252,25 @@ dans le même commit que le travail.
 
 ### Phase 7 — Robustesse et performances
 - [ ] Plan de la phase 7 écrit
-- [ ] *(verrouillage automatique, débranchement inattendu, performances du § 5, essai d'ext4 en écriture
-      sur le vrai disque)*
+- [ ] Verrouillage automatique après X minutes d'inactivité (réglage désactivé par défaut, jamais pendant une copie)
+- [ ] Débranchement inattendu : conseil selon le système de fichiers, copies interrompues signalées
+- [ ] Performances du § 5 mesurées sur le Pixel (listage de 1 000 fichiers, copies téléphone ↔ disque)
+- [ ] *(utilisateur)* Essai d'ext4 en écriture sur le vrai disque *(tâche 13 de la phase 3)*
+- [ ] Points mineurs de la relecture de la phase 6 *(nom assaini de 255 octets, barre de copie qui rejoue
+      le dernier résultat, « Ouvrir avec » et « Partager » sur le fil principal, vignette gardée après
+      l'éjection, favoris d'un disque chiffré en clair, clé USB vue comme carte SD, fichier partiel sous son
+      vrai nom, détails de l'explorateur et de la recherche)*
 - [ ] Version `v1.0.0`
 
 ### Phase 8 — Lecteurs intégrés et stockages distants
 - [ ] Plan de la phase 8 écrit
-- [ ] *(visionneuse d'images, lecteur de musique, éditeur de texte, lecteur vidéo, dossiers distants FTP
-      puis SFTP)*
+      *(demande du 2026-10-20, J.1 ; plan écrit à la fin de la phase 7)*
+- [ ] Visionneuse d'images (glisser d'une photo à l'autre, zoom)
+- [ ] Lecteur de musique (lecture en arrière-plan, file d'attente du dossier)
+- [ ] Éditeur de fichiers texte (ouvrir, modifier, enregistrer, UTF-8)
+- [ ] Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)
+- [ ] Dossiers distants par FTP, comme source du gestionnaire (parcourir, copier, déplacer, ouvrir)
+- [ ] Dossiers distants par SFTP
 - [ ] Version `v1.1.0`
 
 ---
