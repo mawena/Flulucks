@@ -54,6 +54,7 @@ set(FL_SOURCES
   src/format/random.c
   src/format/mkfs_fat.c
   src/format/mkfs_ext4.c
+  src/format/mkfs_ntfs.c
 )
 # Transport usbdevfs : Linux et Android seulement.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR ANDROID)
@@ -63,7 +64,7 @@ endif()
 add_library(fluluks STATIC ${FL_SOURCES})
 target_include_directories(fluluks PUBLIC include PRIVATE src)
 target_compile_options(fluluks PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 fl_fatfs fl_ntfs3g Threads::Threads)
+target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 fl_fatfs fl_mkntfs fl_ntfs3g Threads::Threads)
 if(ANDROID)
   target_link_libraries(fluluks PUBLIC log) # fl_ext4_policy_log (logcat)
 endif()
@@ -148,6 +149,8 @@ if(FL_TESTS)
   target_link_libraries(test_format_fat PRIVATE fl_testsupport)
   fl_add_test(test_format_ext4)
   target_link_libraries(test_format_ext4 PRIVATE fl_testsupport)
+  fl_add_test(test_format_ntfs)
+  target_link_libraries(test_format_ntfs PRIVATE fl_testsupport)
   fl_add_test(test_cache)
   fl_add_test(test_crc32c)
   add_test(NAME test_crc32c_debit COMMAND test_crc32c debit)

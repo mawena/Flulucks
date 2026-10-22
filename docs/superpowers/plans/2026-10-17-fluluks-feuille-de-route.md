@@ -274,7 +274,7 @@ dans le même commit que le travail.
 - [x] T1 — Table de partitions à une partition (MBR jusqu'à 2 Tio, GPT au-delà) *(jugée par sfdisk et sgdisk)*
 - [x] T2 — FAT32 et exFAT *(f_mkfs de FatFs ; fsck.fat et fsck.exfat propres, étiquette dans le secteur de démarrage)*
 - [x] T3 — ext4 avec journal *(ext4_mkfs de lwext4 corrigé par 0011 ; e2fsck propre avant et après écriture)*
-- [ ] T4 — NTFS
+- [x] T4 — NTFS *(mkntfs de ntfs-3g appelé comme bibliothèque, correctif 0007 ; ntfsfix et ntfsjuge propres avant et après écriture)*
 - [ ] T5 — LUKS2 et formatage complet d'un disque
 - [ ] T6 — Formatage depuis Kotlin
 - [ ] T7 — Écran de formatage

@@ -27,6 +27,12 @@ int fl_mkfs_fat(fl_bdev *part, bool exfat, const char *label);
  * FL_EINVAL avant toute écriture. Le dossier racine appartient à root_uid:root_gid. FL_ENOSPC sous 8 Mio. */
 int fl_mkfs_ext4(fl_bdev *part, const char *label, uint32_t root_uid, uint32_t root_gid);
 
+/* NTFS 3.1 (mkntfs de ntfs-3g, formatage rapide) sur tout `part`, sans table. Étiquette : 32 caractères
+ * (unités UTF-16) au plus, UTF-8 valide sans caractère de contrôle, sinon FL_EINVAL avant toute écriture.
+ * `hidden_sectors` : début de la partition sur le disque, en secteurs (champ du secteur de démarrage,
+ * 32 bits ; 0 dans un volume chiffré). FL_ENOSPC sous 8 Mio. */
+int fl_mkfs_ntfs(fl_bdev *part, const char *label, uint64_t hidden_sectors);
+
 /* `len` octets d'aléa de /dev/urandom ; FL_EIO si la lecture échoue (jamais d'aléa faible). */
 int fl_random(void *buf, size_t len);
 

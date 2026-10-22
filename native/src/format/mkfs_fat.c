@@ -2,10 +2,10 @@
 
 #include "fluluks/error.h"
 #include "fluluks/format.h"
+#include "format/format_internal.h"
 #include "fs/fs_internal.h"
 
-/* Nombre de caractères (unités UTF-16) d'une chaîne UTF-8 valide sans caractère de contrôle ; -1 sinon. */
-static int utf16_units(const char *s) {
+int fl_label_utf16_units(const char *s) {
   int n = 0;
   const unsigned char *p = (const unsigned char *)s;
   while (*p) {
@@ -32,7 +32,7 @@ int fl_mkfs_fat(fl_bdev *part, bool exfat, const char *label) {
   if (!label) label = "";
   char up[12];
   if (exfat) {
-    int n = utf16_units(label);
+    int n = fl_label_utf16_units(label);
     if (n < 0 || n > 11) return FL_EINVAL;
   } else {
     /* FAT32 : 11 caractères ASCII imprimables, sans ceux que FAT interdit dans une étiquette */

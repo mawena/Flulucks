@@ -450,7 +450,10 @@ fin de chaîne. Correctif : au plus `n_fatent` clusters parcourus, sinon `FR_INT
   `f20e36ee68074b845e3629e6bced4706ad053804cbaf062fbae60738f854170c`. Licence GPL version 2 ou ultérieure
   (`native/third_party/ntfs-3g/COPYING`) : l'application qui la lie est soumise à la GPL.
 - Copiés tels quels dans `native/third_party/ntfs-3g/` : `libntfs-3g/*.c` sauf `unix_io.c` et `win32_io.c`,
-  `include/ntfs-3g/*.h`, `COPYING`, `AUTHORS`, `CREDITS`, `README`. La configuration est
+  `include/ntfs-3g/*.h`, `COPYING`, `AUTHORS`, `CREDITS`, `README` ; pour le formatage (phase 8), de la
+  même archive (SHA-256 vérifié le 2026-10-22) : `ntfsprogs/mkntfs.c`, `attrdef.c`/`.h`, `boot.c`/`.h`,
+  `sd.c`/`.h`, `utils.c`/`.h`, compilés à part (cible `fl_mkntfs`, `FL_MKNTFS`, `HAVE_GETOPT_H`,
+  `HAVE_LIBGEN_H`). La configuration est
   `native/cmake/ntfs-3g/config.h` (`NO_NTFS_DEVICE_DEFAULT_IO_OPS`, `HAVE_CLOCK_GETTIME`,
   `MAJOR_IN_SYSMACROS`, ni ACL POSIX, ni xattr, ni EFS) ; l'accès disque est `native/src/fs/ntfs_dev.c`.
 - Compilée avec `-w` (nos sources gardent `-Wall -Wextra -Werror`), en gnu11 avec `_GNU_SOURCE` et
@@ -492,6 +495,19 @@ disque illisible jusqu'à un chkdsk : libntfs-3g refusait tout montage. En lectu
 
 Quand la libération des clusters échoue (runlist hors du volume sur un disque hostile), la runlist
 décompressée n'était pas libérée. Trouvé par ASan dans `test_ntfs_hostile`. S'applique après 0004.
+
+### 7. mkntfs appelé comme bibliothèque (0007, phase 8)
+
+Avec `FL_MKNTFS`, le `main` de `mkntfs.c` devient `fl_mkntfs(dev, sector_size, num_sectors, part_start, label,
+rnd, &dev_taken)` : formatage rapide (`-Q -F`, 255 têtes, 63 secteurs par piste, secteurs cachés = début de
+la partition) sur le `struct ntfs_device` de `ntfs_dev.c`, sans ligne de commande ni opérations de
+périphérique par défaut (le `#error` correspondant est levé). Le numéro de série et le GUID du volume
+viennent de l'aléa de l'appelant (`/dev/urandom`) et non de `random()` initialisé par l'heure : deux
+formatages dans la même seconde avaient le même numéro. Sans condition, `mkntfs_cleanup` libère
+`g_upcaseinfo` (fuite vue par ASan) et remet `g_allocation` à `NULL` (liste libérée puis relue par un second
+formatage dans le même processus : use-after-free vu par ASan). Appelé par `fl_ntfs_mkfs`
+(`native/src/fs/ntfs_glue.c`), sous le verrou global ; jugé par `test_format_ntfs` (`ntfsfix -n`,
+`ntfsjuge.py check`, `ntfslabel`).
 
 ## Protections côté FluLuks pour libntfs-3g (sans correctif)
 
