@@ -61,6 +61,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
 
   @override
   void dispose() {
+    _thumbs.dispose();
     state.removeListener(_onState);
     super.dispose();
   }

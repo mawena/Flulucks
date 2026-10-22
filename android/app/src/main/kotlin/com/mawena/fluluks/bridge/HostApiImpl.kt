@@ -3,6 +3,9 @@ package com.mawena.fluluks.bridge
 import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
+import android.os.Build
+import android.os.storage.StorageManager
+import android.os.storage.StorageVolume
 import android.provider.DocumentsContract
 import com.mawena.fluluks.engine.EngineError
 import com.mawena.fluluks.engine.FileType
@@ -12,17 +15,18 @@ import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.FilesException
 import com.mawena.fluluks.files.Search
 import com.mawena.fluluks.files.SharedPrefStore
-import com.mawena.fluluks.files.ViewPrefs
-import com.mawena.fluluks.files.ViewSettings
 import com.mawena.fluluks.files.Sources
 import com.mawena.fluluks.files.Thumbnails
 import com.mawena.fluluks.files.TransferState
 import com.mawena.fluluks.files.Transfers
+import com.mawena.fluluks.files.ViewPrefs
+import com.mawena.fluluks.files.ViewSettings
 import com.mawena.fluluks.volumes.DiskState
 import com.mawena.fluluks.volumes.VolumeManager
 import com.mawena.fluluks.volumes.VolumeState
 import io.flutter.plugin.common.BinaryMessenger
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -56,11 +60,34 @@ class HostApiImpl(
         scope.launch {
             Transfers.state.collect { t -> events.onTransferChanged(t?.let(::transferMsg)) { /* réponse ignorée */ } }
         }
+        if (Build.VERSION.SDK_INT >= 30) {
+            context.getSystemService(StorageManager::class.java)
+                .registerStorageVolumeCallback(context.mainExecutor, storageCallback as StorageManager.StorageVolumeCallback)
+        }
     }
 
     fun detach(messenger: BinaryMessenger) {
         FluLuksHostApi.setUp(messenger, null)
+        if (Build.VERSION.SDK_INT >= 30) {
+            context.getSystemService(StorageManager::class.java)
+                .unregisterStorageVolumeCallback(storageCallback as StorageManager.StorageVolumeCallback)
+        }
         scope.cancel()
+    }
+
+    /**
+     * Carte SD insérée ou retirée : l'état des disques est renvoyé tel quel, Flutter relit alors les
+     * stockages (retour à l'accueil si la carte affichée a disparu). Any : la classe n'existe qu'en API 30.
+     */
+    private val storageCallback: Any? = if (Build.VERSION.SDK_INT >= 30) {
+        object : StorageManager.StorageVolumeCallback() {
+            override fun onStateChanged(volume: StorageVolume) {
+                val (d, v) = toMsgs(VolumeManager.disks.value, VolumeManager.volumes.value)
+                events.onStateChanged(d, v) { /* réponse ignorée */ }
+            }
+        }
+    } else {
+        null
     }
 
     override fun listDisks(): List<DiskMsg> = toMsgs(VolumeManager.disks.value, VolumeManager.volumes.value).first
@@ -200,7 +227,10 @@ class HostApiImpl(
     override fun cancelSearch() = Search.cancel()
 
     override fun thumbnail(sourceId: String, path: String, sizePx: Long, callback: (Result<ByteArray?>) -> Unit) =
-        io(callback) { Thumbnails.get(sourceId, path, sizePx.toInt()) }
+        io(callback, thumbnailDispatcher) { Thumbnails.get(sourceId, path, sizePx.toInt()) }
+
+    /** Vignettes à part : un défilement rapide n'occupe jamais les fils de listDir, search, etc. */
+    private val thumbnailDispatcher = Dispatchers.IO.limitedParallelism(Thumbnails.PARALLEL)
 
     private val viewPrefs by lazy { ViewPrefs(SharedPrefStore(context)) }
 
@@ -219,10 +249,10 @@ class HostApiImpl(
     override fun removeFavorite(key: String, path: String) = guarded { viewPrefs.remove(key, path) }
 
     /** Travail du gestionnaire de fichiers hors du fil principal ; réponse sur le fil principal. */
-    private fun <T> io(callback: (Result<T>) -> Unit, block: () -> T) {
+    private fun <T> io(callback: (Result<T>) -> Unit, dispatcher: CoroutineDispatcher = Dispatchers.IO, block: () -> T) {
         scope.launch {
             val result = try {
-                Result.success(withContext(Dispatchers.IO) { block() })
+                Result.success(withContext(dispatcher) { block() })
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Throwable) {
