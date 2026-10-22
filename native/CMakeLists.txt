@@ -53,6 +53,7 @@ set(FL_SOURCES
   src/format/part_write.c
   src/format/random.c
   src/format/mkfs_fat.c
+  src/format/mkfs_ext4.c
 )
 # Transport usbdevfs : Linux et Android seulement.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR ANDROID)
@@ -145,6 +146,8 @@ if(FL_TESTS)
   target_link_libraries(test_format_part PRIVATE fl_testsupport)
   fl_add_test(test_format_fat)
   target_link_libraries(test_format_fat PRIVATE fl_testsupport)
+  fl_add_test(test_format_ext4)
+  target_link_libraries(test_format_ext4 PRIVATE fl_testsupport)
   fl_add_test(test_cache)
   fl_add_test(test_crc32c)
   add_test(NAME test_crc32c_debit COMMAND test_crc32c debit)

@@ -23,6 +23,10 @@ int fl_part_write_single(fl_bdev *d, fl_fmt_fs fs, bool encrypted, uint64_t *fir
  * (FAT32 : 65 525 clusters au moins). */
 int fl_mkfs_fat(fl_bdev *part, bool exfat, const char *label);
 
+/* ext4 avec journal (lwext4), blocs de 4 Kio, sur tout `part`. Étiquette : 16 octets UTF-8 au plus, sinon
+ * FL_EINVAL avant toute écriture. Le dossier racine appartient à root_uid:root_gid. FL_ENOSPC sous 8 Mio. */
+int fl_mkfs_ext4(fl_bdev *part, const char *label, uint32_t root_uid, uint32_t root_gid);
+
 /* `len` octets d'aléa de /dev/urandom ; FL_EIO si la lecture échoue (jamais d'aléa faible). */
 int fl_random(void *buf, size_t len);
 

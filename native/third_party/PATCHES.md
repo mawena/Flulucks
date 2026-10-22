@@ -344,6 +344,22 @@ rejeu du journal est nécessaire), `test_politique_corruption_en_ecriture` (raci
 Test : `test_politique_suppression_gros_creux` (20 Mio de données, 1 octet à 1 Tio, suppression en au
 plus 64 vidages de cache — 10 mesurés —, `e2fsck` propre).
 
+### 17. Formatage : `ext4_mkfs` (0011, phase 8)
+
+Portail formate en ext4 avec `ext4_mkfs` (`native/src/fs/ext4_glue.c`, `fl_ext4_mkfs`). Trois défauts
+d'amont, tous vus par `e2fsck -fn` ou AddressSanitizer :
+- **Dernier groupe compté entier** : `write_bgroups` comptait `blocks_per_group` blocs libres pour chaque
+  groupe, même le dernier, plus court (ou l'unique groupe d'un volume plus petit qu'un groupe) : les
+  compteurs de blocs libres du groupe et du superbloc dépassaient la taille du volume (« Free blocks count
+  wrong »). Le dernier groupe est maintenant compté à sa vraie taille.
+- **`csum_seed` sans `metadata_csum`** : le formatage retire `metadata_csum` mais gardait l'option
+  incompatible `csum_seed`, que `e2fsck` signale comme inutile ; elle est retirée aussi.
+- **Tampons du cache non libérés** : `ext4_mkfs` détruisait son cache de blocs sans `ext4_bcache_cleanup`
+  (que `ext4_umount` appelle) ; les tampons restants fuyaient.
+
+Test : `native/tests/test_format_ext4.c` (volume d'un seul groupe, plusieurs groupes, secteurs de 4 096
+octets ; `e2fsck -fn` propre avant et après écriture par le moteur).
+
 ## Protections côté FluLuks (sans correctif lwext4)
 
 En écriture, `ext4_glue.c` vérifie chaque opération avant d'appeler lwext4, dont les fonctions de haut
