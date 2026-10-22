@@ -144,9 +144,9 @@ dans le même commit que le travail.
         puis volume gelé en « w » — refus à l'ouverture —, dernier bloc logique, `fsync` réussi après gel,
         éjection après gel, accès hors verrou, nœud d'index vide (0008) ; découpe d'extents à 2 niveaux
         sur disque plein laissée en limite connue ; PC 20/20, JVM 48/48)*
-- [ ] *(utilisateur)* Clé sacrifiée branchable en USB-C (clé USB-C ou adaptateur OTG USB-A → USB-C)
-- [ ] *(utilisateur)* Sauvegarde complète du vrai disque avant toute écriture dessus
-- [ ] T13 — Essais sur le Pixel : clé sacrifiée, puis vrai disque *(non faits pour la 0.2.0 : pas de clé
+- [x] *(utilisateur)* Clé sacrifiée branchable en USB-C (clé USB-C ou adaptateur OTG USB-A → USB-C)
+- [x] *(utilisateur)* Sauvegarde complète du vrai disque avant toute écriture dessus
+- [x] T13 — Essais sur le Pixel : clé sacrifiée, puis vrai disque *(faits le 2026-10-22 avec les essais de la phase 7 ; non faits pour la 0.2.0 : pas de clé
       sacrifiée ni de sauvegarde du vrai disque pour l'instant ; version publiée à la demande de
       l'utilisateur, écriture par défaut, avec la mention « écriture non essayée sur un vrai disque » dans le
       README. Le vrai disque s'ouvre bien en écriture sur le Pixel depuis le correctif du journal de 1 Gio,
@@ -250,17 +250,51 @@ dans le même commit que le travail.
       carte SD retirée non suivie ; corrigés, JVM 114/114, Flutter 60/60, Pixel 59/59)*
 - [x] Version `v0.5.0`
 
-### Phase 7 — Robustesse et performances
-- [ ] Plan de la phase 7 écrit
-- [ ] *(verrouillage automatique, débranchement inattendu, performances du § 5, essai d'ext4 en écriture
-      sur le vrai disque)*
-- [ ] Version `v1.0.0`
+### Phase 7 — Robustesse et performances ([plan](2026-10-22-phase7-robustesse.md))
+- [x] Plan de la phase 7 écrit *(spec § 13)*
+- [x] T1 — Logo orange, plus représentatif : arche de portail, dossier et cadenas *(demande du 2026-10-22 ; AppIdentityTest 3/3 sur le Pixel)*
+- [x] T2 — Système de fichiers et chiffrement connus pour chaque volume *(clé « fs » du statfs natif)*
+- [x] T3 — Verrouillage automatique des disques chiffrés (Kotlin : contrôle toutes les 30 s, jamais pendant une copie)
+- [x] T4 — Réglage du verrouillage dans les Réglages (Jamais par défaut, 5, 15, 30 min, 1 h)
+- [x] T5 — Débranchement pendant une écriture : conseil selon le système de fichiers (ext4, FAT/exFAT, NTFS)
+- [x] T6 — Copies : résultat visible sur l'accueil, montré une fois, avec le débit
+- [x] T7 — Copies : nom temporaire pendant l'écriture (« .nom.portail-partiel »), noms longs rendus uniques
+- [x] T9 — Performances du § 5 mesurées sur le Pixel, sur image *(listage de 1 000 fichiers : 25 ms disque, 276 ms
+      téléphone ; lecture par le provider : 241 Mo/s ; copies 64 Mio : 118 Mo/s vers le disque, 96 Mo/s retour)*
+- [x] Retour d'essai du 2026-10-22 : « Coller ici » disparaît une fois la copie lancée (comme après « Couper »)
+- [x] *(utilisateur)* T10 — Essais sur le Pixel : ext4 en écriture sur le vrai disque *(tâche 13 de la phase 3 ;
+      `e2fsck -fn` propre)*, verrouillage automatique, débranchement d'une clé pendant une copie, divers
+- [x] T8 — Points mineurs de la relecture de la phase 6 *(nom assaini de 255 octets, barre de copie qui rejoue
+      le dernier résultat, « Ouvrir avec » et « Partager » sur le fil principal, vignette gardée après
+      l'éjection, favoris d'un disque chiffré en clair, clé USB vue comme carte SD, fichier partiel sous son
+      vrai nom, détails de l'explorateur et de la recherche)*
+- [x] T11 — Documentation : README (robustesse, mesures, limite levée)
+- [x] Version `v1.0.0`
 
-### Phase 8 — Lecteurs intégrés et stockages distants
-- [ ] Plan de la phase 8 écrit
-- [ ] *(visionneuse d'images, lecteur de musique, éditeur de texte, lecteur vidéo, dossiers distants FTP
-      puis SFTP)*
+### Phase 8 — Formatage des disques USB ([plan](2026-10-22-phase8-formatage.md))
+- [x] Plan de la phase 8 écrit *(demande du 2026-10-22 ; spec § 14)*
+- [ ] T1 — Table de partitions à une partition (MBR jusqu'à 2 Tio, GPT au-delà)
+- [ ] T2 — FAT32 et exFAT
+- [ ] T3 — ext4 avec journal
+- [ ] T4 — NTFS
+- [ ] T5 — LUKS2 et formatage complet d'un disque
+- [ ] T6 — Formatage depuis Kotlin
+- [ ] T7 — Écran de formatage
+- [ ] *(utilisateur)* T8 — Essais : montage par le noyau sur le PC, clé USB sacrifiée sur le Pixel
+- [ ] T9 — Documentation
+- [ ] Fusion `feature/formatage` → `develop`
 - [ ] Version `v1.1.0`
+
+### Phase 9 — Lecteurs intégrés et stockages distants
+- [ ] Plan de la phase 9 écrit
+      *(demande du 2026-10-20, J.1 ; déplacée de la phase 8 à la phase 9 le 2026-10-22)*
+- [ ] Visionneuse d'images (glisser d'une photo à l'autre, zoom)
+- [ ] Lecteur de musique (lecture en arrière-plan, file d'attente du dossier)
+- [ ] Éditeur de fichiers texte (ouvrir, modifier, enregistrer, UTF-8)
+- [ ] Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)
+- [ ] Dossiers distants par FTP, comme source du gestionnaire (parcourir, copier, déplacer, ouvrir)
+- [ ] Dossiers distants par SFTP
+- [ ] Version `v1.2.0`
 
 ---
 

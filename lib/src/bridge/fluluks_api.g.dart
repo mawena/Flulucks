@@ -353,6 +353,7 @@ class SourceMsg {
     required this.freeBytes,
     required this.readOnly,
     required this.roReason,
+    required this.encrypted,
   });
 
   String id;
@@ -371,6 +372,9 @@ class SourceMsg {
 
   String roReason;
 
+  /// Disque ouvert avec une phrase de passe (un favori y montre un nom de dossier chiffré).
+  bool encrypted;
+
   List<Object?> _toList() {
     return <Object?>[
       id,
@@ -381,6 +385,7 @@ class SourceMsg {
       freeBytes,
       readOnly,
       roReason,
+      encrypted,
     ];
   }
 
@@ -398,6 +403,7 @@ class SourceMsg {
       freeBytes: result[5]! as int,
       readOnly: result[6]! as bool,
       roReason: result[7]! as String,
+      encrypted: result[8]! as bool,
     );
   }
 
@@ -410,7 +416,7 @@ class SourceMsg {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(id, other.id) && _deepEquals(stableKey, other.stableKey) && _deepEquals(kind, other.kind) && _deepEquals(label, other.label) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(freeBytes, other.freeBytes) && _deepEquals(readOnly, other.readOnly) && _deepEquals(roReason, other.roReason);
+    return _deepEquals(id, other.id) && _deepEquals(stableKey, other.stableKey) && _deepEquals(kind, other.kind) && _deepEquals(label, other.label) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(freeBytes, other.freeBytes) && _deepEquals(readOnly, other.readOnly) && _deepEquals(roReason, other.roReason) && _deepEquals(encrypted, other.encrypted);
   }
 
   @override
@@ -419,7 +425,7 @@ class SourceMsg {
 
   @override
   String toString() {
-    return 'SourceMsg(id: $id, stableKey: $stableKey, kind: $kind, label: $label, totalBytes: $totalBytes, freeBytes: $freeBytes, readOnly: $readOnly, roReason: $roReason)';
+    return 'SourceMsg(id: $id, stableKey: $stableKey, kind: $kind, label: $label, totalBytes: $totalBytes, freeBytes: $freeBytes, readOnly: $readOnly, roReason: $roReason, encrypted: $encrypted)';
   }
 }
 
@@ -501,6 +507,7 @@ class TransferMsg {
     required this.finished,
     required this.cancelled,
     this.error,
+    required this.elapsedMs,
   });
 
   bool move;
@@ -521,6 +528,9 @@ class TransferMsg {
 
   String? error;
 
+  /// Durée de l'opération en millisecondes (débit affiché à la fin).
+  int elapsedMs;
+
   List<Object?> _toList() {
     return <Object?>[
       move,
@@ -532,6 +542,7 @@ class TransferMsg {
       finished,
       cancelled,
       error,
+      elapsedMs,
     ];
   }
 
@@ -550,6 +561,7 @@ class TransferMsg {
       finished: result[6]! as bool,
       cancelled: result[7]! as bool,
       error: result[8] as String?,
+      elapsedMs: result[9]! as int,
     );
   }
 
@@ -562,7 +574,7 @@ class TransferMsg {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(move, other.move) && _deepEquals(currentName, other.currentName) && _deepEquals(fileIndex, other.fileIndex) && _deepEquals(fileCount, other.fileCount) && _deepEquals(doneBytes, other.doneBytes) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(finished, other.finished) && _deepEquals(cancelled, other.cancelled) && _deepEquals(error, other.error);
+    return _deepEquals(move, other.move) && _deepEquals(currentName, other.currentName) && _deepEquals(fileIndex, other.fileIndex) && _deepEquals(fileCount, other.fileCount) && _deepEquals(doneBytes, other.doneBytes) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(finished, other.finished) && _deepEquals(cancelled, other.cancelled) && _deepEquals(error, other.error) && _deepEquals(elapsedMs, other.elapsedMs);
   }
 
   @override
@@ -571,7 +583,7 @@ class TransferMsg {
 
   @override
   String toString() {
-    return 'TransferMsg(move: $move, currentName: $currentName, fileIndex: $fileIndex, fileCount: $fileCount, doneBytes: $doneBytes, totalBytes: $totalBytes, finished: $finished, cancelled: $cancelled, error: $error)';
+    return 'TransferMsg(move: $move, currentName: $currentName, fileIndex: $fileIndex, fileCount: $fileCount, doneBytes: $doneBytes, totalBytes: $totalBytes, finished: $finished, cancelled: $cancelled, error: $error, elapsedMs: $elapsedMs)';
   }
 }
 
@@ -985,6 +997,44 @@ class FluLuksHostApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[value]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Verrouillage automatique des disques chiffrés, en minutes (0 = jamais ; 5, 15, 30 ou 60).
+  Future<int> getAutoLockMinutes() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.getAutoLockMinutes$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as int;
+  }
+
+  Future<void> setAutoLockMinutes(int minutes) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.setAutoLockMinutes$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[minutes]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(

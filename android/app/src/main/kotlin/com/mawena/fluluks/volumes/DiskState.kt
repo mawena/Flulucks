@@ -25,4 +25,8 @@ data class VolumeState(
     val readOnly: Boolean = true,
     /** UUID de la partition (clé stable des favoris) ; vide si le disque n'en donne pas. */
     val partUuid: String = "",
+    /** Système de fichiers monté (`ext4`, `FAT32`, `exFAT`, `NTFS`…) ; vide si inconnu. */
+    val fs: String = "",
+    /** Ouvert avec une phrase de passe (LUKS) : seul ce volume est verrouillé automatiquement. */
+    val encrypted: Boolean = false,
 )

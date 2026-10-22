@@ -136,6 +136,8 @@ data class VolumeStat(
     val readOnly: Boolean,
     val roReason: String,
     val needsRecovery: Boolean,
+    /** Système de fichiers (`fl_content_name`) ; vide pour un moteur ancien. */
+    val fs: String = "",
 ) {
     companion object {
         fun parse(json: ByteArray): VolumeStat {
@@ -147,6 +149,7 @@ data class VolumeStat(
                 readOnly = o.getBoolean("read_only"),
                 roReason = o.getString("ro_reason"),
                 needsRecovery = o.getBoolean("needs_recovery"),
+                fs = o.optString("fs", ""),
             )
         }
     }

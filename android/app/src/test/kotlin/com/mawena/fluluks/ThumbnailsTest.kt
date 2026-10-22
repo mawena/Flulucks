@@ -48,7 +48,7 @@ class ThumbnailsTest {
         volId = runBlocking { VolumeManager.mountPlain(disk, 1, true) }.id
         val local = LocalSource("phone", "phone", "Téléphone", tmp.root) { true }
         val d = DiskSource(volId, e)
-        Files.setResolverForTests { id -> if (id == "phone") local else d.takeIf { id == volId } }
+        Files.setResolverForTests { id -> if (id == "phone") local else d.takeIf { id == volId && VolumeManager.volume(volId) != null } }
         dec = Decoder()
         Thumbnails.decoder = dec
         Thumbnails.clearForTests()
@@ -113,5 +113,19 @@ class ThumbnailsTest {
         Thumbnails.get("phone", "/p9.jpg", 256) // la plus récente est gardée
         Thumbnails.get("phone", "/p0.jpg", 256) // la plus ancienne est sortie
         assertEquals(listOf("image /p0.jpg 256"), dec.calls)
+    }
+
+    /** Relecture de la phase 6 : une vignette calculée pendant l'éjection de son disque n'est pas gardée. */
+    @Test fun thumbnailNotCachedAfterDrop() {
+        e.nodes["/a.jpg"] = ByteArray(10)
+        Thumbnails.decoder = object : ThumbDecoder {
+            override fun image(src: FileSource, path: String, sizePx: Int): ByteArray {
+                VolumeManager.eject(volId) // éjecté pendant le calcul (vignettes du disque oubliées)
+                return ByteArray(100) { 1 }
+            }
+            override fun video(src: FileSource, path: String, sizePx: Int): ByteArray? = null
+        }
+        Thumbnails.get(volId, "/a.jpg", 128)
+        assertEquals(0L, Thumbnails.cachedBytes())
     }
 }

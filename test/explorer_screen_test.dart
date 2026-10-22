@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluluks/src/app.dart';
@@ -13,16 +14,18 @@ EntryMsg f(String path, {int size = 1000, int mtime = 1700000000}) =>
     EntryMsg(name: path.split('/').last, path: path, type: 'file', size: size, mtime: mtime);
 EntryMsg d(String path) => EntryMsg(name: path.split('/').last, path: path, type: 'dir', size: 0, mtime: 1700000000);
 
-SourceMsg src(String id, {String kind = 'phone', String label = 'Téléphone', bool readOnly = false, String roReason = ''}) =>
+SourceMsg src(String id,
+        {String kind = 'phone', String label = 'Téléphone', bool readOnly = false, String roReason = '', String? key, bool encrypted = false}) =>
     SourceMsg(
       id: id,
-      stableKey: id,
+      stableKey: key ?? id,
       kind: kind,
       label: label,
       totalBytes: 1000,
       freeBytes: 500,
       readOnly: readOnly,
       roReason: roReason,
+      encrypted: encrypted,
     );
 
 /// Une PNG 1 × 1 valide (vignette factice).
@@ -142,7 +145,9 @@ void main() {
     await tester.pump();
     final (s, paths, dst, dir, move) = api.transfers.single;
     expect([s, ...paths, dst, dir, move], ['phone', '/a.jpg', '/b.txt', 'v1', '/', false]);
-    expect(state.clipboard, isNotNull); // une copie peut être recollée
+    // demande de l'utilisateur (2026-10-22) : « Coller ici » disparaît une fois la copie lancée
+    expect(state.clipboard, isNull);
+    expect(find.text('Coller ici'), findsNothing);
   });
 
   testWidgets('cutPasteMoves', (tester) async {
@@ -230,7 +235,7 @@ void main() {
     await state.startTransfer('v1', ['/film.mkv'], 'phone', '/', move: false);
     TransferMsg t({int done = 50, bool finished = false, String? error}) => TransferMsg(
         move: false, currentName: 'film.mkv', fileIndex: 1, fileCount: 1, doneBytes: done, totalBytes: 200,
-        finished: finished, cancelled: false, error: error);
+        finished: finished, cancelled: false, error: error, elapsedMs: 0);
     state.onTransferChanged(t());
     await tester.pump();
     expect(find.text('Copie : film.mkv (1/1) — 25 %'), findsOneWidget);
@@ -289,5 +294,99 @@ void main() {
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('createFolder phone / Vacances'));
+  });
+
+  TransferMsg done({int bytes = 200, int elapsedMs = 0, String? error}) => TransferMsg(
+      move: false, currentName: 'film.mkv', fileIndex: 1, fileCount: 1, doneBytes: bytes, totalBytes: bytes,
+      finished: true, cancelled: false, error: error, elapsedMs: elapsedMs);
+
+  testWidgets('transferDoneShowsRate', (tester) async {
+    final state = await pump(tester, api0());
+    state.onTransferChanged(done(bytes: 100000000, elapsedMs: 4000));
+    await tester.pump();
+    expect(find.text('Terminé : 1 fichier(s), 25 Mo/s'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('transferResultShownOnce', (tester) async {
+    final state = await pump(tester, api0());
+    state.onTransferChanged(done());
+    await tester.pump();
+    expect(find.text('Terminé : 1 fichier(s)'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5)); // résultat vu
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    final nav = tester.state<NavigatorState>(find.byType(Navigator));
+    nav.push(MaterialPageRoute<void>(builder: (_) => ExplorerScreen(state: state, sourceId: 'phone', path: '/DCIM')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Terminé'), findsNothing);
+    expect(state.transfer, isNull);
+  });
+
+  // --- relecture de la phase 6 (points mineurs)
+
+  testWidgets('oneClosedMessageForStackedExplorers', (tester) async {
+    final api = api0()..dirs['v1']!['/sous'] = [];
+    final state = await pump(tester, api, source: 'v1');
+    tester.state<NavigatorState>(find.byType(Navigator)).push(
+        MaterialPageRoute<void>(builder: (_) => ExplorerScreen(state: state, sourceId: 'v1', path: '/sous')));
+    await tester.pumpAndSettle();
+    api.sources = [src('phone')];
+    await state.refreshSources();
+    await tester.pumpAndSettle();
+    expect(find.byType(ExplorerScreen), findsNothing);
+    expect(find.text('Le disque a été fermé'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 6)); // un second message attendrait son tour ici
+    await tester.pumpAndSettle();
+    expect(find.text('Le disque a été fermé'), findsNothing);
+  });
+
+  testWidgets('selectionPrunedAfterReload', (tester) async {
+    final api = api0();
+    final state = await pump(tester, api);
+    await longPress(tester, 'b.txt');
+    expect(find.text('1 sélectionné(s)'), findsOneWidget);
+    api.dirs['phone']!['/'] = [d('/DCIM'), f('/a.jpg', size: 3000000)]; // b.txt supprimé par une autre application
+    final v = state.viewPrefs;
+    await state.setViewPrefs(ViewPrefsMsg(sort: v.sort, ascending: v.ascending, grid: v.grid, showHidden: true));
+    await tester.pumpAndSettle();
+    expect(find.text('1 sélectionné(s)'), findsNothing);
+  });
+
+  testWidgets('favoriteDisabledWithoutPartUuid', (tester) async {
+    final api = api0()..sources = [src('phone'), src('v1', kind: 'disk', label: 'Données', key: 'disk:image:1#1')];
+    await pump(tester, api, source: 'v1');
+    final star = tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.star_border));
+    expect(star.onPressed, isNull);
+  });
+
+  testWidgets('encryptedFavoriteAsksConfirmation', (tester) async {
+    final api = api0()..sources = [src('phone'), src('v1', kind: 'disk', label: 'Données', key: 'disk:u1', encrypted: true)];
+    await pump(tester, api, source: 'v1');
+    await tester.tap(find.byTooltip('Ajouter aux favoris'));
+    await tester.pumpAndSettle();
+    expect(find.text("Le nom de ce dossier restera visible sur l'accueil, même disque verrouillé"), findsOneWidget);
+    await tester.tap(find.text('Annuler'));
+    await tester.pumpAndSettle();
+    expect(api.favorites, isEmpty);
+    await tester.tap(find.byTooltip('Ajouter aux favoris'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ajouter'));
+    await tester.pumpAndSettle();
+    expect(api.favorites.length, 1);
+  });
+
+  testWidgets('imageCacheClearedOnClose', (tester) async {
+    final api = api0();
+    final state = await pump(tester, api, source: 'v1');
+    // une vignette décodée du disque, gardée par le cache d'images de Flutter
+    final img = (await tester.runAsync(() => createTestImage(width: 4, height: 4)))!;
+    final cache = PaintingBinding.instance.imageCache;
+    cache.putIfAbsent('vignette', () => OneFrameImageStreamCompleter(SynchronousFuture(ImageInfo(image: img))));
+    expect(cache.currentSize, 1);
+    api.sources = [src('phone')];
+    await state.refreshSources();
+    await tester.pumpAndSettle();
+    expect(cache.currentSize, 0);
   });
 }

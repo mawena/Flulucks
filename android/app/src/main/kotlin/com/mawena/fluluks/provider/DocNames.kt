@@ -22,14 +22,27 @@ object DocNames {
         return if (dot <= 0) "$name ($n)" else name.substring(0, dot) + " ($n)" + name.substring(dot)
     }
 
-    /** Premier nom libre parmi [name], « nom (1) »… « nom (999) » selon [exists] ; null si aucun. */
+    /**
+     * Premier nom libre parmi [name], « nom (1) »… « nom (999) » selon [exists] ; null si aucun. Une variante
+     * qui dépasserait 255 octets est raccourcie (extension gardée, sans couper un caractère).
+     */
     fun unique(name: String, exists: (String) -> Boolean): String? {
         if (!exists(name)) return name
         for (n in 1..MAX_TRIES) {
-            val c = numbered(name, n)
+            val c = fitted(name, n)
             if (isValid(c) && !exists(c)) return c
         }
         return null
+    }
+
+    /** [numbered], raccourci au besoin pour tenir en [MAX_NAME_BYTES] octets. */
+    private fun fitted(name: String, n: Int): String {
+        val c = numbered(name, n)
+        if (c.toByteArray(Charsets.UTF_8).size <= MAX_NAME_BYTES) return c
+        val dot = name.lastIndexOf('.')
+        val ext = if (dot > 0 && name.length - dot <= 16) name.substring(dot) else ""
+        val suffix = " ($n)$ext"
+        return truncateUtf8(name.substring(0, name.length - ext.length), MAX_NAME_BYTES - suffix.toByteArray(Charsets.UTF_8).size) + suffix
     }
 
     /** Caractères refusés par FAT et NTFS (en plus des caractères de contrôle). */
@@ -59,7 +72,7 @@ object DocNames {
     }
 
     /** Préfixe de [s] d'au plus [max] octets UTF-8, sans couper un caractère (ni une paire de substitution). */
-    private fun truncateUtf8(s: String, max: Int): String {
+    fun truncateUtf8(s: String, max: Int): String {
         var bytes = 0
         var i = 0
         while (i < s.length) {

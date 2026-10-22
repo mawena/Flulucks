@@ -277,7 +277,7 @@ Décisions de l'utilisateur, après la phase 5 :
 - **Nom** : l'application s'appelle **Portail**. Seul le nom visible change : le paquet
   `com.mawena.fluluks`, le dépôt et la bibliothèque native gardent leur nom *(décision du planificateur :
   changer l'`applicationId` créerait une autre application et ferait perdre les réglages)*.
-- **Logo** : un dossier en forme de bouclier, avec une serrure, sur un dégradé indigo → violet
+- **Logo** *(remplacé le 2026-10-22, voir § 13)* : un dossier en forme de bouclier, avec une serrure, sur un dégradé indigo → violet
   (`assets/logo/portail.svg`).
 - **Gestionnaire de fichiers à part entière.** L'« explorateur intégré simple » du § 2 et du § 4.4
   devient un gestionnaire complet :
@@ -299,8 +299,36 @@ Décisions de l'utilisateur, après la phase 5 :
 Décisions de l'utilisateur (`docs/Manuel/maj-20-10-2026.md`) :
 - **Affichage des dossiers** en liste ou en grille, choisi dans les Réglages (en plus du menu de
   l'explorateur). Phase 6, T13.
-- **Lecteurs intégrés et stockages distants**, à planifier après la v1.0.0 (phase 8) :
+- **Lecteurs intégrés et stockages distants**, à planifier après la v1.0.0 (phase 8, devenue phase 9 le
+  2026-10-22, voir § 14) :
   - voir des images, écouter de la musique, éditer des fichiers texte, lire des vidéos dans Portail ;
   - accéder à des dossiers distants par FTP, puis par SFTP, comme sources du gestionnaire de fichiers.
 - Ce qui est lu ou affiché depuis un disque chiffré suit la règle du § 11 : rien n'en est écrit sur le
   stockage du téléphone sans action explicite de l'utilisateur (copie, export).
+
+## 13. Évolution du 2026-10-22 : phase 7
+
+- **Logo** *(décision de l'utilisateur, dessin choisi par le planificateur)* : fond orange terracotta
+  (`#E07B53` → `#C2410C`), clin d'œil à la couleur de Claude sans reprendre son logo ; une arche de
+  portail blanche qui encadre un dossier, avec un petit cadenas : l'accès aux fichiers, même chiffrés.
+- **Verrouillage automatique** (§ 4.4) *(décision du planificateur)* : seuls les volumes **chiffrés**
+  sont verrouillés (éjectés, clé effacée) après le délai choisi : jamais, 5, 15, 30 ou 60 min ; jamais
+  pendant une copie ; toute lecture ou écriture repousse le délai.
+- **Débranchement** (§ 4.3) : l'avertissement donne un conseil selon le système de fichiers (ext4 : Ubuntu
+  rejoue le journal ; FAT/exFAT : vérification sur un ordinateur ; NTFS : vérification par Windows).
+
+## 14. Évolution du 2026-10-22 (suite) : formatage
+
+Décision de l'utilisateur : le **formatage des disques USB** devient la **phase 8** (v1.1.0) ; les lecteurs
+intégrés et les stockages distants passent en **phase 9** (v1.2.0).
+- Formater un disque USB branché sur le téléphone, en **FAT32, exFAT, ext4 ou NTFS**, en clair ou **chiffré
+  LUKS2** (le système de fichiers choisi dans le volume chiffré), avec une étiquette.
+- Jamais le stockage du téléphone ni une carte SD montée par Android : seulement un disque dont Portail a
+  pris l'interface USB.
+- Formater détruit tout le contenu : confirmation en tapant le nom affiché du disque, refus si un de ses
+  volumes est ouvert, taille et modèle du disque affichés.
+- Les disques formatés doivent être reconnus sans réserve par les outils de référence (`e2fsck`,
+  `fsck.fat`, `fsck.exfat`, `ntfsfix`, `cryptsetup luksDump`/`open`, montage par le noyau Linux) : vérifié
+  sur des images sur le PC, puis sur une clé USB sacrifiée, jamais sur le vrai disque.
+- Autres options évoquées (changer la phrase de passe, gérer les partitions, effacement sécurisé, vérifier
+  un disque) : non retenues pour l'instant.

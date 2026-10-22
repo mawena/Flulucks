@@ -28,7 +28,11 @@ class LocalSource(
     private val hasAccess: () -> Boolean,
 ) : FileSource {
     override val readOnlyReason: String?
-        get() = if (root.canWrite()) null else "stockage en lecture seule"
+        get() = when {
+            !hasAccess() -> Files.MSG_NO_ACCESS
+            root.canWrite() -> null
+            else -> "stockage en lecture seule"
+        }
     override val caseInsensitive = true
 
     /** Carte SD (FAT, exFAT) : noms limités ; stockage interne : tout sauf « / » et NUL. */
@@ -36,11 +40,15 @@ class LocalSource(
 
     private val canonRoot: File by lazy { root.canonicalFile }
 
-    private fun file(path: String): File {
+    /**
+     * Fichier de [path] sous la racine. [linkItself] : un lien symbolique final est accepté s'il est lui-même
+     * sous la racine (renommer, supprimer, stat : on agit sur le lien), même s'il pointe au-dehors.
+     */
+    private fun file(path: String, linkItself: Boolean = false): File {
         if (!hasAccess()) throw FileNotFoundException(Files.MSG_NO_ACCESS)
         val p = PathRules.require(path)
         val f = if (p == "/") root else File(root, p.substring(1))
-        val c = f.canonicalFile
+        val c = if (linkItself && p != "/" && NioFiles.isSymbolicLink(f.toPath())) File(f.parentFile!!.canonicalFile, f.name) else f.canonicalFile
         if (c != canonRoot && !c.path.startsWith(canonRoot.path + File.separator)) throw FileNotFoundException(Files.MSG_BAD_PATH)
         return f
     }
@@ -77,7 +85,7 @@ class LocalSource(
     }
 
     override fun stat(path: String): Entry? {
-        val f = file(path)
+        val f = file(path, linkItself = true)
         if (!NioFiles.exists(f.toPath(), LinkOption.NOFOLLOW_LINKS)) return null
         return entry(f, PathRules.require(path))
     }
@@ -113,8 +121,8 @@ class LocalSource(
     override fun rename(path: String, newName: String): String {
         requireWritable()
         if (PathRules.require(path) == "/") throw FileNotFoundException("La racine ne peut pas être renommée")
-        val f = file(path)
-        if (!f.exists()) throw FileNotFoundException("Document introuvable")
+        val f = file(path, linkItself = true)
+        if (!NioFiles.exists(f.toPath(), LinkOption.NOFOLLOW_LINKS)) throw FileNotFoundException("Document introuvable")
         val n = requireName(newName)
         val target = File(f.parentFile, n)
         val targetPath = DocumentIds.child(WriteOps.parentOf(path), n)
@@ -128,7 +136,7 @@ class LocalSource(
     override fun delete(path: String) {
         requireWritable()
         if (PathRules.require(path) == "/") throw FileNotFoundException("La racine ne peut pas être supprimée")
-        val f = file(path)
+        val f = file(path, linkItself = true)
         if (!NioFiles.exists(f.toPath(), LinkOption.NOFOLLOW_LINKS)) throw FileNotFoundException("Document introuvable")
         // les liens sont supprimés eux-mêmes, jamais suivis
         val stack = ArrayDeque<File>().apply { add(f) }

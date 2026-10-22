@@ -236,6 +236,7 @@ typedef struct {
   fl_bdev *slice, *plain; /* plain : déchiffré (NULL si en clair) */
   fl_luks *luks;
   fl_fs *fs;
+  fl_content kind; /* système de fichiers monté (clé "fs" de fj_statfs) */
 } jvol;
 
 static int file_destroy(void *obj, int64_t h) {
@@ -466,6 +467,7 @@ static int vol_open(fl_bdev *dev, uint32_t part_index, const void *pass, size_t 
     target = v->plain;
   }
   if (!fl_content_supported(pr.content) || is_luks(pr.content)) return FL_ENOTSUP; /* ext4, FAT, exFAT */
+  v->kind = pr.content;
   return fl_fs_mount(target, pr.content, want_rw, &v->fs);
 }
 
@@ -566,6 +568,7 @@ int fj_statfs(int64_t vol, fl_json *out) {
   fl_statfs sf;
   memset(&sf, 0, sizeof sf);
   int rc = fl_fs_statfs(v->fs, &sf);
+  fl_content kind = v->kind;
   tab_release(vol, T_VOL);
   if (rc != FL_OK) return rc;
   sf.label[sizeof sf.label - 1] = 0;
@@ -584,6 +587,8 @@ int fj_statfs(int64_t vol, fl_json *out) {
   fl_json_cstr(out, sf.ro_reason);
   fl_json_key(out, "needs_recovery");
   fl_json_bool(out, sf.needs_recovery);
+  fl_json_key(out, "fs");
+  fl_json_cstr(out, fl_content_name(kind));
   fl_json_obj_end(out);
   return out->err;
 }

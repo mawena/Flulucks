@@ -1,0 +1,36 @@
+# essais instrumentés 20261022-155406
+# commit f99552c — google/coral/coral:13/TP1A.221005.002.B2/9382335:user/release-keys
+## construction et installation des APK de test
+Performing Streamed Install
+Success
+Performing Streamed Install
+Success
+## PerfInstrumentedTest
+INSTRUMENTATION_STATUS: class=com.mawena.fluluks.PerfInstrumentedTest
+INSTRUMENTATION_STATUS: test=sequentialReadAtLeast20MBps
+INSTRUMENTATION_STATUS: class=com.mawena.fluluks.PerfInstrumentedTest
+INSTRUMENTATION_STATUS: test=sequentialReadAtLeast20MBps
+INSTRUMENTATION_STATUS: class=com.mawena.fluluks.PerfInstrumentedTest
+INSTRUMENTATION_STATUS: test=list1000FilesUnder2s
+INSTRUMENTATION_STATUS: class=com.mawena.fluluks.PerfInstrumentedTest
+INSTRUMENTATION_STATUS: test=list1000FilesUnder2s
+INSTRUMENTATION_STATUS: class=com.mawena.fluluks.PerfInstrumentedTest
+INSTRUMENTATION_STATUS: test=listPhoneFolder1000Under2s
+INSTRUMENTATION_STATUS: class=com.mawena.fluluks.PerfInstrumentedTest
+INSTRUMENTATION_STATUS: test=listPhoneFolder1000Under2s
+INSTRUMENTATION_STATUS: class=com.mawena.fluluks.PerfInstrumentedTest
+INSTRUMENTATION_STATUS: test=copyThroughput
+INSTRUMENTATION_STATUS: class=com.mawena.fluluks.PerfInstrumentedTest
+INSTRUMENTATION_STATUS: test=copyThroughput
+OK (4 tests)
+## mesures (PortailPerf)
+10-22 15:54:29.557 12941 12955 I PortailPerf: lecture séquentielle par le provider, 64 Mio : 278 ms, 241,4 Mo/s
+10-22 15:54:36.376 12941 12955 I PortailPerf: listage disque, 1 000 fichiers : 25 ms
+10-22 15:55:00.336 12941 12955 I PortailPerf: listage téléphone, 1 000 fichiers : 276 ms
+10-22 15:55:12.658 12941 12955 I PortailPerf: copie téléphone → disque, 64 Mio : 568 ms, 118,1 Mo/s
+10-22 15:55:13.374 12941 12955 I PortailPerf: copie disque → téléphone, 64 Mio : 696 ms, 96,4 Mo/s
+## réinstallation de l'APK de production
+Caught exception: Already watching path: /opt/flutter/packages/flutter_tools/gradle
+Performing Streamed Install
+Success
+## fin : tout est vert
