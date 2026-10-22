@@ -245,7 +245,9 @@ dans le même commit que le travail.
 - [x] T12 — Récupération de `feature/portail-save` *(un test repris, branche supprimée)*
 - [x] T13 — Affichage des dossiers en liste ou en grille, choisi dans les Réglages
 - [x] T14 — Documentation *(README : gestionnaire de fichiers, accès à tous les fichiers, vignettes en mémoire, limites, phases 7 et 8)*
-- [ ] Fusion `feature/portail` → `develop`
+- [x] Fusion `feature/portail` → `develop` *(après relecture finale : `Android/data` affiché vide, chemins absolus
+      dans les messages, source supprimée pendant un téléchargement, vignettes qui bloquaient le listage,
+      carte SD retirée non suivie ; corrigés, JVM 114/114, Flutter 60/60, Pixel 59/59)*
 - [ ] Version `v0.5.0`
 
 ### Phase 7 — Robustesse et performances
