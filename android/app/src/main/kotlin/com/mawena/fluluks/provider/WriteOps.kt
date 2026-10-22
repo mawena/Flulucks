@@ -19,6 +19,7 @@ class WriteOps(
     private val vol: Long,
     private val maxEntries: Int = MAX_ENTRIES,
     private val onChunk: () -> Unit = {},
+    private val busyWaitMs: Long = BUSY_WAIT_MS,
 ) {
     private fun b(path: String) = path.toByteArray(Charsets.UTF_8)
 
@@ -32,6 +33,17 @@ class WriteOps(
     private fun list(path: String): List<DirEntry> = DirEntry.parseList(engine.list(vol, b(path)))
 
     private fun check(rc: Int) { if (rc < 0) throw EngineError(rc) }
+
+    /** FL_EBUSY sur un fichier que le client vient de fermer : la libération du descripteur proxy
+     *  (onRelease) arrive en différé. Réessaie jusqu'à [busyWaitMs] ; un fichier vraiment ouvert reste refusé. */
+    private fun afterRelease(op: () -> Int): Int {
+        val end = System.nanoTime() + busyWaitMs * 1_000_000
+        while (true) {
+            val rc = op()
+            if (rc != EngineError.FL_EBUSY || System.nanoTime() >= end) return rc
+            Thread.sleep(20)
+        }
+    }
 
     private fun requireDir(path: String) {
         val st = statOrNull(path) ?: throw FileNotFoundException("Dossier introuvable")
@@ -95,7 +107,7 @@ class WriteOps(
         val order = scan(path, root.type) // rien n'est écrit tant que le parcours n'est pas sain
         for (i in order.indices.reversed()) {
             val n = order[i]
-            check(if (n.type == FileType.DIR) engine.rmdir(vol, b(n.path)) else engine.unlink(vol, b(n.path)))
+            check(if (n.type == FileType.DIR) engine.rmdir(vol, b(n.path)) else afterRelease { engine.unlink(vol, b(n.path)) })
         }
     }
 
@@ -106,7 +118,7 @@ class WriteOps(
         if (target == path) return path
         // Pas de test d'existence ici : sur FAT, « a.txt » → « A.txt » désigne le même fichier, que le moteur
         // renomme ; une cible qui est un autre élément rend FL_EEXIST.
-        val rc = engine.rename(vol, b(path), b(target))
+        val rc = afterRelease { engine.rename(vol, b(path), b(target)) }
         if (rc == EngineError.FL_EEXIST) throw FileNotFoundException("Un élément porte déjà ce nom")
         check(rc)
         return target
@@ -122,7 +134,7 @@ class WriteOps(
         }
         if (parentOf(path) == targetParent) return path
         val target = uniqueChild(targetParent, nameOf(path))
-        check(engine.rename(vol, b(path), b(target)))
+        check(afterRelease { engine.rename(vol, b(path), b(target)) })
         return target
     }
 
@@ -185,6 +197,8 @@ class WriteOps(
         const val TOO_DEEP = "Arborescence trop profonde ou en boucle"
         const val MAX_DEPTH = 256
         const val MAX_ENTRIES = 1_000_000
+        /** Attente maximale de la libération d'un fichier que le client vient de fermer. */
+        const val BUSY_WAIT_MS = 2_000L
         const val COPY_CHUNK = 1 shl 20
 
         fun parentOf(path: String): String {

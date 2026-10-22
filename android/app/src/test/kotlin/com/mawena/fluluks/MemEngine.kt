@@ -44,6 +44,14 @@ open class MemEngine : Engine {
     /** Code rendu par le n-ième pwrite à venir (1 = le prochain) ; 0 : pas de panne. */
     var failPwriteAt = 0
     var failPwriteCode = EngineError.FL_EIO
+    /** Nombre de FL_EBUSY rendus par unlink/rename sur ce chemin avant d'aboutir (fichier encore ouvert). */
+    val busy = mutableMapOf<String, Int>()
+    private fun busyNow(p: String): Boolean {
+        val n = busy[p] ?: return false
+        if (n <= 0) return false
+        busy[p] = n - 1
+        return true
+    }
 
     override fun openImage(path: ByteArray, readOnly: Boolean) = 1L
     override fun openUsb(fd: Int, iface: Int, epIn: Int, epOut: Int) = 0L
@@ -123,6 +131,7 @@ open class MemEngine : Engine {
         val p = s(path)
         if (!nodes.containsKey(p)) return EngineError.FL_ENOENT
         if (nodes[p] == null) return EngineError.FL_EISDIR
+        if (busyNow(p)) return EngineError.FL_EBUSY
         nodes.remove(p); ops++
         return 0
     }
@@ -140,6 +149,7 @@ open class MemEngine : Engine {
         if (!nodes.containsKey(f)) return EngineError.FL_ENOENT
         if (nodes.containsKey(key(t)) && key(t) != f) return EngineError.FL_EEXIST
         if (t.startsWith("$f/")) return EngineError.FL_EINVAL
+        if (busyNow(f)) return EngineError.FL_EBUSY
         val moved = nodes.keys.filter { it == f || it.startsWith("$f/") }
         for (k in moved) nodes[t + k.substring(f.length)] = nodes.remove(k)
         ops++
