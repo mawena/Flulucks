@@ -29,6 +29,8 @@ data class TransferState(
     val finished: Boolean = false,
     val cancelled: Boolean = false,
     val error: String? = null,
+    /** Durée de l'opération (ms), connue à la fin. */
+    val elapsedMs: Long = 0,
 )
 
 /**
@@ -107,6 +109,7 @@ object Transfers {
         val r: Running, val srcId: String, val paths: List<String>, val dstId: String, val dstDir: String, val move: Boolean,
     ) {
         var st = TransferState(move, "", 0, 0, 0, 0)
+        val startMs = clock()
         var lastPublish = 0L
         var skipped = 0
         var changed = 0
@@ -125,7 +128,7 @@ object Transfers {
                 skipped > 0 -> MSG_LINKS
                 else -> null
             }
-            st = st.copy(finished = true, cancelled = cancelled, error = error ?: warning)
+            st = st.copy(finished = true, cancelled = cancelled, error = error ?: warning, elapsedMs = clock() - startMs)
             _state.value = st
         }
 

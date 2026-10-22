@@ -501,6 +501,7 @@ class TransferMsg {
     required this.finished,
     required this.cancelled,
     this.error,
+    required this.elapsedMs,
   });
 
   bool move;
@@ -521,6 +522,9 @@ class TransferMsg {
 
   String? error;
 
+  /// Durée de l'opération en millisecondes (débit affiché à la fin).
+  int elapsedMs;
+
   List<Object?> _toList() {
     return <Object?>[
       move,
@@ -532,6 +536,7 @@ class TransferMsg {
       finished,
       cancelled,
       error,
+      elapsedMs,
     ];
   }
 
@@ -550,6 +555,7 @@ class TransferMsg {
       finished: result[6]! as bool,
       cancelled: result[7]! as bool,
       error: result[8] as String?,
+      elapsedMs: result[9]! as int,
     );
   }
 
@@ -562,7 +568,7 @@ class TransferMsg {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(move, other.move) && _deepEquals(currentName, other.currentName) && _deepEquals(fileIndex, other.fileIndex) && _deepEquals(fileCount, other.fileCount) && _deepEquals(doneBytes, other.doneBytes) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(finished, other.finished) && _deepEquals(cancelled, other.cancelled) && _deepEquals(error, other.error);
+    return _deepEquals(move, other.move) && _deepEquals(currentName, other.currentName) && _deepEquals(fileIndex, other.fileIndex) && _deepEquals(fileCount, other.fileCount) && _deepEquals(doneBytes, other.doneBytes) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(finished, other.finished) && _deepEquals(cancelled, other.cancelled) && _deepEquals(error, other.error) && _deepEquals(elapsedMs, other.elapsedMs);
   }
 
   @override
@@ -571,7 +577,7 @@ class TransferMsg {
 
   @override
   String toString() {
-    return 'TransferMsg(move: $move, currentName: $currentName, fileIndex: $fileIndex, fileCount: $fileCount, doneBytes: $doneBytes, totalBytes: $totalBytes, finished: $finished, cancelled: $cancelled, error: $error)';
+    return 'TransferMsg(move: $move, currentName: $currentName, fileIndex: $fileIndex, fileCount: $fileCount, doneBytes: $doneBytes, totalBytes: $totalBytes, finished: $finished, cancelled: $cancelled, error: $error, elapsedMs: $elapsedMs)';
   }
 }
 

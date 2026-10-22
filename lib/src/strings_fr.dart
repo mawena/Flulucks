@@ -85,6 +85,12 @@ class Fr {
       '${move ? 'Déplacement' : 'Copie'} : $name ($i/$n) — $pct %';
   static String transferDone(int n) => 'Terminé : $n fichier(s)';
 
+  /// « Terminé : 3 fichier(s), 34 Mo/s » ; sans débit sous 1 s ou sous 1 Mo (chiffre sans intérêt).
+  static String transferDoneRate(int n, int bytes, int elapsedMs) {
+    if (elapsedMs < 1000 || bytes < 1000000) return transferDone(n);
+    return '${transferDone(n)}, ${(bytes / 1000 / elapsedMs).round()} Mo/s';
+  }
+
   /// Date courte d'un élément (jj/mm/aaaa hh:mm, heure locale), depuis des secondes UTC.
   static String shortDate(int seconds) {
     final d = DateTime.fromMillisecondsSinceEpoch(seconds * 1000);

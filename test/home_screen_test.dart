@@ -304,4 +304,15 @@ void main() {
     expect(Fr.humanSize(1500000000), '1,5 Go');
     expect(Fr.humanSize(250000000), '250,0 Mo');
   });
+
+  // Phase 7 : une copie interrompue (explorateur fermé avec son disque) reste signalée sur l'accueil.
+  testWidgets('homeShowsInterruptedTransfer', (tester) async {
+    final (state, _) = await pump(tester, FakeHostApi());
+    state.onTransferChanged(TransferMsg(
+        move: true, currentName: 'a.bin', fileIndex: 1, fileCount: 2, doneBytes: 10, totalBytes: 20,
+        finished: true, cancelled: false, error: 'Stockage fermé : opération interrompue', elapsedMs: 1200));
+    await tester.pump();
+    expect(find.text('Stockage fermé : opération interrompue'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+  });
 }

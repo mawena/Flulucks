@@ -60,6 +60,7 @@ void main() {
       totalBytes: 20,
       finished: false,
       cancelled: false,
+      elapsedMs: 0,
     ));
     expect(state.transfer!.doneBytes, 10);
     expect(notified, 1);

@@ -67,6 +67,13 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   /// Copie ou déplacement en cours, ou le dernier terminé ; null si aucun.
   TransferMsg? get transfer => _transfer;
 
+  /// Le résultat d'une opération finie a été montré : plus aucun écran ne le réaffiche.
+  void transferResultSeen() {
+    if (_transfer?.finished != true) return;
+    _transfer = null;
+    notifyListeners();
+  }
+
   /// Accès à tous les fichiers du téléphone accordé.
   bool get allFilesAccess => _allFilesAccess;
 

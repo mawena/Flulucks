@@ -230,7 +230,7 @@ void main() {
     await state.startTransfer('v1', ['/film.mkv'], 'phone', '/', move: false);
     TransferMsg t({int done = 50, bool finished = false, String? error}) => TransferMsg(
         move: false, currentName: 'film.mkv', fileIndex: 1, fileCount: 1, doneBytes: done, totalBytes: 200,
-        finished: finished, cancelled: false, error: error);
+        finished: finished, cancelled: false, error: error, elapsedMs: 0);
     state.onTransferChanged(t());
     await tester.pump();
     expect(find.text('Copie : film.mkv (1/1) — 25 %'), findsOneWidget);
@@ -289,5 +289,32 @@ void main() {
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('createFolder phone / Vacances'));
+  });
+
+  TransferMsg done({int bytes = 200, int elapsedMs = 0, String? error}) => TransferMsg(
+      move: false, currentName: 'film.mkv', fileIndex: 1, fileCount: 1, doneBytes: bytes, totalBytes: bytes,
+      finished: true, cancelled: false, error: error, elapsedMs: elapsedMs);
+
+  testWidgets('transferDoneShowsRate', (tester) async {
+    final state = await pump(tester, api0());
+    state.onTransferChanged(done(bytes: 100000000, elapsedMs: 4000));
+    await tester.pump();
+    expect(find.text('Terminé : 1 fichier(s), 25 Mo/s'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5));
+  });
+
+  testWidgets('transferResultShownOnce', (tester) async {
+    final state = await pump(tester, api0());
+    state.onTransferChanged(done());
+    await tester.pump();
+    expect(find.text('Terminé : 1 fichier(s)'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 5)); // résultat vu
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    final nav = tester.state<NavigatorState>(find.byType(Navigator));
+    nav.push(MaterialPageRoute<void>(builder: (_) => ExplorerScreen(state: state, sourceId: 'phone', path: '/DCIM')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Terminé'), findsNothing);
+    expect(state.transfer, isNull);
   });
 }

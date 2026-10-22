@@ -257,7 +257,8 @@ dans le même commit que le travail.
 - [x] T3 — Verrouillage automatique des disques chiffrés (Kotlin : contrôle toutes les 30 s, jamais pendant une copie)
 - [x] T4 — Réglage du verrouillage dans les Réglages (Jamais par défaut, 5, 15, 30 min, 1 h)
 - [x] T5 — Débranchement pendant une écriture : conseil selon le système de fichiers (ext4, FAT/exFAT, NTFS)
-- [ ] T6 — Copies : résultat visible sur l'accueil, montré une fois, avec le débit
+- [x] T6 — Copies : résultat visible sur l'accueil, montré une fois, avec le débit
+- [ ] T7 — Copies : nom temporaire pendant l'écriture, noms longs rendus uniques
 - [ ] Performances du § 5 mesurées sur le Pixel (listage de 1 000 fichiers, copies téléphone ↔ disque)
 - [ ] *(utilisateur)* Essai d'ext4 en écriture sur le vrai disque *(tâche 13 de la phase 3)*
 - [ ] Points mineurs de la relecture de la phase 6 *(nom assaini de 255 octets, barre de copie qui rejoue

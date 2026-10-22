@@ -299,4 +299,15 @@ class TransfersTest {
         assertArrayEquals(data(3 * mib), disk("/a.bin")) // la source reste sur le disque
         assertTrue(File(root, "dest").list()!!.none { it == "a.bin" }) // jamais de fichier incomplet sous son nom
     }
+
+    /** Phase 7 : durée de l'opération (débit affiché à la fin). */
+    @Test fun elapsedMeasured() {
+        var t = 1_000L
+        Transfers.resetForTests(clock = { t })
+        local("a.bin", data(mib))
+        e.onPwrite = { t = 3_000L }
+        val s = run("phone", listOf("/a.bin"), volId, "/")
+        assertNull(s.error)
+        assertEquals(2_000L, s.elapsedMs)
+    }
 }

@@ -336,6 +336,7 @@ class HostApiImpl(
         internal fun transferMsg(t: TransferState) = TransferMsg(
             move = t.move, currentName = t.currentName, fileIndex = t.fileIndex.toLong(), fileCount = t.fileCount.toLong(),
             doneBytes = t.doneBytes, totalBytes = t.totalBytes, finished = t.finished, cancelled = t.cancelled, error = t.error,
+            elapsedMs = t.elapsedMs,
         )
 
         private fun volumeMsg(v: VolumeState) = VolumeMsg(

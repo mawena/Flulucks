@@ -526,7 +526,9 @@ data class TransferMsg (
   val totalBytes: Long,
   val finished: Boolean,
   val cancelled: Boolean,
-  val error: String? = null
+  val error: String? = null,
+  /** Durée de l'opération en millisecondes (débit affiché à la fin). */
+  val elapsedMs: Long
 )
  {
   companion object {
@@ -540,7 +542,8 @@ data class TransferMsg (
       val finished = pigeonVar_list[6] as Boolean
       val cancelled = pigeonVar_list[7] as Boolean
       val error = pigeonVar_list[8] as String?
-      return TransferMsg(move, currentName, fileIndex, fileCount, doneBytes, totalBytes, finished, cancelled, error)
+      val elapsedMs = pigeonVar_list[9] as Long
+      return TransferMsg(move, currentName, fileIndex, fileCount, doneBytes, totalBytes, finished, cancelled, error, elapsedMs)
     }
   }
   fun toList(): List<Any?> {
@@ -554,6 +557,7 @@ data class TransferMsg (
       finished,
       cancelled,
       error,
+      elapsedMs,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -564,7 +568,7 @@ data class TransferMsg (
       return true
     }
     val other = other as TransferMsg
-    return FluLuksApiPigeonUtils.deepEquals(this.move, other.move) && FluLuksApiPigeonUtils.deepEquals(this.currentName, other.currentName) && FluLuksApiPigeonUtils.deepEquals(this.fileIndex, other.fileIndex) && FluLuksApiPigeonUtils.deepEquals(this.fileCount, other.fileCount) && FluLuksApiPigeonUtils.deepEquals(this.doneBytes, other.doneBytes) && FluLuksApiPigeonUtils.deepEquals(this.totalBytes, other.totalBytes) && FluLuksApiPigeonUtils.deepEquals(this.finished, other.finished) && FluLuksApiPigeonUtils.deepEquals(this.cancelled, other.cancelled) && FluLuksApiPigeonUtils.deepEquals(this.error, other.error)
+    return FluLuksApiPigeonUtils.deepEquals(this.move, other.move) && FluLuksApiPigeonUtils.deepEquals(this.currentName, other.currentName) && FluLuksApiPigeonUtils.deepEquals(this.fileIndex, other.fileIndex) && FluLuksApiPigeonUtils.deepEquals(this.fileCount, other.fileCount) && FluLuksApiPigeonUtils.deepEquals(this.doneBytes, other.doneBytes) && FluLuksApiPigeonUtils.deepEquals(this.totalBytes, other.totalBytes) && FluLuksApiPigeonUtils.deepEquals(this.finished, other.finished) && FluLuksApiPigeonUtils.deepEquals(this.cancelled, other.cancelled) && FluLuksApiPigeonUtils.deepEquals(this.error, other.error) && FluLuksApiPigeonUtils.deepEquals(this.elapsedMs, other.elapsedMs)
   }
 
   override fun hashCode(): Int {
@@ -578,10 +582,11 @@ data class TransferMsg (
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.finished)
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.cancelled)
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.error)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.elapsedMs)
     return result
   }
   override fun toString(): String {
-    return "TransferMsg(move=$move, currentName=$currentName, fileIndex=$fileIndex, fileCount=$fileCount, doneBytes=$doneBytes, totalBytes=$totalBytes, finished=$finished, cancelled=$cancelled, error=$error)"
+    return "TransferMsg(move=$move, currentName=$currentName, fileIndex=$fileIndex, fileCount=$fileCount, doneBytes=$doneBytes, totalBytes=$totalBytes, finished=$finished, cancelled=$cancelled, error=$error, elapsedMs=$elapsedMs)"
   }
 }
 

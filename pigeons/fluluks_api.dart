@@ -121,6 +121,7 @@ class TransferMsg {
     required this.finished,
     required this.cancelled,
     this.error,
+    required this.elapsedMs,
   });
   bool move;
   String currentName;
@@ -131,6 +132,9 @@ class TransferMsg {
   bool finished;
   bool cancelled;
   String? error;
+
+  /// Durée de l'opération en millisecondes (débit affiché à la fin).
+  int elapsedMs;
 }
 
 /// Résultats d'une recherche ; `truncated` au-delà de 500.

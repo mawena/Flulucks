@@ -4,6 +4,7 @@ import '../state/app_state.dart';
 import '../strings_fr.dart';
 import '../widgets/disk_card.dart';
 import '../widgets/source_tile.dart';
+import '../widgets/transfer_bar.dart';
 import 'explorer_screen.dart';
 import 'settings_screen.dart';
 
@@ -27,6 +28,7 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
+      bottomNavigationBar: TransferBar(state: state), // copie en cours ou interrompue, même hors de l'explorateur
       body: ListenableBuilder(
         listenable: state,
         builder: (context, _) {
