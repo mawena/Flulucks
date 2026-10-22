@@ -35,7 +35,8 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
   disque est ouvert.
 - **Réglages** : lecture seule des disques, affichage en liste ou en grille, fichiers cachés, accès aux
   fichiers du téléphone.
-- **Nouveau nom et nouveau logo** : un dossier en forme de bouclier, avec une serrure.
+- **Nouveau nom et nouveau logo** : une arche de portail qui encadre un dossier, avec un cadenas, sur un
+  fond orange.
 
 ### Disques USB
 
