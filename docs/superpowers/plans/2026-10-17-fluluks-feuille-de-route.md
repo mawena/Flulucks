@@ -285,8 +285,8 @@ dans le même commit que le travail.
 - [ ] Fusion `feature/formatage` → `develop`
 - [ ] Version `v1.1.0`
 
-### Phase 9 — Compression, corbeille et outils du gestionnaire
-- [ ] Plan de la phase 9 écrit *(demande du 2026-10-22 ; spec § 15)*
+### Phase 9 — Compression, corbeille et outils du gestionnaire ([plan](2026-10-22-phase9-compression.md))
+- [x] Plan de la phase 9 écrit *(demande du 2026-10-22 ; spec § 15)*
 - [ ] Compresser en ZIP ; extraire ZIP, 7z, RAR (lecture), TAR, TAR.GZ, TAR.XZ, avec progression et annulation
 - [ ] Corbeille sur le téléphone et sur les disques (récupérable 30 jours)
 - [ ] Analyse de l'espace (dossiers et plus gros fichiers)
