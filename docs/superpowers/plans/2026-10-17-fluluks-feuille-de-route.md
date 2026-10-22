@@ -248,7 +248,7 @@ dans le même commit que le travail.
 - [x] Fusion `feature/portail` → `develop` *(après relecture finale : `Android/data` affiché vide, chemins absolus
       dans les messages, source supprimée pendant un téléchargement, vignettes qui bloquaient le listage,
       carte SD retirée non suivie ; corrigés, JVM 114/114, Flutter 60/60, Pixel 59/59)*
-- [ ] Version `v0.5.0`
+- [x] Version `v0.5.0`
 
 ### Phase 7 — Robustesse et performances
 - [ ] Plan de la phase 7 écrit
