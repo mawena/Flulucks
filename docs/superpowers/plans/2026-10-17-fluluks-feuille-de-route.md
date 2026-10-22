@@ -269,16 +269,21 @@ dans le même commit que le travail.
       vrai nom, détails de l'explorateur et de la recherche)*
 - [ ] Version `v1.0.0`
 
-### Phase 8 — Lecteurs intégrés et stockages distants
-- [ ] Plan de la phase 8 écrit
-      *(demande du 2026-10-20, J.1 ; plan écrit à la fin de la phase 7)*
+### Phase 8 — Formatage des disques USB
+- [ ] Plan de la phase 8 écrit *(demande du 2026-10-22 ; spec § 14)*
+- [ ] Formatage en FAT32, exFAT, ext4 et NTFS, en clair ou chiffré LUKS2
+- [ ] Version `v1.1.0`
+
+### Phase 9 — Lecteurs intégrés et stockages distants
+- [ ] Plan de la phase 9 écrit
+      *(demande du 2026-10-20, J.1 ; déplacée de la phase 8 à la phase 9 le 2026-10-22)*
 - [ ] Visionneuse d'images (glisser d'une photo à l'autre, zoom)
 - [ ] Lecteur de musique (lecture en arrière-plan, file d'attente du dossier)
 - [ ] Éditeur de fichiers texte (ouvrir, modifier, enregistrer, UTF-8)
 - [ ] Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)
 - [ ] Dossiers distants par FTP, comme source du gestionnaire (parcourir, copier, déplacer, ouvrir)
 - [ ] Dossiers distants par SFTP
-- [ ] Version `v1.1.0`
+- [ ] Version `v1.2.0`
 
 ---
 
