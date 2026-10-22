@@ -250,8 +250,9 @@ dans le même commit que le travail.
       carte SD retirée non suivie ; corrigés, JVM 114/114, Flutter 60/60, Pixel 59/59)*
 - [x] Version `v0.5.0`
 
-### Phase 7 — Robustesse et performances
-- [ ] Plan de la phase 7 écrit
+### Phase 7 — Robustesse et performances ([plan](2026-10-22-phase7-robustesse.md))
+- [x] Plan de la phase 7 écrit *(spec § 13)*
+- [ ] Logo orange, plus représentatif : arche de portail, dossier et cadenas *(demande du 2026-10-22)*
 - [ ] Verrouillage automatique après X minutes d'inactivité (réglage désactivé par défaut, jamais pendant une copie)
 - [ ] Débranchement inattendu : conseil selon le système de fichiers, copies interrompues signalées
 - [ ] Performances du § 5 mesurées sur le Pixel (listage de 1 000 fichiers, copies téléphone ↔ disque)

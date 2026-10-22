@@ -277,7 +277,7 @@ Décisions de l'utilisateur, après la phase 5 :
 - **Nom** : l'application s'appelle **Portail**. Seul le nom visible change : le paquet
   `com.mawena.fluluks`, le dépôt et la bibliothèque native gardent leur nom *(décision du planificateur :
   changer l'`applicationId` créerait une autre application et ferait perdre les réglages)*.
-- **Logo** : un dossier en forme de bouclier, avec une serrure, sur un dégradé indigo → violet
+- **Logo** *(remplacé le 2026-10-22, voir § 13)* : un dossier en forme de bouclier, avec une serrure, sur un dégradé indigo → violet
   (`assets/logo/portail.svg`).
 - **Gestionnaire de fichiers à part entière.** L'« explorateur intégré simple » du § 2 et du § 4.4
   devient un gestionnaire complet :
@@ -304,3 +304,14 @@ Décisions de l'utilisateur (`docs/Manuel/maj-20-10-2026.md`) :
   - accéder à des dossiers distants par FTP, puis par SFTP, comme sources du gestionnaire de fichiers.
 - Ce qui est lu ou affiché depuis un disque chiffré suit la règle du § 11 : rien n'en est écrit sur le
   stockage du téléphone sans action explicite de l'utilisateur (copie, export).
+
+## 13. Évolution du 2026-10-22 : phase 7
+
+- **Logo** *(décision de l'utilisateur, dessin choisi par le planificateur)* : fond orange terracotta
+  (`#E07B53` → `#C2410C`), clin d'œil à la couleur de Claude sans reprendre son logo ; une arche de
+  portail blanche qui encadre un dossier, avec un petit cadenas : l'accès aux fichiers, même chiffrés.
+- **Verrouillage automatique** (§ 4.4) *(décision du planificateur)* : seuls les volumes **chiffrés**
+  sont verrouillés (éjectés, clé effacée) après le délai choisi : jamais, 5, 15, 30 ou 60 min ; jamais
+  pendant une copie ; toute lecture ou écriture repousse le délai.
+- **Débranchement** (§ 4.3) : l'avertissement donne un conseil selon le système de fichiers (ext4 : Ubuntu
+  rejoue le journal ; FAT/exFAT : vérification sur un ordinateur ; NTFS : vérification par Windows).
