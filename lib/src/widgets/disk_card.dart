@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../bridge/fluluks_api.g.dart';
+import '../screens/format_screen.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
 import 'partition_tile.dart';
@@ -22,7 +23,10 @@ class DiskCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(disk.name, style: theme.textTheme.titleMedium),
+            Row(children: [
+              Expanded(child: Text(disk.name, style: theme.textTheme.titleMedium)),
+              if (disk.hasPermission) _menu(context),
+            ]),
             Text(Fr.humanSize(disk.sizeBytes), style: theme.textTheme.bodySmall),
             if (disk.error != null)
               Text(disk.error!, style: TextStyle(color: theme.colorScheme.error)),
@@ -43,6 +47,29 @@ class DiskCard extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+
+  /// « Formater… », désactivé avec la raison tant qu'un volume du disque est ouvert.
+  Widget _menu(BuildContext context) {
+    final open = state.volumes.any((v) => v.diskId == disk.id);
+    return PopupMenuButton<String>(
+      tooltip: Fr.diskMenu,
+      onSelected: (_) => Navigator.of(context)
+          .push(MaterialPageRoute<void>(builder: (_) => FormatScreen(state: state, disk: disk))),
+      itemBuilder: (_) => [
+        PopupMenuItem<String>(
+          value: 'format',
+          enabled: !open,
+          child: ListTile(
+            contentPadding: EdgeInsets.zero,
+            enabled: !open,
+            leading: const Icon(Icons.cleaning_services_outlined),
+            title: const Text(Fr.formatMenu),
+            subtitle: open ? const Text(Fr.formatEjectFirst) : null,
+          ),
+        ),
+      ],
     );
   }
 }

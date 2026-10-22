@@ -245,6 +245,20 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     await refresh();
   }
 
+  /// Formate tout le disque ; rend null, ou le message d'erreur (affiché par l'écran de formatage). La
+  /// phrase de passe est mise à zéro après l'appel, sur tous les chemins.
+  Future<String?> formatDisk(String diskId, String fs, bool encrypted, String label, Uint8List? passphrase) async {
+    try {
+      await api.formatDisk(diskId, fs, encrypted, label, passphrase);
+      await refresh();
+      return null;
+    } on PlatformException catch (e) {
+      return e.message ?? Fr.genericError;
+    } finally {
+      passphrase?.fillRange(0, passphrase.length, 0);
+    }
+  }
+
   Future<void> _guard(Future<void> Function() action) async {
     try {
       _lastError = null;

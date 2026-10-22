@@ -119,4 +119,30 @@ class Fr {
     final value = bytes / (isGo ? 1e9 : 1e6);
     return '${value.toStringAsFixed(1).replaceAll('.', ',')} ${isGo ? 'Go' : 'Mo'}';
   }
+
+  // --- formatage (phase 8)
+  static const diskMenu = 'Options du disque';
+  static const formatMenu = 'Formater…';
+  static const formatEjectFirst = "Éjectez d'abord les volumes de ce disque";
+  static const formatTitle = 'Formater le disque';
+  static const fsHelpExfat = 'Windows, macOS, Linux, TV';
+  static const fsHelpFat32 = 'Ancien matériel, 4 Gio par fichier au plus';
+  static const fsHelpExt4 = 'Ubuntu';
+  static const fsHelpNtfs = 'Windows';
+  static const encryptSwitch = 'Chiffrer (LUKS2)';
+  static const encryptHelp = 'La phrase de passe sera demandée à chaque ouverture, ici comme sous Ubuntu';
+  static const passConfirm = 'Confirmer la phrase de passe';
+  static const passEmpty = 'Saisissez une phrase de passe';
+  static const passMismatch = 'Les deux phrases de passe diffèrent';
+  static const formatLabel = 'Étiquette';
+  static String labelLimitChars(int n) => '$n caractères au plus';
+  static String labelLimitBytes(int n) => '$n octets au plus (une lettre accentuée en compte deux)';
+  static const labelLimitFat32 = '11 caractères au plus, sans accent';
+  static const labelInvalid = 'Étiquette refusée par ce système de fichiers';
+  static const formatButton = 'Formater';
+  static String formatConfirm(String name, String size) =>
+      'Tout le contenu de « $name » ($size) sera effacé. Tapez le nom du disque pour confirmer.';
+  static const formatConfirmHint = 'Nom du disque';
+  static String formatting(int pct) => 'Formatage… $pct %';
+  static const formatted = 'Disque formaté';
 }
