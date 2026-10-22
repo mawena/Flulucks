@@ -40,6 +40,9 @@ int fl_format(fl_bdev *disk, const fl_fmt_opts *o, const void *pass, size_t pass
   if (rc != FL_OK) return rc;
   uint64_t bytes = count * disk->sector_size;
   if (bytes < min_fs(o->fs, disk->sector_size) + (o->encrypted ? LUKS_HDR : 0)) return FL_ENOSPC;
+  /* FatFs : FAT32 sous 2^32 secteurs (2 Tio en secteurs de 512 octets) ; les secteurs chiffrés sont ceux du disque */
+  uint64_t vol_sectors = count - (o->encrypted ? LUKS_HDR / disk->sector_size : 0);
+  if (o->fs == FL_FMT_FAT32 && vol_sectors >= (1ull << 32)) return FL_EFBIG;
   report(progress, arg, 0);
 
   rc = fl_part_write_single(disk, o->fs, o->encrypted, &first, &count);

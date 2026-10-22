@@ -50,7 +50,9 @@ typedef struct {
 
 /* Formate tout `disk` : vérifications (taille minimale, étiquette, phrase) avant toute écriture, table à
  * une partition, effacement des anciennes signatures, LUKS2 si demandé, système de fichiers, vidage du
- * cache du disque. progress (facultatif) reçoit un pourcentage croissant, 100 à la fin. */
+ * cache du disque. progress (facultatif) reçoit un pourcentage croissant, 100 à la fin. Avant toute
+ * écriture : FL_ENOSPC si le disque est trop petit pour ce format, FL_EFBIG pour FAT32 sur 2^32 secteurs
+ * ou plus. */
 int fl_format(fl_bdev *disk, const fl_fmt_opts *o, const void *pass, size_t passlen,
               void (*progress)(int pct, void *arg), void *arg);
 

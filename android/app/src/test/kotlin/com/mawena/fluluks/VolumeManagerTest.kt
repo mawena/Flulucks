@@ -555,6 +555,13 @@ class VolumeManagerTest {
         assertEquals(VolumeManager.MSG_FORMAT_DETACHED, formatErr(FormatOptions("ext4", false, "")).message)
     }
 
+    @Test fun formatSizeRefusalsExplained() {
+        engine.formatResult = EngineError.FL_ENOSPC
+        assertEquals(VolumeManager.MSG_FORMAT_TOO_SMALL, formatErr(FormatOptions("fat32", false, "")).message)
+        engine.formatResult = EngineError.FL_EFBIG
+        assertEquals(VolumeManager.MSG_FORMAT_TOO_BIG, formatErr(FormatOptions("fat32", false, "")).message)
+    }
+
     @Test fun formatReadOnlyDisk() {
         engine.formatResult = EngineError.FL_EROFS
         assertEquals(VolumeManager.MSG_FORMAT_RO, formatErr(FormatOptions("exfat", false, "")).message)

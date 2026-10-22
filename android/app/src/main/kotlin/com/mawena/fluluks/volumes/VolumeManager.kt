@@ -83,6 +83,9 @@ object VolumeManager {
     const val MSG_FORMAT_RO = "Disque protégé en écriture"
     const val MSG_FORMAT_DETACHED = "Disque débranché pendant le formatage : recommencez le formatage"
     const val MSG_FORMAT_BUSY = "Un formatage est déjà en cours"
+    const val MSG_FORMAT_TOO_SMALL =
+        "Disque trop petit pour ce format : 34 Mio au moins en FAT32, 8 Mio sinon, 16 Mio de plus s'il est chiffré"
+    const val MSG_FORMAT_TOO_BIG = "Disque trop grand pour FAT32 (2 Tio au plus) : choisissez exFAT"
     /** Argon2 du formatage : 1 Gio comme cryptsetup, 256 Mio si la mémoire disponible ne le permet pas. */
     private const val FORMAT_KDF_KIB = 1_048_576
     private const val FORMAT_KDF_LOW_KIB = 262_144
@@ -531,6 +534,8 @@ object VolumeManager {
                 throw when (rc) {
                     EngineError.FL_EROFS -> EngineError(rc, MSG_FORMAT_RO)
                     EngineError.FL_EBUSY -> EngineError(rc, MSG_FORMAT_OPEN)
+                    EngineError.FL_ENOSPC -> EngineError(rc, MSG_FORMAT_TOO_SMALL)
+                    EngineError.FL_EFBIG -> EngineError(rc, MSG_FORMAT_TOO_BIG)
                     EngineError.FL_ENODEV, EngineError.FL_EIO, EngineError.FL_ETIMEDOUT, EngineError.FL_ESTALL ->
                         EngineError(rc, MSG_FORMAT_DETACHED)
                     else -> EngineError(rc)

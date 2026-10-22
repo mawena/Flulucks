@@ -258,6 +258,30 @@ static void test_refus_avant_ecriture(void) {
   unlink(img);
 }
 
+/* FAT32 : FatFs refuse 2^32 secteurs ou plus (2 Tio en secteurs de 512 octets). Image creuse : le refus
+ * vient avant toute écriture (FL_EFBIG), en clair comme en chiffré. */
+static void test_fat32_trop_grand(void) {
+  char img[4096];
+  TT_ASSERT_EQ(image(img, sizeof img, "format-fat32-2tio.img", (2048ull << 30) + 64 * MIB), 0);
+  int fd = open(img, O_RDWR);
+  uint8_t marque[512], lu[512];
+  memset(marque, 0x5A, sizeof marque);
+  TT_ASSERT_EQ(pwrite(fd, marque, sizeof marque, 0), (ssize_t)sizeof marque);
+  close(fd);
+  fl_bdev *d = NULL;
+  TT_ASSERT_EQ(fl_file_bdev_open(img, 512, false, &d), FL_OK);
+  fl_fmt_opts o = {.fs = FL_FMT_FAT32, .encrypted = false, .label = "", .kdf_mem_kib = MEM};
+  TT_ASSERT_EQ(fl_format(d, &o, NULL, 0, NULL, NULL), FL_EFBIG);
+  o.encrypted = true;
+  TT_ASSERT_EQ(fl_format(d, &o, PASS, strlen(PASS), NULL, NULL), FL_EFBIG);
+  fl_bdev_close(d);
+  fd = open(img, O_RDONLY);
+  TT_ASSERT_EQ(pread(fd, lu, sizeof lu, 0), (ssize_t)sizeof lu);
+  close(fd);
+  TT_ASSERT(memcmp(lu, marque, sizeof lu) == 0);
+  unlink(img);
+}
+
 int main(void) {
   char out[256];
   char *v[] = {"cryptsetup", "--version", NULL};
@@ -268,5 +292,6 @@ int main(void) {
   TT_RUN(test_secteurs_4096);
   TT_RUN(test_anciennes_signatures);
   TT_RUN(test_refus_avant_ecriture);
+  TT_RUN(test_fat32_trop_grand);
   TT_MAIN_END();
 }
