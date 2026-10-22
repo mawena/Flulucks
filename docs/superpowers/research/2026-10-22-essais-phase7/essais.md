@@ -34,4 +34,6 @@ v1.0.0). Cochez chaque ligne faite ; notez ce qui ne va pas sous la ligne.
 ## 4. Divers
 
 - [ ] Explorateur : Téléphone → Android → data affiche « Dossier protégé par Android ».
+- [ ] Copier une photo d'un disque vers Téléphone → DCIM → Camera : la copie réussit et la photo apparaît
+      dans Google Photos.
 - [ ] Le nouveau logo orange s'affiche sur l'écran d'accueil et dans la notification « Disque ouvert ».
