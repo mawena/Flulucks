@@ -269,7 +269,7 @@ dans le même commit que le travail.
       l'éjection, favoris d'un disque chiffré en clair, clé USB vue comme carte SD, fichier partiel sous son
       vrai nom, détails de l'explorateur et de la recherche)*
 - [x] T11 — Documentation : README (robustesse, mesures, limite levée)
-- [ ] Version `v1.0.0`
+- [x] Version `v1.0.0`
 
 ### Phase 8 — Formatage des disques USB ([plan](2026-10-22-phase8-formatage.md))
 - [x] Plan de la phase 8 écrit *(demande du 2026-10-22 ; spec § 14)*
