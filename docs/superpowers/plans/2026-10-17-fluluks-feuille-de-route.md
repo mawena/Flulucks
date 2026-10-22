@@ -271,7 +271,7 @@ dans le même commit que le travail.
 
 ### Phase 8 — Formatage des disques USB ([plan](2026-10-22-phase8-formatage.md))
 - [x] Plan de la phase 8 écrit *(demande du 2026-10-22 ; spec § 14)*
-- [ ] T1 — Table de partitions à une partition (MBR jusqu'à 2 Tio, GPT au-delà)
+- [x] T1 — Table de partitions à une partition (MBR jusqu'à 2 Tio, GPT au-delà) *(jugée par sfdisk et sgdisk)*
 - [ ] T2 — FAT32 et exFAT
 - [ ] T3 — ext4 avec journal
 - [ ] T4 — NTFS

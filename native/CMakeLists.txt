@@ -50,6 +50,8 @@ set(FL_SOURCES
   src/usb/bot.c
   src/usb/scsi.c
   src/usb/usb_bdev.c
+  src/format/part_write.c
+  src/format/random.c
 )
 # Transport usbdevfs : Linux et Android seulement.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR ANDROID)
@@ -138,6 +140,8 @@ if(FL_TESTS)
   fl_add_test(test_ntfs_dev)
   fl_add_test(test_ntfs_hostile)
   set_tests_properties(test_ntfs_hostile PROPERTIES TIMEOUT 600)
+  fl_add_test(test_format_part)
+  target_link_libraries(test_format_part PRIVATE fl_testsupport)
   fl_add_test(test_cache)
   fl_add_test(test_crc32c)
   add_test(NAME test_crc32c_debit COMMAND test_crc32c debit)
