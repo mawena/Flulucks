@@ -272,4 +272,15 @@ class TransfersTest {
         assertEquals("Volume en lecture seule : disque protégé en écriture", run("phone", listOf("/a.txt"), volId, "/").error)
         assertEquals(setOf("/"), e.nodes.keys)
     }
+
+    /** Relecture finale : un fichier encore en cours d'écriture (téléchargement) n'est pas supprimé. */
+    @Test fun moveKeepsSourceChangedDuringCopy() {
+        local("dl.bin", data(3 * mib)); local("ok.txt", data(4))
+        e.onPwrite = { if (it == 1) File(root, "dl.bin").appendBytes(data(10, 3)) }
+        val s = run("phone", listOf("/dl.bin", "/ok.txt"), volId, "/", move = true)
+        assertEquals(Transfers.MSG_CHANGED, s.error)
+        assertEquals(3L * mib + 10, File(root, "dl.bin").length()) // source gardée, entière
+        assertFalse(File(root, "ok.txt").exists()) // l'autre élément est bien déplacé
+        assertArrayEquals(data(4), disk("/ok.txt"))
+    }
 }

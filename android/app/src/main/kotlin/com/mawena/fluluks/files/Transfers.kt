@@ -36,7 +36,8 @@ data class TransferState(
  *
  * Avant toute écriture : parcours borné de la source, place libre de la destination, copie dans soi-même
  * refusée. Un déplacement entre deux sources ne supprime un élément de premier niveau qu'une fois tous ses
- * fichiers copiés et leur taille vérifiée sur la destination. En cas d'échec ou d'annulation, le fichier en
+ * fichiers copiés et leur taille vérifiée sur la destination, et jamais si un fichier a changé de taille
+ * pendant la copie (téléchargement en cours). En cas d'échec ou d'annulation, le fichier en
  * cours de la destination est supprimé (si elle est encore là) ; ce qui est complet est gardé.
  */
 object Transfers {
@@ -45,6 +46,7 @@ object Transfers {
     const val MSG_SOURCE_GONE = "Stockage fermé : opération interrompue"
     const val MSG_LINKS = "Les liens symboliques et fichiers spéciaux ne sont pas copiés"
     const val MSG_SIZE_MISMATCH = "Copie incomplète : taille différente sur la destination"
+    const val MSG_CHANGED = "Fichier modifié pendant le déplacement : l'original est gardé"
     fun msgNoSpace(need: Long, free: Long) =
         "Pas assez de place : ${VolumeManager.humanSize(need)} nécessaires, ${VolumeManager.humanSize(free)} libres"
 
@@ -107,6 +109,7 @@ object Transfers {
         var st = TransferState(move, "", 0, 0, 0, 0)
         var lastPublish = 0L
         var skipped = 0
+        var changed = 0
 
         fun publish(force: Boolean = false) {
             val now = clock()
@@ -117,7 +120,12 @@ object Transfers {
         }
 
         fun finish(error: String? = null, cancelled: Boolean = false) {
-            st = st.copy(finished = true, cancelled = cancelled, error = error ?: if (skipped > 0) MSG_LINKS else null)
+            val warning = when {
+                changed > 0 -> MSG_CHANGED
+                skipped > 0 -> MSG_LINKS
+                else -> null
+            }
+            st = st.copy(finished = true, cancelled = cancelled, error = error ?: warning)
             _state.value = st
         }
 
@@ -174,8 +182,8 @@ object Transfers {
                     if (n.type == FileType.DIR) {
                         checkCancel()
                         mapped[n.rel] = dst.mkdir(parentDst, name)
-                    } else {
-                        copyFile(src, dst, n, parentDst, name)
+                    } else if (!copyFile(src, dst, n, parentDst, name) && move) {
+                        changed++; complete = false // fichier encore en cours d'écriture : source gardée
                     }
                 }
                 // déplacement : la source n'est supprimée qu'une fois tout l'élément copié et vérifié
@@ -218,7 +226,8 @@ object Transfers {
             return out
         }
 
-        fun copyFile(src: FileSource, dst: FileSource, n: Node, parentDst: String, name: String) {
+        /** Copie un fichier ; faux si la source a changé de taille depuis le parcours (encore en écriture). */
+        fun copyFile(src: FileSource, dst: FileSource, n: Node, parentDst: String, name: String): Boolean {
             checkCancel()
             st = st.copy(currentName = name, fileIndex = st.fileIndex + 1)
             publish(force = true)
@@ -252,6 +261,7 @@ object Transfers {
                 if (written != n.size) st = st.copy(totalBytes = st.totalBytes + (written - n.size))
                 created = null
                 publish(force = true)
+                return written == n.size && src.stat(n.src)?.size == written
             } finally {
                 out?.let { runCatching { it.close() } }
                 created?.let { partial -> if (alive(dst)) runCatching { dst.delete(partial) } }
