@@ -61,6 +61,55 @@ static bool probe_fat(const uint8_t *b, fl_probe_result *out) {
   return true;
 }
 
+/* Étiquette exFAT : entrée 0x83 du dossier racine (au plus 11 caractères UTF-16LE), cherchée dans les
+ * 256 premières entrées du premier cluster. Ajoute le texte UTF-8 à out ; 0, ou une erreur d'E/S. */
+static int probe_exfat_label(fl_bdev *d, const uint8_t *b, fl_probe_result *out) {
+  unsigned bps_shift = b[108], spc_shift = b[109];
+  uint64_t heap = le32(b + 88), root = le32(b + 96);
+  if (bps_shift < 9 || bps_shift > 12 || spc_shift > 25 - bps_shift || root < 2) return 0;
+  uint64_t off = (heap + ((root - 2) << spc_shift)) << bps_shift;
+  uint64_t clus = 1ull << (bps_shift + spc_shift);
+  uint8_t e[32 * 256];
+  size_t len = clus < sizeof e ? (size_t)clus : sizeof e;
+  int r = rd(d, off, len, e);
+  if (r != 0) return r < 0 ? r : 0;
+  for (size_t i = 0; i < len; i += 32) {
+    if (e[i] == 0x00) return 0; /* fin du dossier */
+    if (e[i] != 0x83) continue;
+    unsigned n = e[i + 1] < 11 ? e[i + 1] : 11;
+    size_t k = 0;
+    for (unsigned j = 0; j < n; j++) {
+      uint32_t c = le16(e + i + 2 + 2 * j);
+      if (c >= 0xD800 && c <= 0xDBFF && j + 1 < n) { /* paire de substitution */
+        uint32_t c2 = le16(e + i + 4 + 2 * j);
+        if (c2 >= 0xDC00 && c2 <= 0xDFFF) {
+          c = 0x10000 + ((c - 0xD800) << 10) + (c2 - 0xDC00);
+          j++;
+        }
+      }
+      if (c >= 0xD800 && c <= 0xDFFF) c = 0xFFFD;
+      if (c < 0x80) {
+        out->label[k++] = (char)c;
+      } else if (c < 0x800) {
+        out->label[k++] = (char)(0xC0 | c >> 6);
+        out->label[k++] = (char)(0x80 | (c & 0x3F));
+      } else if (c < 0x10000) {
+        out->label[k++] = (char)(0xE0 | c >> 12);
+        out->label[k++] = (char)(0x80 | ((c >> 6) & 0x3F));
+        out->label[k++] = (char)(0x80 | (c & 0x3F));
+      } else {
+        out->label[k++] = (char)(0xF0 | c >> 18);
+        out->label[k++] = (char)(0x80 | ((c >> 12) & 0x3F));
+        out->label[k++] = (char)(0x80 | ((c >> 6) & 0x3F));
+        out->label[k++] = (char)(0x80 | (c & 0x3F));
+      }
+    }
+    out->label[k] = '\0'; /* 11 caractères de 4 octets au plus : 44 < sizeof label */
+    return 0;
+  }
+  return 0;
+}
+
 int fl_probe(fl_bdev *d, fl_probe_result *out) {
   if (!d || !out) return FL_EINVAL;
   memset(out, 0, sizeof *out);
@@ -84,7 +133,11 @@ int fl_probe(fl_bdev *d, fl_probe_result *out) {
     }
     if (memcmp(b + 3, "-FVE-FS-", 8) == 0) { out->content = FL_CONTENT_BITLOCKER; return FL_OK; }
     if (memcmp(b + 3, "NTFS    ", 8) == 0) { out->content = FL_CONTENT_NTFS; return FL_OK; }
-    if (memcmp(b + 3, "EXFAT   ", 8) == 0) { out->content = FL_CONTENT_EXFAT; return FL_OK; }
+    if (memcmp(b + 3, "EXFAT   ", 8) == 0) {
+      out->content = FL_CONTENT_EXFAT;
+      r = probe_exfat_label(d, b, out);
+      return r < 0 ? r : FL_OK;
+    }
     if (probe_fat(b, out)) return FL_OK;
   }
 

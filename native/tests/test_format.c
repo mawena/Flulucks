@@ -14,6 +14,7 @@
 #include "fluluks/error.h"
 #include "fluluks/format.h"
 #include "fluluks/partition.h"
+#include "fluluks/probe.h"
 #include "fsck_util.h"
 #include "tt.h"
 
@@ -129,6 +130,14 @@ static void cas(uint32_t ss, uint64_t taille, fl_fmt_fs fs, bool chiffre, const 
   fl_bdev_close(d);
 
   extraire_partition(img, ss, part, sizeof part);
+  if (!chiffre && fs != FL_FMT_NTFS) { /* l'étiquette relue par notre sondeur (carte du disque) */
+    fl_bdev *p = NULL;
+    fl_probe_result r;
+    TT_ASSERT_EQ(fl_file_bdev_open(part, ss, true, &p), FL_OK);
+    TT_ASSERT_EQ(fl_probe(p, &r), FL_OK);
+    fl_bdev_close(p);
+    TT_ASSERT_STR_EQ(r.label, etiquette);
+  }
   if (chiffre) {
     blkid_type(part, "crypto_LUKS");
     char td[4096];
