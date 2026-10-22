@@ -9,16 +9,30 @@ d'Android : on ouvre une vidéo dans VLC, un PDF ou une photo dans les applicati
 Elle est née d'un besoin simple : utiliser sur un téléphone non rooté (un Pixel 4 XL) le disque
 LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permettait.
 
-> **État actuel : version 0.5.0, gestionnaire de fichiers ; lecture et écriture sur ext4, FAT, exFAT et
-> NTFS.** L'écriture a été
-> vérifiée sur PC (batteries de non-corruption jugées par des outils indépendants et le noyau Linux,
-> coupures simulées) et sur le téléphone avec des images. FAT, exFAT et NTFS ont été essayés sur une vraie
-> clé ou un vrai disque, **pas encore ext4** : faites une sauvegarde avant d'écrire sur un disque qui
-> compte, ou activez « Ouvrir les disques en lecture seule ». Voir les [limites](#limites-actuelles).
+> **État actuel : version 1.0.0 ; gestionnaire de fichiers, lecture et écriture sur ext4, FAT, exFAT et
+> NTFS.** L'écriture a été vérifiée sur PC (batteries de non-corruption jugées par des outils indépendants
+> et le noyau Linux, coupures simulées), sur le téléphone avec des images, puis essayée sur une vraie clé
+> et un vrai disque pour chaque système de fichiers (ext4 compris : `e2fsck` propre ensuite sous Ubuntu).
+> Une sauvegarde reste recommandée avant d'écrire sur un disque qui compte. Voir les
+> [limites](#limites-actuelles).
 
-## Ce que fait la version 0.5.0
+## Ce que fait la version 1.0.0
 
-### Gestionnaire de fichiers (nouveau en 0.5.0)
+### Robustesse (nouveau en 1.0.0)
+
+- **Verrouillage automatique** des disques chiffrés après 5, 15, 30 minutes ou 1 heure sans activité
+  (Réglages ; « Jamais » par défaut). Une copie en cours ou un fichier lu par une autre application (une
+  vidéo dans VLC, par exemple) compte comme une activité. Une notification l'annonce.
+- **Disque débranché pendant une écriture** : la notification donne le conseil adapté au système de
+  fichiers (ext4 : le brancher sous Ubuntu, qui rejoue le journal ; FAT ou exFAT : le faire vérifier, il
+  s'ouvre en lecture seule d'ici là ; NTFS : le brancher sous Windows), et l'accueil affiche « Stockage
+  fermé : opération interrompue ».
+- **Copies plus sûres** : un fichier en cours de copie porte un nom temporaire (« .nom.portail-partiel »)
+  jusqu'à la fin ; une copie interrompue ne laisse jamais un fichier incomplet sous son vrai nom.
+- **Résultat des copies** sur l'accueil, avec le débit (« Terminé : 3 fichier(s), 118 Mo/s »).
+- **Nouveau logo orange** : une arche de portail qui encadre un dossier, avec un cadenas.
+
+### Gestionnaire de fichiers
 
 - **Un accueil pour tous les stockages** : le téléphone, la carte SD, les disques USB (à déverrouiller,
   ouvrir ou éjecter) et les favoris.
@@ -35,8 +49,6 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
   disque est ouvert.
 - **Réglages** : lecture seule des disques, affichage en liste ou en grille, fichiers cachés, accès aux
   fichiers du téléphone.
-- **Nouveau nom et nouveau logo** : une arche de portail qui encadre un dossier, avec un cadenas, sur un
-  fond orange.
 
 ### Disques USB
 
@@ -99,6 +111,11 @@ Mesures sur un Pixel 4 XL avec le vrai disque (LUKS2, Argon2id à 1 Gio de mémo
 - déverrouillage en 4,3 s environ ;
 - lecture d'une vidéo dans VLC à environ 65 Mo/s.
 
+Mesures sur le même téléphone, sur une image (test `PerfInstrumentedTest`, sans la limite du port USB) :
+- listage d'un dossier de 1 000 fichiers : 25 ms sur un disque, 276 ms sur le téléphone ;
+- lecture par le fournisseur de documents (ce que voit VLC) : 241 Mo/s ;
+- copie de 64 Mio : 118 Mo/s du téléphone vers le disque, 96 Mo/s du disque vers le téléphone.
+
 ### Limites actuelles
 
 - **Dossiers protégés du téléphone** : Android interdit à toute application, même avec l'accès à tous les
@@ -106,9 +123,9 @@ Mesures sur un Pixel 4 XL avec le vrai disque (LUKS2, Argon2id à 1 Gio de mémo
 - **Liens symboliques et fichiers spéciaux** : listés, mais ni suivis ni copiés ; une copie qui en
   rencontre le signale à la fin (« Les liens symboliques et fichiers spéciaux ne sont pas copiés »).
 
-- **Écriture non essayée sur un vrai disque USB.** Elle est vérifiée sur PC et, sur le téléphone, avec
-  des images et un faux disque USB simulé ; l'essai sur un vrai disque (tâche 13 de la phase 3) reste à
-  faire. Sauvegardez avant d'écrire sur un disque important.
+- **Écriture ext4** : vérifiée sur PC et sur le téléphone avec des images, puis essayée sur le vrai disque
+  (LUKS2 et ext4 : copie de 1 Gio dans les deux sens, renommage, suppression, `e2fsck -fn` propre sous
+  Ubuntu, fichiers appartenant à l'utilisateur). Sauvegardez avant d'écrire sur un disque important.
 - **Écriture refusée** (le volume s'ouvre en lecture seule, avec la raison) sur un ext4 sans journal,
   sans extents (ancien ext3 converti), à journal externe, avec un journal à sommes v1 ou v2, ou avec
   une option inconnue de Portail. Le journal doit avoir été rejoué (disque bien démonté sous Ubuntu).
@@ -196,7 +213,8 @@ La construction demande les outils listés plus bas, dans [Développement](#dév
    attente… ».
 
 Pour n'ouvrir les disques qu'en lecture, activez **Ouvrir les disques en lecture seule** dans les
-**Réglages** avant de déverrouiller.
+**Réglages** avant de déverrouiller. Le **verrouillage automatique** des disques chiffrés se règle au
+même endroit.
 
 ## Comment ça marche
 
@@ -288,11 +306,11 @@ Le dépôt suit git flow :
 |---|---|---|
 | 1 | Moteur natif en lecture sur PC | — |
 | 2 | Android en lecture : « mon disque dans VLC » | **v0.1.0** |
-| 3 | ext4 en écriture (essai sur un vrai disque à faire) | **v0.2.1** |
+| 3 | ext4 en écriture | **v0.2.1** |
 | 4 | FAT16 / FAT32 / exFAT | **v0.3.0** |
 | 5 | NTFS | **v0.4.0** |
 | 6 | Portail : nom, logo, gestionnaire de fichiers (téléphone, carte SD, disques) | **v0.5.0** |
-| 7 | Robustesse : verrouillage automatique, débranchement inattendu, performances, ext4 sur le vrai disque | v1.0.0 |
+| 7 | Robustesse : verrouillage automatique, débranchement inattendu, performances, ext4 sur le vrai disque | **v1.0.0** |
 | 8 | Formatage des disques USB : FAT32, exFAT, ext4, NTFS, en clair ou chiffré LUKS2 | v1.1.0 |
 | 9 | Compression et décompression (ZIP, 7z, RAR, TAR), corbeille, analyse de l'espace, propriétés et SHA-256, renommage par lot, filtres | v1.2.0 |
 | 10 | Visionneuse d'images, lecteurs de musique et de vidéo, éditeur de texte, dossiers distants FTP puis SFTP | v1.3.0 |
