@@ -17,6 +17,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   List<VolumeMsg> _volumes = const [];
   String? _lastError;
   bool _readOnlyPreference = false;
+  int _autoLockMinutes = 0;
   bool _ejecting = false;
   String? _ejectError;
   List<SourceMsg> _sources = const [];
@@ -79,6 +80,9 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   /// « Ouvrir les disques en lecture seule » : tout nouveau montage se fait alors sans écriture.
   bool get readOnlyPreference => _readOnlyPreference;
 
+  /// Verrouillage automatique des disques chiffrés, en minutes (0 = jamais).
+  int get autoLockMinutes => _autoLockMinutes;
+
   /// Éjection en cours (données en attente écrites, démontage) : les boutons sont désactivés.
   bool get ejecting => _ejecting;
 
@@ -106,6 +110,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
       _disks = await api.listDisks();
       _volumes = await api.listVolumes();
       _readOnlyPreference = await api.getReadOnlyPreference();
+      _autoLockMinutes = await api.getAutoLockMinutes();
       _sources = await api.listSources();
       _allFilesAccess = await api.hasAllFilesAccess();
       _viewPrefs = await api.getViewPrefs();
@@ -174,6 +179,12 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   Future<void> removeFavorite(String key, String path) => _guard(() async {
         await api.removeFavorite(key, path);
         _favorites = await api.listFavorites();
+        notifyListeners();
+      });
+
+  Future<void> setAutoLockMinutes(int minutes) => _guard(() async {
+        await api.setAutoLockMinutes(minutes);
+        _autoLockMinutes = minutes;
         notifyListeners();
       });
 

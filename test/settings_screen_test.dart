@@ -64,4 +64,25 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(GridView), findsOneWidget);
   });
+
+  testWidgets('autoLockShowsCurrentValue', (tester) async {
+    tester.view.physicalSize = const Size(412, 869); // largeur du Pixel 4 XL : pas de débordement
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await pumpSettings(tester, FakeHostApi()..autoLockMinutes = 15);
+    expect(find.text('Verrouillage automatique'), findsOneWidget);
+    expect(find.text('Disques chiffrés, après ce délai sans activité'), findsOneWidget);
+    expect(find.text('15 min'), findsOneWidget);
+  });
+
+  testWidgets('autoLockCallsApi', (tester) async {
+    final api = await pumpSettings(tester, FakeHostApi());
+    expect(find.text('Jamais'), findsOneWidget); // désactivé par défaut
+    await tester.tap(find.text('Jamais'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('1 h').last);
+    await tester.pumpAndSettle();
+    expect(api.autoLockMinutes, 60);
+    expect(find.text('1 h'), findsOneWidget);
+  });
 }

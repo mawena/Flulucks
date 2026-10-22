@@ -255,7 +255,7 @@ dans le même commit que le travail.
 - [x] T1 — Logo orange, plus représentatif : arche de portail, dossier et cadenas *(demande du 2026-10-22 ; AppIdentityTest 3/3 sur le Pixel)*
 - [x] T2 — Système de fichiers et chiffrement connus pour chaque volume *(clé « fs » du statfs natif)*
 - [x] T3 — Verrouillage automatique des disques chiffrés (Kotlin : contrôle toutes les 30 s, jamais pendant une copie)
-- [ ] T4 — Réglage du verrouillage dans les Réglages (désactivé par défaut)
+- [x] T4 — Réglage du verrouillage dans les Réglages (Jamais par défaut, 5, 15, 30 min, 1 h)
 - [ ] Débranchement inattendu : conseil selon le système de fichiers, copies interrompues signalées
 - [ ] Performances du § 5 mesurées sur le Pixel (listage de 1 000 fichiers, copies téléphone ↔ disque)
 - [ ] *(utilisateur)* Essai d'ext4 en écriture sur le vrai disque *(tâche 13 de la phase 3)*

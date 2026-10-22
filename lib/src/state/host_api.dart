@@ -13,6 +13,8 @@ abstract class HostApi {
   Future<void> openInFiles(String volumeId);
   Future<bool> getReadOnlyPreference();
   Future<void> setReadOnlyPreference(bool value);
+  Future<int> getAutoLockMinutes();
+  Future<void> setAutoLockMinutes(int minutes);
   Future<List<SourceMsg>> listSources();
   Future<bool> hasAllFilesAccess();
   Future<void> requestAllFilesAccess();
@@ -59,6 +61,10 @@ class PigeonHostApi implements HostApi {
   Future<bool> getReadOnlyPreference() => _api.getReadOnlyPreference();
   @override
   Future<void> setReadOnlyPreference(bool value) => _api.setReadOnlyPreference(value);
+  @override
+  Future<int> getAutoLockMinutes() => _api.getAutoLockMinutes();
+  @override
+  Future<void> setAutoLockMinutes(int minutes) => _api.setAutoLockMinutes(minutes);
   @override
   Future<List<SourceMsg>> listSources() => _api.listSources();
   @override

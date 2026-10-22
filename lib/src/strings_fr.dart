@@ -36,6 +36,12 @@ class Fr {
   static const browse = 'Parcourir';
   static const settings = 'Réglages';
   static const readOnlyHelp = "S'applique aux prochaines ouvertures de disques";
+  static const autoLock = 'Verrouillage automatique';
+  static const autoLockHelp = 'Disques chiffrés, après ce délai sans activité';
+  static const never = 'Jamais';
+
+  /// « 15 min », « 1 h ».
+  static String minutes(int m) => m == 60 ? '1 h' : '$m min';
   static const newFolder = 'Nouveau dossier';
   static const folderName = 'Nom du dossier';
   static const rename = 'Renommer';
