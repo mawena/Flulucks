@@ -6,6 +6,7 @@ import com.mawena.fluluks.files.ProtectedDirException
 import java.io.File
 import java.io.FileNotFoundException
 import java.nio.file.Files as NioFiles
+import com.mawena.fluluks.files.Files
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -92,5 +93,32 @@ class LocalSourceTest {
         val (free, total) = s.space()
         assertTrue(free in 1..total)
         assertEquals(null, s.readOnlyReason)
+    }
+
+    /** Relecture finale : Android 11 et plus renvoie souvent une liste vide (et non null) pour ces dossiers. */
+    @Test fun androidDataAndObbReportedProtected() {
+        File(root, "Android/data/com.exemple").mkdirs()
+        File(root, "Android/obb").mkdirs()
+        File(root, "Android/media").mkdirs()
+        for (p in listOf("/Android/data", "/Android/obb", "/android/DATA", "/Android/data/com.exemple")) {
+            refused<ProtectedDirException> { src().list(p) }
+        }
+        assertEquals(setOf("data", "obb", "media"), src().list("/Android").map { it.name }.toSet())
+        assertEquals(0, src().list("/Android/media").size)
+    }
+
+    /** Relecture finale : les erreurs de java.io (« /storage/…: open failed: EACCES ») ne sortent jamais. */
+    @Test fun ioFailuresNeverLeakPaths() {
+        val f = File(root, "secret.txt").apply { writeText("x") }
+        val d = File(root, "fermé").apply { mkdir() }
+        assumeTrue(f.setReadable(false) && !f.canRead() && d.setWritable(false) && !d.canWrite()) // pas en root
+        try {
+            for (block in listOf({ src().openRead("/secret.txt").close() }, { src().createFile("/fermé", "a.txt").second.close() })) {
+                val m = Files.toFilesException(refused<Exception>(block), "copyDocument").message!!
+                assertFalse(m, m.contains(root.path) || m.contains("EACCES") || m.contains("/"))
+            }
+        } finally {
+            f.setReadable(true); d.setWritable(true)
+        }
     }
 }

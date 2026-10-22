@@ -56,12 +56,23 @@ class LocalSource(
         return Entry(f.name, path, type, if (type == FileType.FILE) f.length() else 0L, f.lastModified() / 1000)
     }
 
+    /**
+     * `Android/data`, `Android/obb` et leur contenu : refusés par Android à toute autre application, même
+     * avec l'accès à tous les fichiers. Selon la version, listFiles() rend null ou une liste vide trompeuse.
+     */
+    private fun isAndroidPrivate(p: String): Boolean {
+        val parts = p.trim('/').split('/')
+        return parts.size >= 2 && parts[0].equals("Android", ignoreCase = true) &&
+            (parts[1].equals("data", ignoreCase = true) || parts[1].equals("obb", ignoreCase = true))
+    }
+
     override fun list(path: String): List<Entry> {
         val d = file(path)
+        val p = PathRules.require(path)
+        if (isAndroidPrivate(p)) throw ProtectedDirException()
         if (!d.exists()) throw FileNotFoundException("Dossier introuvable")
         if (!d.isDirectory) throw FileNotFoundException("Ce n'est pas un dossier")
         val children = d.listFiles() ?: throw ProtectedDirException()
-        val p = PathRules.require(path)
         return children.map { entry(it, DocumentIds.child(p, it.name)) }
     }
 
@@ -154,14 +165,20 @@ class LocalSource(
     override fun openRead(path: String): InputStream {
         val f = file(path)
         if (!f.isFile) throw FileNotFoundException("Ce n'est pas un fichier ordinaire")
-        return FileInputStream(f)
+        // le message de java.io porte le chemin absolu, en anglais : jamais affiché
+        return try { FileInputStream(f) } catch (e: FileNotFoundException) { throw FileNotFoundException("Fichier illisible") }
     }
 
     override fun createFile(parent: String, name: String): Pair<String, OutputStream> {
         requireWritable()
         val d = requireDir(parent)
         val n = unique(d, requireName(name))
-        return DocumentIds.child(PathRules.require(parent), n) to FileOutputStream(File(d, n))
+        val out = try {
+            FileOutputStream(File(d, n))
+        } catch (e: FileNotFoundException) {
+            throw FileNotFoundException("Écriture impossible dans ce dossier")
+        }
+        return DocumentIds.child(PathRules.require(parent), n) to out
     }
 
     override fun contentUri(path: String): Uri {

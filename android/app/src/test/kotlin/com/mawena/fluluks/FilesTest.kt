@@ -137,4 +137,12 @@ class FilesTest {
             assertFalse(m.contains("secret"))
         }
     }
+
+    /** Relecture finale : un FileNotFoundException de java.io porte le chemin absolu en anglais. */
+    @Test fun javaIoMessagesReplaced() {
+        val m = Files.toFilesException(
+            java.io.FileNotFoundException("/storage/emulated/0/DCIM/x.jpg: open failed: EACCES (Permission denied)"),
+            "openDocument").message!!
+        assertEquals(Files.MSG_BAD_PATH, m)
+    }
 }
