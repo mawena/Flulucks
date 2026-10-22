@@ -82,6 +82,7 @@ class SourceMsg {
     required this.freeBytes,
     required this.readOnly,
     required this.roReason,
+    required this.encrypted,
   });
   String id;
   String stableKey;
@@ -91,6 +92,9 @@ class SourceMsg {
   int freeBytes;
   bool readOnly;
   String roReason;
+
+  /// Disque ouvert avec une phrase de passe (un favori y montre un nom de dossier chiffré).
+  bool encrypted;
 }
 
 /// Élément d'un dossier. `type` : `dir`, `file`, `link` ou `other` ; `mtime` en secondes UTC.
@@ -121,6 +125,7 @@ class TransferMsg {
     required this.finished,
     required this.cancelled,
     this.error,
+    required this.elapsedMs,
   });
   bool move;
   String currentName;
@@ -131,6 +136,9 @@ class TransferMsg {
   bool finished;
   bool cancelled;
   String? error;
+
+  /// Durée de l'opération en millisecondes (débit affiché à la fin).
+  int elapsedMs;
 }
 
 /// Résultats d'une recherche ; `truncated` au-delà de 500.
@@ -172,6 +180,10 @@ abstract class FluLuksHostApi {
   bool getReadOnlyPreference();
   void setReadOnlyPreference(bool value);
 
+  /// Verrouillage automatique des disques chiffrés, en minutes (0 = jamais ; 5, 15, 30 ou 60).
+  int getAutoLockMinutes();
+  void setAutoLockMinutes(int minutes);
+
   // --- gestionnaire de fichiers (phase 6)
   List<SourceMsg> listSources();
   bool hasAllFilesAccess();
@@ -184,7 +196,9 @@ abstract class FluLuksHostApi {
   String rename(String sourceId, String path, String newName);
   @async
   void deleteEntries(String sourceId, List<String> paths);
+  @async
   void openWith(String sourceId, String path);
+  @async
   void share(String sourceId, List<String> paths);
   void startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
   void cancelTransfer();

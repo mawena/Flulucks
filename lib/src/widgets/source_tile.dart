@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../strings_fr.dart';
 
-/// Icône d'un stockage selon son type (`phone`, `sd`, `disk`).
+/// Icône d'un stockage selon son type (`phone`, `removable` : carte SD ou clé montée par Android, `disk`).
 IconData sourceIcon(String kind) => switch (kind) {
       'phone' => Icons.smartphone,
-      'sd' => Icons.sd_card,
+      'removable' => Icons.sd_storage,
       _ => Icons.usb,
     };
 

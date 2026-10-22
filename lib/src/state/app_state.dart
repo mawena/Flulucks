@@ -1,5 +1,6 @@
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 
 import '../bridge/fluluks_api.g.dart';
@@ -17,6 +18,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   List<VolumeMsg> _volumes = const [];
   String? _lastError;
   bool _readOnlyPreference = false;
+  int _autoLockMinutes = 0;
   bool _ejecting = false;
   String? _ejectError;
   List<SourceMsg> _sources = const [];
@@ -25,6 +27,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
   List<FavoriteMsg> _favorites = const [];
   ClipboardItems? _clipboard;
+  final _closedNoticed = <String>{}; // stockages disparus dont la fermeture a déjà été annoncée
   (String, String)? _transferDestination;
 
   List<DiskMsg> get disks => _disks;
@@ -66,6 +69,13 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   /// Copie ou déplacement en cours, ou le dernier terminé ; null si aucun.
   TransferMsg? get transfer => _transfer;
 
+  /// Le résultat d'une opération finie a été montré : plus aucun écran ne le réaffiche.
+  void transferResultSeen() {
+    if (_transfer?.finished != true) return;
+    _transfer = null;
+    notifyListeners();
+  }
+
   /// Accès à tous les fichiers du téléphone accordé.
   bool get allFilesAccess => _allFilesAccess;
 
@@ -78,6 +88,9 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
 
   /// « Ouvrir les disques en lecture seule » : tout nouveau montage se fait alors sans écriture.
   bool get readOnlyPreference => _readOnlyPreference;
+
+  /// Verrouillage automatique des disques chiffrés, en minutes (0 = jamais).
+  int get autoLockMinutes => _autoLockMinutes;
 
   /// Éjection en cours (données en attente écrites, démontage) : les boutons sont désactivés.
   bool get ejecting => _ejecting;
@@ -106,6 +119,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
       _disks = await api.listDisks();
       _volumes = await api.listVolumes();
       _readOnlyPreference = await api.getReadOnlyPreference();
+      _autoLockMinutes = await api.getAutoLockMinutes();
       _sources = await api.listSources();
       _allFilesAccess = await api.hasAllFilesAccess();
       _viewPrefs = await api.getViewPrefs();
@@ -124,10 +138,22 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     refreshSources(); // un volume ouvert ou fermé ajoute ou retire un stockage
   }
 
+  /// Vrai la première fois seulement qu'on annonce la disparition de [sourceId] (un message, même avec
+  /// plusieurs explorateurs ouverts dessus).
+  bool takeClosedNotice(String sourceId) => _closedNoticed.add(sourceId);
+
   /// Relit les stockages, l'accès aux fichiers et les favoris (changement d'état, retour au premier plan).
+  /// Un stockage disparu vide le presse-papiers qui le désigne et le cache d'images décodées (vignettes).
   Future<void> refreshSources() async {
     try {
+      final before = _sources.map((s) => s.id).toSet();
       _sources = await api.listSources();
+      final now = _sources.map((s) => s.id).toSet();
+      _closedNoticed.removeAll(now);
+      if (before.difference(now).isNotEmpty) {
+        if (_clipboard != null && !now.contains(_clipboard!.sourceId)) _clipboard = null;
+        PaintingBinding.instance.imageCache.clear();
+      }
       _allFilesAccess = await api.hasAllFilesAccess();
       _favorites = await api.listFavorites();
       notifyListeners();
@@ -174,6 +200,12 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   Future<void> removeFavorite(String key, String path) => _guard(() async {
         await api.removeFavorite(key, path);
         _favorites = await api.listFavorites();
+        notifyListeners();
+      });
+
+  Future<void> setAutoLockMinutes(int minutes) => _guard(() async {
+        await api.setAutoLockMinutes(minutes);
+        _autoLockMinutes = minutes;
         notifyListeners();
       });
 

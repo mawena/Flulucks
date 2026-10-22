@@ -1,29 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Avant-plan de l'icône Portail : dossier-bouclier et serrure, dans la zone sûre (66 dp sur 108). -->
+<!-- Avant-plan de l'icône Portail : arche de portail, dossier et cadenas, dans la zone sûre (66 dp sur 108) (assets/logo/portail.svg). -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="512" android:viewportHeight="512">
-    <group android:pivotX="256" android:pivotY="300" android:scaleX="0.74" android:scaleY="0.74" android:translateY="-44">
-        <group android:translateY="14">
-            <path android:fillColor="#381E1B4B" android:pathData="M116,176 Q116,156 136,156 L214,156 L242,184 L376,184 Q396,184 396,204 L396,268 C396,358 338,410 256,442 C174,410 116,358 116,268 Z" />
+    <group android:pivotX="256" android:pivotY="262" android:scaleX="0.86" android:scaleY="0.86">
+        <group android:translateY="10">
+            <path android:fillColor="#477C2D12" android:fillType="evenOdd" android:pathData="M160,372 V236 A96,96 0 0 1 352,236 V372 Z M188,372 V236 A68,68 0 0 1 324,236 V372 Z" />
+            <path android:fillColor="#477C2D12" android:pathData="M200,258 Q200,248 210,248 L238,248 L250,260 L302,260 Q312,260 312,270 L312,338 Q312,348 302,348 L210,348 Q200,348 200,338 Z" />
+            <path android:fillColor="#477C2D12" android:pathData="M149,372 H363 A9,9 0 0 1 363,390 H149 A9,9 0 0 1 149,372 Z" />
         </group>
-        <path android:pathData="M116,176 Q116,156 136,156 L214,156 L242,184 L376,184 Q396,184 396,204 L396,268 C396,358 338,410 256,442 C174,410 116,358 116,268 Z">
-            <aapt:attr name="android:fillColor">
-                <gradient android:type="linear" android:startX="0" android:startY="156" android:endX="0" android:endY="442">
-                    <item android:offset="0" android:color="#FFFFFFFF" />
-                    <item android:offset="1" android:color="#FFDDE1FF" />
-                </gradient>
-            </aapt:attr>
+        <path android:fillType="evenOdd" android:pathData="M160,372 V236 A96,96 0 0 1 352,236 V372 Z M188,372 V236 A68,68 0 0 1 324,236 V372 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="140" android:endX="0" android:endY="390">
+                <item android:offset="0" android:color="#FFFFFFFF" />
+                <item android:offset="1" android:color="#FFFFE8DD" />
+            </gradient>
+        </aapt:attr>
         </path>
-        <path android:fillColor="#8CC7CCFF" android:pathData="M116,206 L396,206 L396,224 L116,224 Z" />
-        <path android:pathData="M240,318.25 A36,36 0 1,1 272,318.25 L284,370 Q285,378 277,378 L235,378 Q227,378 228,370 Z">
-            <aapt:attr name="android:fillColor">
-                <gradient android:type="linear" android:startX="0" android:startY="276" android:endX="0" android:endY="378">
-                    <item android:offset="0" android:color="#FF4338CA" />
-                    <item android:offset="1" android:color="#FF6D28D9" />
-                </gradient>
-            </aapt:attr>
+        <path android:fillColor="#FFFFE8DD" android:pathData="M149,372 H363 A9,9 0 0 1 363,390 H149 A9,9 0 0 1 149,372 Z" />
+        <path android:pathData="M200,258 Q200,248 210,248 L238,248 L250,260 L302,260 Q312,260 312,270 L312,338 Q312,348 302,348 L210,348 Q200,348 200,338 Z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="140" android:endX="0" android:endY="390">
+                <item android:offset="0" android:color="#FFFFFFFF" />
+                <item android:offset="1" android:color="#FFFFE8DD" />
+            </gradient>
+        </aapt:attr>
         </path>
+        <path android:fillColor="#FFF4B79C" android:pathData="M200,276 H312 V287 H200 Z" />
+        <path android:strokeColor="#FFC9531E" android:strokeWidth="22" android:strokeLineCap="round" android:pathData="M311,330 V318 A15,15 0 0 1 341,318 V330" />
+        <path android:fillColor="#FFC9531E" android:pathData="M306,324 H346 Q358,324 358,336 V364 Q358,376 346,376 H306 Q294,376 294,364 V336 Q294,324 306,324 Z" />
+        <path android:strokeColor="#FFFFFFFF" android:strokeWidth="9" android:strokeLineCap="round" android:pathData="M311,330 V318 A15,15 0 0 1 341,318 V330" />
+        <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd" android:pathData="M308,330 H344 Q352,330 352,338 V362 Q352,370 344,370 H308 Q300,370 300,362 V338 Q300,330 308,330 Z M326,341 A6,6 0 0 1 329,352.2 L330,360 H322 L323,352.2 A6,6 0 0 1 326,341 Z" />
     </group>
 </vector>

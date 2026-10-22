@@ -1,5 +1,6 @@
 package com.mawena.fluluks.files
 
+import com.mawena.fluluks.engine.EngineError
 import com.mawena.fluluks.provider.WriteOps
 import java.io.FileNotFoundException
 import java.text.Normalizer
@@ -43,6 +44,9 @@ object Search {
             } catch (e: FileNotFoundException) {
                 if (dir == start && e !is ProtectedDirException) throw e // le dossier de départ doit exister
                 continue // dossier protégé ou disparu : sauté
+            } catch (e: EngineError) {
+                if (dir == start) throw e
+                continue // dossier illisible d'un disque : sauté, la recherche continue
             }
             for (e in children.sortedBy { it.name.lowercase() }) {
                 if (flag[0]) break

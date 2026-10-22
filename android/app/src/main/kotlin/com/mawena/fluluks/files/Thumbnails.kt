@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.annotation.VisibleForTesting
 import com.mawena.fluluks.engine.FileType
 import com.mawena.fluluks.provider.MimeTypes
+import com.mawena.fluluks.volumes.VolumeManager
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Semaphore
 
@@ -58,7 +59,7 @@ object Thumbnails {
             try {
                 synchronized(cache) { cache[key] }?.let { return it } // calculée pendant l'attente
                 val bytes = (if (video) decoder.video(src, e.path, px) else decoder.image(src, e.path, px)) ?: return null
-                put(key, bytes)
+                put(key, bytes) { src !is DiskSource || VolumeManager.volume(sourceId) != null }
                 bytes
             } finally {
                 permits.release()
@@ -69,8 +70,12 @@ object Thumbnails {
         }
     }
 
-    private fun put(key: String, bytes: ByteArray) = synchronized(cache) {
-        if (bytes.size > CACHE_BYTES) return@synchronized
+    /**
+     * [stillOpen] est relu sous le verrou du cache : un disque éjecté pendant le calcul (retiré des volumes
+     * avant [drop]) ne laisse aucune vignette derrière lui.
+     */
+    private fun put(key: String, bytes: ByteArray, stillOpen: () -> Boolean) = synchronized(cache) {
+        if (bytes.size > CACHE_BYTES || !stillOpen()) return@synchronized
         cache.put(key, bytes)?.let { cacheBytes -= it.size }
         cacheBytes += bytes.size
         val it = cache.entries.iterator()

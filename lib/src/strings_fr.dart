@@ -36,6 +36,12 @@ class Fr {
   static const browse = 'Parcourir';
   static const settings = 'Réglages';
   static const readOnlyHelp = "S'applique aux prochaines ouvertures de disques";
+  static const autoLock = 'Verrouillage automatique';
+  static const autoLockHelp = 'Disques chiffrés, après ce délai sans activité';
+  static const never = 'Jamais';
+
+  /// « 15 min », « 1 h ».
+  static String minutes(int m) => m == 60 ? '1 h' : '$m min';
   static const newFolder = 'Nouveau dossier';
   static const folderName = 'Nom du dossier';
   static const rename = 'Renommer';
@@ -61,6 +67,8 @@ class Fr {
   static const list = 'Liste';
   static const showHidden = 'Afficher les fichiers cachés';
   static const addFavorite = 'Ajouter aux favoris';
+  static const add = 'Ajouter';
+  static const encryptedFavorite = "Le nom de ce dossier restera visible sur l'accueil, même disque verrouillé";
   static const removeFavorite = 'Retirer des favoris';
   static const favoriteUnavailable = 'Disque non ouvert';
   static const search = 'Rechercher';
@@ -78,6 +86,12 @@ class Fr {
   static String transferLine(bool move, String name, int i, int n, int pct) =>
       '${move ? 'Déplacement' : 'Copie'} : $name ($i/$n) — $pct %';
   static String transferDone(int n) => 'Terminé : $n fichier(s)';
+
+  /// « Terminé : 3 fichier(s), 34 Mo/s » ; sans débit sous 1 s ou sous 1 Mo (chiffre sans intérêt).
+  static String transferDoneRate(int n, int bytes, int elapsedMs) {
+    if (elapsedMs < 1000 || bytes < 1000000) return transferDone(n);
+    return '${transferDone(n)}, ${(bytes / 1000 / elapsedMs).round()} Mo/s';
+  }
 
   /// Date courte d'un élément (jj/mm/aaaa hh:mm, heure locale), depuis des secondes UTC.
   static String shortDate(int seconds) {

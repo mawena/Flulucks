@@ -4,8 +4,11 @@ import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
 
-/// Réglages : lecture seule des disques, accès aux fichiers, affichage en liste ou en grille,
-/// fichiers cachés par défaut.
+/// Réglages : lecture seule des disques, verrouillage automatique, accès aux fichiers, affichage en liste
+/// ou en grille, fichiers cachés par défaut.
+/// Délais proposés (minutes ; 0 = jamais), les mêmes que AutoLock.CHOICES côté Kotlin.
+const autoLockChoices = [0, 5, 15, 30, 60];
+
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key, required this.state});
 
@@ -25,6 +28,20 @@ class SettingsScreen extends StatelessWidget {
               subtitle: const Text(Fr.readOnlyHelp),
               value: state.readOnlyPreference,
               onChanged: state.setReadOnlyPreference,
+            ),
+            ListTile(
+              title: const Text(Fr.autoLock),
+              subtitle: const Text(Fr.autoLockHelp),
+              trailing: DropdownButton<int>(
+                value: autoLockChoices.contains(state.autoLockMinutes) ? state.autoLockMinutes : 0,
+                items: [
+                  for (final m in autoLockChoices)
+                    DropdownMenuItem(value: m, child: Text(m == 0 ? Fr.never : Fr.minutes(m))),
+                ],
+                onChanged: (m) {
+                  if (m != null) state.setAutoLockMinutes(m);
+                },
+              ),
             ),
             ListTile(
               title: const Text(Fr.allFilesTitle),

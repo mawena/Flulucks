@@ -21,6 +21,7 @@ import com.mawena.fluluks.files.TransferState
 import com.mawena.fluluks.files.Transfers
 import com.mawena.fluluks.files.ViewPrefs
 import com.mawena.fluluks.files.ViewSettings
+import com.mawena.fluluks.volumes.AutoLock
 import com.mawena.fluluks.volumes.DiskState
 import com.mawena.fluluks.volumes.VolumeManager
 import com.mawena.fluluks.volumes.VolumeState
@@ -173,18 +174,22 @@ class HostApiImpl(
                 SourceMsg(
                     id = v.id, stableKey = if (v.partUuid.isBlank()) "disk:${v.diskId}#${v.partIndex}" else "disk:${v.partUuid}",
                     kind = "disk", label = v.title, totalBytes = v.totalBytes, freeBytes = v.freeBytes,
-                    readOnly = v.readOnly, roReason = v.roReason,
+                    readOnly = v.readOnly, roReason = v.roReason, encrypted = v.encrypted,
                 )
             } else {
                 val (free, total) = src.space()
                 val ro = src.readOnlyReason
                 SourceMsg(
                     id = src.id, stableKey = src.stableKey, kind = Sources.kind(src), label = src.label,
-                    totalBytes = total, freeBytes = free, readOnly = ro != null, roReason = ro ?: "",
+                    totalBytes = total, freeBytes = free, readOnly = ro != null, roReason = ro ?: "", encrypted = false,
                 )
             }
         }
     }
+
+    override fun getAutoLockMinutes(): Long = AutoLock.readPref(context).toLong()
+
+    override fun setAutoLockMinutes(minutes: Long) = guarded { AutoLock.writePref(context, minutes.toInt()) }
 
     override fun hasAllFilesAccess(): Boolean = Sources.hasAllFilesAccess()
 
@@ -202,14 +207,33 @@ class HostApiImpl(
     override fun deleteEntries(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit) =
         io(callback) { Files.delete(sourceId, paths) }
 
-    override fun openWith(sourceId: String, path: String) = guarded {
-        val chooser = Files.viewIntent(sourceId, path)
-        if (!Files.hasViewer(context, chooser)) throw FlutterError(EngineError.FL_ENOTSUP.toString(), Files.MSG_NO_VIEWER)
-        context.startActivity(chooser)
-    }
+    override fun openWith(sourceId: String, path: String, callback: (Result<Unit>) -> Unit) =
+        startPrepared(callback) {
+            val chooser = Files.viewIntent(sourceId, path)
+            if (!Files.hasViewer(context, chooser)) throw FlutterError(EngineError.FL_ENOTSUP.toString(), Files.MSG_NO_VIEWER)
+            chooser
+        }
 
-    override fun share(sourceId: String, paths: List<String>) = guarded {
-        context.startActivity(Files.shareIntent(sourceId, paths))
+    override fun share(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit) =
+        startPrepared(callback) { Files.shareIntent(sourceId, paths) }
+
+    /**
+     * Intent préparé hors du fil principal (stat du moteur, qui peut attendre une synchronisation en cours),
+     * puis activité lancée sur le fil principal.
+     */
+    private fun startPrepared(callback: (Result<Unit>) -> Unit, build: () -> Intent) {
+        scope.launch {
+            val result = try {
+                val intent = withContext(Dispatchers.IO) { build() }
+                context.startActivity(intent)
+                Result.success(Unit)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Result.failure(toFlutterError(e))
+            }
+            callback(result)
+        }
     }
 
     override fun startTransfer(srcId: String, paths: List<String>, dstId: String, dstDir: String, move: Boolean) = guarded {
@@ -283,14 +307,16 @@ class HostApiImpl(
         }
     }
 
-    private fun toFlutterError(e: Throwable): FlutterError = when (e) {
-        is EngineError -> FlutterError(e.code.toString(), e.message)
-        is FilesException -> FlutterError(e.code.toString(), e.message)
-        is ActivityNotFoundException -> FlutterError(EngineError.FL_ENOTSUP.toString(), Files.MSG_NO_VIEWER)
-        else -> FlutterError(EngineError.FL_EIO.toString(), "Erreur inattendue : l'opération a échoué")
-    }
-
     companion object {
+        /** Erreur rendue à Flutter : code fl_err et message français, jamais le détail d'une exception. */
+        internal fun toFlutterError(e: Throwable): FlutterError = when (e) {
+            is FlutterError -> e // déjà en français (« Aucune application… »)
+            is EngineError -> FlutterError(e.code.toString(), e.message)
+            is FilesException -> FlutterError(e.code.toString(), e.message)
+            is ActivityNotFoundException -> FlutterError(EngineError.FL_ENOTSUP.toString(), Files.MSG_NO_VIEWER)
+            else -> FlutterError(EngineError.FL_EIO.toString(), "Erreur inattendue : l'opération a échoué")
+        }
+
         const val MSG_NO_PARTITION = "Aucune partition reconnue"
         private const val PREFS = "fluluks"
         private const val PREF_READ_ONLY = "lecture_seule"
@@ -331,6 +357,7 @@ class HostApiImpl(
         internal fun transferMsg(t: TransferState) = TransferMsg(
             move = t.move, currentName = t.currentName, fileIndex = t.fileIndex.toLong(), fileCount = t.fileCount.toLong(),
             doneBytes = t.doneBytes, totalBytes = t.totalBytes, finished = t.finished, cancelled = t.cancelled, error = t.error,
+            elapsedMs = t.elapsedMs,
         )
 
         private fun volumeMsg(v: VolumeState) = VolumeMsg(

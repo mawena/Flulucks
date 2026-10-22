@@ -18,6 +18,7 @@ class WriteOps(
     private val engine: Engine,
     private val vol: Long,
     private val maxEntries: Int = MAX_ENTRIES,
+    private val onChunk: () -> Unit = {},
 ) {
     private fun b(path: String) = path.toByteArray(Charsets.UTF_8)
 
@@ -167,6 +168,7 @@ class WriteOps(
                     val w = engine.pwrite(out, off, buf, n)
                     if (w < 0) throw EngineError(w)
                     off += n
+                    onChunk()
                 }
                 closed = true
                 check(engine.closeFile(out))

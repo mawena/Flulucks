@@ -10,15 +10,18 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.util.Log
 import com.mawena.fluluks.MainActivity
 import com.mawena.fluluks.R
+import com.mawena.fluluks.volumes.AutoLock
 import com.mawena.fluluks.volumes.VolumeManager
 import com.mawena.fluluks.volumes.VolumeState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
@@ -77,6 +80,7 @@ class VolumeService : Service() {
     override fun onCreate() {
         super.onCreate()
         VolumeManager.init(this)
+        AutoLock.bind(this) { msg -> warn(this, msg) }
         running = true
         createChannel()
         val notif = buildNotification(VolumeManager.volumes.value)
@@ -85,6 +89,13 @@ class VolumeService : Service() {
             combine(VolumeManager.ejecting, VolumeManager.ejectError) { e, err -> e to err }.collect {
                 val list = VolumeManager.volumes.value
                 if (list.isNotEmpty()) foregroundOk = startAsForeground(buildNotification(list))
+            }
+        }
+        scope.launch {
+            // verrouillage automatique : contrôle périodique tant que le service vit (un volume est ouvert)
+            while (true) {
+                delay(AutoLock.PERIOD_MS)
+                AutoLock.check(SystemClock.elapsedRealtime())
             }
         }
         scope.launch {

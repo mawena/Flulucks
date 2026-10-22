@@ -32,6 +32,7 @@ class TransfersTest {
     /** Moteur dont chaque pwrite et pread peut déclencher une action (annulation, éjection, attente). */
     private class Engine : MemEngine() {
         var onPwrite: (Int) -> Unit = {}
+        var onPread: (Int) -> Unit = {}
         var pwrites = 0
         var preads = 0
         override fun pwrite(file: Long, offset: Long, buf: ByteArray, len: Int): Int {
@@ -39,21 +40,22 @@ class TransfersTest {
             return super.pwrite(file, offset, buf, len)
         }
         override fun pread(file: Long, offset: Long, buf: ByteArray, len: Int): Int {
-            preads++
+            onPread(++preads)
             return super.pread(file, offset, buf, len)
         }
     }
 
     private lateinit var e: Engine
     private lateinit var volId: String
+    private lateinit var diskId: String
     private val root: File get() = tmp.root
     private val mib = 1 shl 20
 
     @Before fun setup() {
         e = Engine()
         VolumeManager.resetForTests(e, delayer = FakeDelayer())
-        val disk = VolumeManager.addImageDiskForTests("/x/mem.img", readOnly = false)
-        volId = runBlocking { VolumeManager.mountPlain(disk, 1, true) }.id
+        diskId = VolumeManager.addImageDiskForTests("/x/mem.img", readOnly = false)
+        volId = runBlocking { VolumeManager.mountPlain(diskId, 1, true) }.id
         Transfers.resetForTests()
         val local = LocalSource("phone", "phone", "Téléphone", root) { true }
         val disks = DiskSource(volId, e)
@@ -282,5 +284,72 @@ class TransfersTest {
         assertEquals(3L * mib + 10, File(root, "dl.bin").length()) // source gardée, entière
         assertFalse(File(root, "ok.txt").exists()) // l'autre élément est bien déplacé
         assertArrayEquals(data(4), disk("/ok.txt"))
+    }
+
+    /** Phase 7 : disque débranché pendant un déplacement disque → téléphone : rien de perdu. */
+    @Test fun detachDuringMoveKeepsSource() {
+        local("a.bin", data(3 * mib))
+        assertNull(run("phone", listOf("/a.bin"), volId, "/").error) // le fichier est maintenant sur le disque
+        File(root, "a.bin").delete()
+        File(root, "dest").mkdir()
+        e.preads = 0
+        e.onPread = { if (it == 3) VolumeManager.onUsbDetachedName(diskId) }
+        val s = run(volId, listOf("/a.bin"), "phone", "/dest", move = true)
+        assertEquals(Transfers.MSG_SOURCE_GONE, s.error)
+        assertArrayEquals(data(3 * mib), disk("/a.bin")) // la source reste sur le disque
+        assertTrue(File(root, "dest").list()!!.none { it == "a.bin" }) // jamais de fichier incomplet sous son nom
+    }
+
+    /** Phase 7 : durée de l'opération (débit affiché à la fin). */
+    @Test fun elapsedMeasured() {
+        var t = 1_000L
+        Transfers.resetForTests(clock = { t })
+        local("a.bin", data(mib))
+        e.onPwrite = { t = 3_000L }
+        val s = run("phone", listOf("/a.bin"), volId, "/")
+        assertNull(s.error)
+        assertEquals(2_000L, s.elapsedMs)
+    }
+
+    /** Phase 7 : pendant l'écriture, le fichier porte un nom temporaire ; son vrai nom seulement une fois vérifié. */
+    @Test fun partialHasTemporaryName() {
+        local("a.bin", data(3 * mib))
+        val seen = mutableSetOf<String>()
+        e.onPwrite = { seen += e.nodes.keys.filter { it != "/" } }
+        val s = run("phone", listOf("/a.bin"), volId, "/")
+        assertNull(s.error)
+        assertEquals(setOf("/.a.bin.portail-partiel"), seen)
+        assertEquals(setOf("/", "/a.bin"), e.nodes.keys)
+        assertArrayEquals(data(3 * mib), disk("/a.bin"))
+    }
+
+    @Test fun failureRemovesTemporary() {
+        local("gros.bin", data(3 * mib))
+        e.failPwriteAt = 2
+        e.failPwriteCode = EngineError.FL_EFBIG
+        run("phone", listOf("/gros.bin"), volId, "/")
+        assertEquals(setOf("/"), e.nodes.keys)
+    }
+
+    /** Phase 7 : un nom de 255 octets copié deux fois dans le même dossier : deux fichiers, noms ≤ 255 octets. */
+    @Test fun copyLongNameTwice() {
+        val long = "n".repeat(251) + ".bin" // 255 octets : la limite d'un nom local
+        local(long, data(10))
+        var tooLong = false
+        e.onPwrite = { if (e.nodes.keys.any { it.substringAfterLast('/').toByteArray().size > 255 }) tooLong = true }
+        assertNull(run("phone", listOf("/$long"), volId, "/").error)
+        assertNull(run("phone", listOf("/$long"), volId, "/").error)
+        assertFalse(tooLong)
+        val names = e.nodes.keys.filter { it != "/" }.map { it.substring(1) }
+        assertEquals(2, names.size)
+        assertTrue(names.toString(), names.all { it.toByteArray().size <= 255 && it.endsWith(".bin") })
+    }
+
+    /** Relecture finale : un « .nom.portail-partiel » laissé par une copie interrompue est remplacé, pas doublé. */
+    @Test fun stalePartialReplaced() {
+        e.nodes["/.a.bin.portail-partiel"] = data(5) // reste d'une copie interrompue (processus tué)
+        local("a.bin", data(mib))
+        assertNull(run("phone", listOf("/a.bin"), volId, "/").error)
+        assertEquals(setOf("/", "/a.bin"), e.nodes.keys)
     }
 }

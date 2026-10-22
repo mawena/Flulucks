@@ -3,6 +3,7 @@ package com.mawena.fluluks
 import com.mawena.fluluks.engine.FileType
 import com.mawena.fluluks.files.LocalSource
 import com.mawena.fluluks.files.ProtectedDirException
+import com.mawena.fluluks.files.Sources
 import java.io.File
 import java.io.FileNotFoundException
 import java.nio.file.Files as NioFiles
@@ -19,6 +20,7 @@ import org.junit.rules.TemporaryFolder
 /** Source locale (stockage du téléphone, carte SD) sur un dossier temporaire. */
 class LocalSourceTest {
     @get:Rule val tmp = TemporaryFolder()
+    @get:Rule val dehors = TemporaryFolder()
 
     private val root: File get() = tmp.root
     private fun src(access: Boolean = true) = LocalSource("phone", "phone", "Téléphone", root) { access }
@@ -120,5 +122,29 @@ class LocalSourceTest {
         } finally {
             f.setReadable(true); d.setWritable(true)
         }
+    }
+
+    /** Relecture de la phase 6 : un lien qui pointe hors de la racine se renomme et se supprime (lui, jamais sa cible). */
+    @Test fun deleteAndRenameLinkPointingOutside() {
+        val cible = File(dehors.root, "cible.txt").apply { writeText("garde") }
+        NioFiles.createSymbolicLink(File(root, "lien").toPath(), cible.toPath())
+        assertEquals("/lien2", src().rename("/lien", "lien2"))
+        assertEquals(FileType.SYMLINK, src().stat("/lien2")!!.type)
+        src().delete("/lien2")
+        assertFalse(NioFiles.exists(File(root, "lien2").toPath(), java.nio.file.LinkOption.NOFOLLOW_LINKS))
+        assertEquals("garde", cible.readText())
+        refused<FileNotFoundException> { src().openRead("/lien2") }
+    }
+
+    /** Relecture de la phase 6 : sans accès, la raison affichée n'est pas « lecture seule ». */
+    @Test fun noAccessReason() {
+        assertEquals(Files.MSG_NO_ACCESS, src(access = false).readOnlyReason)
+        assertEquals(null, src().readOnlyReason)
+    }
+
+    /** Relecture de la phase 6 : Android ne dit pas si un stockage amovible est une carte ou une clé USB. */
+    @Test fun removableKindForAndroidVolumes() {
+        assertEquals("phone", Sources.kind(src()))
+        assertEquals("removable", Sources.kind(LocalSource("sd:1234-ABCD", "sd:1234-ABCD", "Clé USB", root) { true }))
     }
 }

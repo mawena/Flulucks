@@ -61,8 +61,16 @@ object VolumeManager {
         "Mémoire insuffisante pour déverrouiller ce disque : fermez d'autres applications et réessayez"
     const val MSG_TOO_MANY = "Trop de volumes ouverts : éjectez-en un avant d'en ouvrir un autre"
     const val MSG_EJECTING = "Écriture des données en attente…"
-    const val MSG_DETACH_DURING_WRITE =
-        "Disque débranché pendant une écriture : vérifiez-le sous Ubuntu avant de le réutiliser"
+    private const val MSG_DETACH_DURING_WRITE_PREFIX = "Disque débranché pendant une écriture : "
+    /** Avertissement d'un débranchement pendant une écriture, avec le conseil adapté au système de fichiers. */
+    fun detachAdvice(fs: String): String = MSG_DETACH_DURING_WRITE_PREFIX + when (fs) {
+        "ext4" -> "branchez-le sous Ubuntu, le journal sera rejoué au montage ; en cas de doute, lancez e2fsck."
+        "FAT12", "FAT16", "FAT32", "exFAT" ->
+            "faites-le vérifier par un ordinateur (chkdsk sous Windows, fsck.fat ou fsck.exfat sous Linux). " +
+                "Portail l'ouvrira en lecture seule d'ici là."
+        "NTFS" -> "branchez-le sous Windows, qui le vérifiera, puis éjectez-le proprement."
+        else -> "faites-le vérifier sur un ordinateur avant de le réutiliser."
+    }
     fun msgEjectFailed(detail: String) = "Éjection impossible : $detail"
     fun msgEjectIncomplete(detail: String) =
         "Éjection incomplète : des données ont pu ne pas être écrites ($detail). Vérifiez le disque sous Ubuntu."
@@ -359,7 +367,8 @@ object VolumeManager {
     private fun detach(diskId: String) {
         val entry = diskEntries.remove(diskId)
         val vols = mountOrder.filter { mounts[it]?.state?.diskId == diskId }
-        if (vols.any { hasUnsyncedWrites(it) }) detachWarner(MSG_DETACH_DURING_WRITE)
+        // un seul avertissement, avec le conseil du premier volume écrit
+        vols.firstOrNull { hasUnsyncedWrites(it) }?.let { detachWarner(detachAdvice(mounts[it]?.state?.fs ?: "")) }
         for (vid in vols) unmountLocked(vid)
         if (entry != null) release(entry)
         publishDisks(); publishVolumes()
@@ -438,7 +447,7 @@ object VolumeManager {
                 id = "v" + sessionToken + "-" + counter.incrementAndGet(), diskId = diskId, partIndex = partIndex, title = title,
                 totalBytes = stat.totalBytes, freeBytes = stat.freeBytes,
                 needsRecovery = stat.needsRecovery, roReason = stat.roReason, readOnly = stat.readOnly,
-                partUuid = part.uuid,
+                partUuid = part.uuid, fs = stat.fs, encrypted = pass != null,
             )
             mounts[state.id] = MountEntry(state, vol)
             activity[state.id] = clock()
@@ -462,6 +471,22 @@ object VolumeManager {
         forget(m.state.id) // démonté, ou détruit par le moteur sur erreur
         publishVolumes()
         if (rc < 0) throw EngineError(rc, msgModeChange(writable, EngineError(rc).message))
+    }
+
+    /**
+     * Verrouillage automatique ([AutoLock]) : sur l'exécuteur, au moment où l'éjection passe enfin, le volume
+     * doit être resté inactif depuis [expectedLast] et sans copie ([busy]) ; sinon rien. [onLocked] n'est
+     * appelé que si le volume est réellement fermé (une éjection refusée publie « Éjection impossible »).
+     */
+    fun autoLock(volumeId: String, expectedLast: Long, busy: (String) -> Boolean, onLocked: () -> Unit) {
+        val disk = mounts[volumeId]?.state?.diskId
+        exec.execute {
+            runSafely(disk) {
+                if (!mounts.containsKey(volumeId) || activity[volumeId] != expectedLast || busy(volumeId)) return@runSafely
+                ejectVolumes(listOf(volumeId))
+                if (!mounts.containsKey(volumeId)) onLocked()
+            }
+        }
     }
 
     fun eject(volumeId: String) {
