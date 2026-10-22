@@ -32,4 +32,30 @@ class DocNamesTest {
         // variante trop longue : sautée, pas de nom invalide rendu
         assertNull(DocNames.unique("x".repeat(255)) { it == "x".repeat(255) })
     }
+
+    @Test fun sanitizeForbiddenChars() {
+        assertEquals("photo_1.jpg", DocNames.sanitize("photo:1.jpg"))
+        assertEquals("a_b_c_d_e_f_g_h_i_", DocNames.sanitize("a/b\\c:d*e?f\"g<h>i|"))
+        assertEquals("tab_nl_", DocNames.sanitize("tab\tnl\n"))
+        assertEquals("déjà ☀.txt", DocNames.sanitize("déjà ☀.txt"))
+    }
+
+    @Test fun sanitizeTrailingDotsAndSpaces() {
+        assertEquals("nom", DocNames.sanitize("nom. . "))
+        assertEquals(".bashrc", DocNames.sanitize(".bashrc"))
+    }
+
+    @Test fun sanitizeLongNameKeepsExtension() {
+        val n = DocNames.sanitize("é".repeat(150) + ".jpeg") // 300 octets
+        assertTrue(n.endsWith(".jpeg"))
+        assertTrue(n.toByteArray(Charsets.UTF_8).size <= 255)
+        assertTrue(DocNames.isValid(n))
+        assertEquals(n, DocNames.sanitize(n))
+        val emoji = DocNames.sanitize("🚀".repeat(70)) // 280 octets, sans extension : pas de demi-caractère
+        assertEquals("🚀".repeat(63), emoji)
+    }
+
+    @Test fun sanitizeEmpty() {
+        for (n in listOf("", ".", "..", "   ", "...")) assertEquals(n, "fichier", DocNames.sanitize(n))
+    }
 }

@@ -11,6 +11,10 @@ object ProviderErrors {
     private val NAMING_OPS = setOf("createDocument", "renameDocument", "moveDocument", "copyDocument")
 
     const val VOLUME_CLOSED = "Volume fermé"
+    const val READ_ONLY = "Volume en lecture seule"
+
+    /** « Volume en lecture seule : <raison> » (ou sans raison), pour une écriture refusée. */
+    fun readOnly(reason: String): String = if (reason.isBlank()) READ_ONLY else "$READ_ONLY : $reason"
 
     fun errno(code: Int): Errno = when (code) {
         EngineError.FL_ENOSPC -> Errno.ENOSPC

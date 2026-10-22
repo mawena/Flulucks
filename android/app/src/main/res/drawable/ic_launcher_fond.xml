@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fond de l'icône Portail : dégradé indigo → violet et halo (assets/logo/portail.svg). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="512" android:viewportHeight="512">
+    <path android:pathData="M0,0h512v512h-512z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="0" android:startY="0" android:endX="512" android:endY="512">
+                <item android:offset="0" android:color="#FF4F46E5" />
+                <item android:offset="1" android:color="#FF9333EA" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#14FFFFFF" android:pathData="M380,120 m-150,0 a150,150 0 1,0 300,0 a150,150 0 1,0 -300,0" />
+</vector>

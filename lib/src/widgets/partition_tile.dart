@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
+import '../screens/explorer_screen.dart';
 import '../strings_fr.dart';
 import 'unlock_dialog.dart';
 
@@ -34,6 +35,10 @@ class PartitionTile extends StatelessWidget {
         Wrap(
           spacing: 8,
           children: [
+            FilledButton(
+              onPressed: state.ejecting ? null : () => openExplorer(context, state, volumeId),
+              child: const Text(Fr.browse),
+            ),
             FilledButton.tonal(
               onPressed: state.ejecting ? null : () => state.openInFiles(volumeId),
               child: const Text(Fr.openInFiles),

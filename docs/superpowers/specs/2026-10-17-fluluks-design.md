@@ -270,3 +270,37 @@ open source, mais c'est à revoir si l'utilisateur veut un jour la distribuer en
 - **Android tue le processus** : atténué par le service au premier plan ; il faut tout de même un
   comportement sûr (rien de corrompu) si cela arrive.
 - **Argon2 gourmand en mémoire** : à surveiller sur l'appareil.
+
+## 11. Évolution du 2026-10-20 : Portail, gestionnaire de fichiers
+
+Décisions de l'utilisateur, après la phase 5 :
+- **Nom** : l'application s'appelle **Portail**. Seul le nom visible change : le paquet
+  `com.mawena.fluluks`, le dépôt et la bibliothèque native gardent leur nom *(décision du planificateur :
+  changer l'`applicationId` créerait une autre application et ferait perdre les réglages)*.
+- **Logo** : un dossier en forme de bouclier, avec une serrure, sur un dégradé indigo → violet
+  (`assets/logo/portail.svg`).
+- **Gestionnaire de fichiers à part entière.** L'« explorateur intégré simple » du § 2 et du § 4.4
+  devient un gestionnaire complet :
+  - stockages parcourus : téléphone, carte SD et disques USB (chiffrés ou non) ;
+  - accès au téléphone par la permission « Accès à tous les fichiers » (`MANAGE_EXTERNAL_STORAGE`),
+    acceptable puisque l'application est installée à la main (§ 2, non-objectifs) ;
+  - fonctions : naviguer, ouvrir avec, partager, créer, renommer, supprimer, **copier et déplacer entre
+    tous les stockages** avec progression et annulation, **recherche** par nom, **vignettes** des photos
+    et vidéos, affichage en grille, **tri**, fichiers cachés, **favoris**.
+- **Confidentialité** : les vignettes et résultats de recherche d'un disque chiffré ne sont jamais écrits
+  sur le stockage du téléphone (cache en mémoire seulement).
+- Le § 4.2 s'applique inchangé à toute écriture sur un disque USB, qu'elle vienne du gestionnaire ou du
+  DocumentsProvider.
+- Ordre de construction (§ 6, point 7) : phase 6 = nom, logo et gestionnaire de fichiers (v0.5.0) ;
+  phase 7 = verrouillage automatique, débranchement inattendu, performances (v1.0.0).
+
+## 12. Évolution du 2026-10-20 (suite) : demandes après les essais de la phase 6
+
+Décisions de l'utilisateur (`docs/Manuel/maj-20-10-2026.md`) :
+- **Affichage des dossiers** en liste ou en grille, choisi dans les Réglages (en plus du menu de
+  l'explorateur). Phase 6, T13.
+- **Lecteurs intégrés et stockages distants**, à planifier après la v1.0.0 (phase 8) :
+  - voir des images, écouter de la musique, éditer des fichiers texte, lire des vidéos dans Portail ;
+  - accéder à des dossiers distants par FTP, puis par SFTP, comme sources du gestionnaire de fichiers.
+- Ce qui est lu ou affiché depuis un disque chiffré suit la règle du § 11 : rien n'en est écrit sur le
+  stockage du téléphone sans action explicite de l'utilisateur (copie, export).

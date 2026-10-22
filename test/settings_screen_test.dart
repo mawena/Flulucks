@@ -1,0 +1,67 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:fluluks/src/app.dart';
+import 'package:fluluks/src/bridge/fluluks_api.g.dart';
+import 'package:fluluks/src/state/app_state.dart';
+
+import 'fake_host_api.dart';
+
+Future<FakeHostApi> pumpSettings(WidgetTester tester, FakeHostApi api) async {
+  final state = AppState(api);
+  await state.refresh();
+  await tester.pumpWidget(FluLuksApp(state: state));
+  await tester.tap(find.byTooltip('Réglages'));
+  await tester.pumpAndSettle();
+  return api;
+}
+
+Set<bool> selected(WidgetTester tester) =>
+    tester.widget<SegmentedButton<bool>>(find.byType(SegmentedButton<bool>)).selected;
+
+void main() {
+  testWidgets('displayChoiceShowsCurrentMode', (tester) async {
+    tester.view.physicalSize = const Size(412, 869); // largeur du Pixel 4 XL : pas de débordement
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final api = FakeHostApi()..viewPrefs = ViewPrefsMsg(sort: 'size', ascending: false, grid: true, showHidden: true);
+    await pumpSettings(tester, api);
+    expect(find.text('Affichage des dossiers'), findsOneWidget);
+    expect(selected(tester), {true});
+  });
+
+  testWidgets('displayChoiceCallsApi', (tester) async {
+    final api = FakeHostApi()..viewPrefs = ViewPrefsMsg(sort: 'size', ascending: false, grid: true, showHidden: true);
+    await pumpSettings(tester, api);
+    await tester.tap(find.text('Liste'));
+    await tester.pump();
+    final v = api.viewPrefs;
+    expect([v.grid, v.sort, v.ascending, v.showHidden], [false, 'size', false, true]);
+    expect(selected(tester), {false});
+  });
+
+  testWidgets('explorerOpensInChosenMode', (tester) async {
+    final api = FakeHostApi()
+      ..sources = [
+        SourceMsg(
+            id: 'phone',
+            stableKey: 'phone',
+            kind: 'phone',
+            label: 'Téléphone',
+            totalBytes: 1000,
+            freeBytes: 500,
+            readOnly: false,
+            roReason: ''),
+      ]
+      ..dirs['phone'] = {
+        '/': [EntryMsg(name: 'DCIM', path: '/DCIM', type: 'dir', size: 0, mtime: 1700000000)],
+      };
+    await pumpSettings(tester, api);
+    await tester.tap(find.text('Grille'));
+    await tester.pump();
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Téléphone'));
+    await tester.pumpAndSettle();
+    expect(find.byType(GridView), findsOneWidget);
+  });
+}

@@ -13,6 +13,25 @@ abstract class HostApi {
   Future<void> openInFiles(String volumeId);
   Future<bool> getReadOnlyPreference();
   Future<void> setReadOnlyPreference(bool value);
+  Future<List<SourceMsg>> listSources();
+  Future<bool> hasAllFilesAccess();
+  Future<void> requestAllFilesAccess();
+  Future<List<EntryMsg>> listDir(String sourceId, String path, bool showHidden);
+  Future<String> createFolder(String sourceId, String parent, String name);
+  Future<String> rename(String sourceId, String path, String newName);
+  Future<void> deleteEntries(String sourceId, List<String> paths);
+  Future<void> openWith(String sourceId, String path);
+  Future<void> share(String sourceId, List<String> paths);
+  Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
+  Future<void> cancelTransfer();
+  Future<SearchResultMsg> search(String sourceId, String path, String query, bool showHidden);
+  Future<void> cancelSearch();
+  Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx);
+  Future<ViewPrefsMsg> getViewPrefs();
+  Future<void> setViewPrefs(ViewPrefsMsg prefs);
+  Future<List<FavoriteMsg>> listFavorites();
+  Future<void> addFavorite(String sourceId, String path, String label);
+  Future<void> removeFavorite(String key, String path);
 }
 
 /// Implémentation réelle : délègue au client Pigeon généré.
@@ -40,4 +59,46 @@ class PigeonHostApi implements HostApi {
   Future<bool> getReadOnlyPreference() => _api.getReadOnlyPreference();
   @override
   Future<void> setReadOnlyPreference(bool value) => _api.setReadOnlyPreference(value);
+  @override
+  Future<List<SourceMsg>> listSources() => _api.listSources();
+  @override
+  Future<bool> hasAllFilesAccess() => _api.hasAllFilesAccess();
+  @override
+  Future<void> requestAllFilesAccess() => _api.requestAllFilesAccess();
+  @override
+  Future<List<EntryMsg>> listDir(String sourceId, String path, bool showHidden) =>
+      _api.listDir(sourceId, path, showHidden);
+  @override
+  Future<String> createFolder(String sourceId, String parent, String name) =>
+      _api.createFolder(sourceId, parent, name);
+  @override
+  Future<String> rename(String sourceId, String path, String newName) => _api.rename(sourceId, path, newName);
+  @override
+  Future<void> deleteEntries(String sourceId, List<String> paths) => _api.deleteEntries(sourceId, paths);
+  @override
+  Future<void> openWith(String sourceId, String path) => _api.openWith(sourceId, path);
+  @override
+  Future<void> share(String sourceId, List<String> paths) => _api.share(sourceId, paths);
+  @override
+  Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move) =>
+      _api.startTransfer(srcId, paths, dstId, dstDir, move);
+  @override
+  Future<void> cancelTransfer() => _api.cancelTransfer();
+  @override
+  Future<SearchResultMsg> search(String sourceId, String path, String query, bool showHidden) =>
+      _api.search(sourceId, path, query, showHidden);
+  @override
+  Future<void> cancelSearch() => _api.cancelSearch();
+  @override
+  Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx) => _api.thumbnail(sourceId, path, sizePx);
+  @override
+  Future<ViewPrefsMsg> getViewPrefs() => _api.getViewPrefs();
+  @override
+  Future<void> setViewPrefs(ViewPrefsMsg prefs) => _api.setViewPrefs(prefs);
+  @override
+  Future<List<FavoriteMsg>> listFavorites() => _api.listFavorites();
+  @override
+  Future<void> addFavorite(String sourceId, String path, String label) => _api.addFavorite(sourceId, path, label);
+  @override
+  Future<void> removeFavorite(String key, String path) => _api.removeFavorite(key, path);
 }

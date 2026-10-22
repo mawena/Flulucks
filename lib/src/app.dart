@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'screens/disks_screen.dart';
+import 'screens/home_screen.dart';
 import 'state/app_state.dart';
 import 'strings_fr.dart';
 
@@ -20,7 +20,7 @@ class FluLuksApp extends StatelessWidget {
         useMaterial3: true,
       ),
       themeMode: ThemeMode.system,
-      home: DisksScreen(state: state),
+      home: HomeScreen(state: state),
     );
   }
 }

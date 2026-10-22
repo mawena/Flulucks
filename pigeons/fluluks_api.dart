@@ -71,6 +71,93 @@ class VolumeMsg {
   bool readOnly;
 }
 
+/// Un stockage du gestionnaire de fichiers. `kind` : `phone`, `sd` ou `disk`.
+class SourceMsg {
+  SourceMsg({
+    required this.id,
+    required this.stableKey,
+    required this.kind,
+    required this.label,
+    required this.totalBytes,
+    required this.freeBytes,
+    required this.readOnly,
+    required this.roReason,
+  });
+  String id;
+  String stableKey;
+  String kind;
+  String label;
+  int totalBytes;
+  int freeBytes;
+  bool readOnly;
+  String roReason;
+}
+
+/// Élément d'un dossier. `type` : `dir`, `file`, `link` ou `other` ; `mtime` en secondes UTC.
+class EntryMsg {
+  EntryMsg({
+    required this.name,
+    required this.path,
+    required this.type,
+    required this.size,
+    required this.mtime,
+  });
+  String name;
+  String path;
+  String type;
+  int size;
+  int mtime;
+}
+
+/// Avancement d'une copie ou d'un déplacement ; `error` peut accompagner `finished`.
+class TransferMsg {
+  TransferMsg({
+    required this.move,
+    required this.currentName,
+    required this.fileIndex,
+    required this.fileCount,
+    required this.doneBytes,
+    required this.totalBytes,
+    required this.finished,
+    required this.cancelled,
+    this.error,
+  });
+  bool move;
+  String currentName;
+  int fileIndex;
+  int fileCount;
+  int doneBytes;
+  int totalBytes;
+  bool finished;
+  bool cancelled;
+  String? error;
+}
+
+/// Résultats d'une recherche ; `truncated` au-delà de 500.
+class SearchResultMsg {
+  SearchResultMsg({required this.entries, required this.truncated});
+  List<EntryMsg> entries;
+  bool truncated;
+}
+
+/// Préférences d'affichage ; `sort` : `name`, `size` ou `date`.
+class ViewPrefsMsg {
+  ViewPrefsMsg({required this.sort, required this.ascending, required this.grid, required this.showHidden});
+  String sort;
+  bool ascending;
+  bool grid;
+  bool showHidden;
+}
+
+/// Favori ; `sourceId` null si le stockage n'est pas ouvert.
+class FavoriteMsg {
+  FavoriteMsg({required this.key, required this.path, required this.label, this.sourceId});
+  String key;
+  String path;
+  String label;
+  String? sourceId;
+}
+
 @HostApi()
 abstract class FluLuksHostApi {
   List<DiskMsg> listDisks();
@@ -84,6 +171,33 @@ abstract class FluLuksHostApi {
   void openInFiles(String volumeId);
   bool getReadOnlyPreference();
   void setReadOnlyPreference(bool value);
+
+  // --- gestionnaire de fichiers (phase 6)
+  List<SourceMsg> listSources();
+  bool hasAllFilesAccess();
+  void requestAllFilesAccess();
+  @async
+  List<EntryMsg> listDir(String sourceId, String path, bool showHidden);
+  @async
+  String createFolder(String sourceId, String parent, String name);
+  @async
+  String rename(String sourceId, String path, String newName);
+  @async
+  void deleteEntries(String sourceId, List<String> paths);
+  void openWith(String sourceId, String path);
+  void share(String sourceId, List<String> paths);
+  void startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
+  void cancelTransfer();
+  @async
+  SearchResultMsg search(String sourceId, String path, String query, bool showHidden);
+  void cancelSearch();
+  @async
+  Uint8List? thumbnail(String sourceId, String path, int sizePx);
+  ViewPrefsMsg getViewPrefs();
+  void setViewPrefs(ViewPrefsMsg prefs);
+  List<FavoriteMsg> listFavorites();
+  void addFavorite(String sourceId, String path, String label);
+  void removeFavorite(String key, String path);
 }
 
 @FlutterApi()
@@ -92,4 +206,7 @@ abstract class FluLuksEventsApi {
 
   /// Éjection en cours (synchronisation, démontage) et dernier échec (« Éjection impossible : … »).
   void onEjectStateChanged(bool ejecting, String? error);
+
+  /// Copie ou déplacement en cours ou terminé ; null tant qu'aucune opération n'a eu lieu.
+  void onTransferChanged(TransferMsg? transfer);
 }

@@ -19,9 +19,62 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   bool _readOnlyPreference = false;
   bool _ejecting = false;
   String? _ejectError;
+  List<SourceMsg> _sources = const [];
+  bool _allFilesAccess = false;
+  TransferMsg? _transfer;
+  ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
+  List<FavoriteMsg> _favorites = const [];
+  ClipboardItems? _clipboard;
+  (String, String)? _transferDestination;
 
   List<DiskMsg> get disks => _disks;
   List<VolumeMsg> get volumes => _volumes;
+
+  /// Stockages du gestionnaire de fichiers : téléphone, cartes SD, volumes ouverts.
+  List<SourceMsg> get sources => _sources;
+
+  /// Tri, grille et fichiers cachés (persistés côté Kotlin).
+  ViewPrefsMsg get viewPrefs => _viewPrefs;
+
+  /// Favoris, résolus vers les stockages ouverts (`sourceId` null sinon).
+  List<FavoriteMsg> get favorites => _favorites;
+
+  FavoriteMsg? favoriteFor(String sourceId, String path) {
+    final key = sourceById(sourceId)?.stableKey;
+    for (final f in _favorites) {
+      if (f.key == key && f.path == path) return f;
+    }
+    return null;
+  }
+
+  /// Éléments copiés ou coupés, en attente de « Coller ici » ; null si vide.
+  ClipboardItems? get clipboard => _clipboard;
+
+  void setClipboard(String sourceId, List<String> paths, {required bool move}) {
+    _clipboard = ClipboardItems(sourceId, List.unmodifiable(paths), move);
+    notifyListeners();
+  }
+
+  void clearClipboard() {
+    _clipboard = null;
+    notifyListeners();
+  }
+
+  /// (source, dossier) où écrit la dernière copie lancée : l'explorateur qui l'affiche se rafraîchit.
+  (String, String)? get transferDestination => _transferDestination;
+
+  /// Copie ou déplacement en cours, ou le dernier terminé ; null si aucun.
+  TransferMsg? get transfer => _transfer;
+
+  /// Accès à tous les fichiers du téléphone accordé.
+  bool get allFilesAccess => _allFilesAccess;
+
+  SourceMsg? sourceById(String id) {
+    for (final s in _sources) {
+      if (s.id == id) return s;
+    }
+    return null;
+  }
 
   /// « Ouvrir les disques en lecture seule » : tout nouveau montage se fait alors sans écriture.
   bool get readOnlyPreference => _readOnlyPreference;
@@ -53,6 +106,10 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
       _disks = await api.listDisks();
       _volumes = await api.listVolumes();
       _readOnlyPreference = await api.getReadOnlyPreference();
+      _sources = await api.listSources();
+      _allFilesAccess = await api.hasAllFilesAccess();
+      _viewPrefs = await api.getViewPrefs();
+      _favorites = await api.listFavorites();
       notifyListeners();
     } on PlatformException catch (e) {
       _fail(e);
@@ -64,7 +121,22 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     _disks = disks;
     _volumes = volumes;
     notifyListeners();
+    refreshSources(); // un volume ouvert ou fermé ajoute ou retire un stockage
   }
+
+  /// Relit les stockages, l'accès aux fichiers et les favoris (changement d'état, retour au premier plan).
+  Future<void> refreshSources() async {
+    try {
+      _sources = await api.listSources();
+      _allFilesAccess = await api.hasAllFilesAccess();
+      _favorites = await api.listFavorites();
+      notifyListeners();
+    } on PlatformException catch (e) {
+      _fail(e);
+    }
+  }
+
+  Future<void> requestAllFilesAccess() => _guard(() => api.requestAllFilesAccess());
 
   @override
   void onEjectStateChanged(bool ejecting, String? error) {
@@ -72,6 +144,38 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     _ejectError = error;
     notifyListeners();
   }
+
+  @override
+  void onTransferChanged(TransferMsg? transfer) {
+    _transfer = transfer;
+    notifyListeners();
+  }
+
+  Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, {required bool move}) =>
+      _guard(() async {
+        await api.startTransfer(srcId, paths, dstId, dstDir, move);
+        _transferDestination = (dstId, dstDir);
+      });
+
+  Future<void> cancelTransfer() => _guard(() => api.cancelTransfer());
+
+  Future<void> setViewPrefs(ViewPrefsMsg prefs) => _guard(() async {
+        await api.setViewPrefs(prefs);
+        _viewPrefs = prefs;
+        notifyListeners();
+      });
+
+  Future<void> addFavorite(String sourceId, String path, String label) => _guard(() async {
+        await api.addFavorite(sourceId, path, label);
+        _favorites = await api.listFavorites();
+        notifyListeners();
+      });
+
+  Future<void> removeFavorite(String key, String path) => _guard(() async {
+        await api.removeFavorite(key, path);
+        _favorites = await api.listFavorites();
+        notifyListeners();
+      });
 
   Future<void> setReadOnlyPreference(bool value) => _guard(() async {
         await api.setReadOnlyPreference(value);
@@ -112,4 +216,13 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     _lastError = e.message ?? Fr.genericError;
     notifyListeners();
   }
+}
+
+/// Contenu du presse-papiers de l'explorateur.
+class ClipboardItems {
+  const ClipboardItems(this.sourceId, this.paths, this.move);
+
+  final String sourceId;
+  final List<String> paths;
+  final bool move;
 }
