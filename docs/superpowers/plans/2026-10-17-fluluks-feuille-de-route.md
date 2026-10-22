@@ -244,7 +244,7 @@ dans le même commit que le travail.
 - [x] *(utilisateur)* T11 — Essais sur le Pixel *(2026-10-20 : tout est correct selon l'utilisateur)*
 - [x] T12 — Récupération de `feature/portail-save` *(un test repris, branche supprimée)*
 - [x] T13 — Affichage des dossiers en liste ou en grille, choisi dans les Réglages
-- [ ] T14 — Documentation
+- [x] T14 — Documentation *(README : gestionnaire de fichiers, accès à tous les fichiers, vignettes en mémoire, limites, phases 7 et 8)*
 - [ ] Fusion `feature/portail` → `develop`
 - [ ] Version `v0.5.0`
 
