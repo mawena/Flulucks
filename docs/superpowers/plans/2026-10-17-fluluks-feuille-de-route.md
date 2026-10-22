@@ -283,16 +283,26 @@ dans le même commit que le travail.
 - [ ] Fusion `feature/formatage` → `develop`
 - [ ] Version `v1.1.0`
 
-### Phase 9 — Lecteurs intégrés et stockages distants
-- [ ] Plan de la phase 9 écrit
-      *(demande du 2026-10-20, J.1 ; déplacée de la phase 8 à la phase 9 le 2026-10-22)*
+### Phase 9 — Compression, corbeille et outils du gestionnaire
+- [ ] Plan de la phase 9 écrit *(demande du 2026-10-22 ; spec § 15)*
+- [ ] Compresser en ZIP ; extraire ZIP, 7z, RAR (lecture), TAR, TAR.GZ, TAR.XZ, avec progression et annulation
+- [ ] Corbeille sur le téléphone et sur les disques (récupérable 30 jours)
+- [ ] Analyse de l'espace (dossiers et plus gros fichiers)
+- [ ] Propriétés d'un fichier, avec empreinte SHA-256
+- [ ] Renommage par lot
+- [ ] Filtres rapides sur l'accueil (photos, vidéos, musique, documents, archives, récents)
+- [ ] Version `v1.2.0`
+
+### Phase 10 — Lecteurs intégrés et stockages distants
+- [ ] Plan de la phase 10 écrit
+      *(demande du 2026-10-20, J.1 ; déplacée en phase 9 puis en phase 10 le 2026-10-22)*
 - [ ] Visionneuse d'images (glisser d'une photo à l'autre, zoom)
 - [ ] Lecteur de musique (lecture en arrière-plan, file d'attente du dossier)
 - [ ] Éditeur de fichiers texte (ouvrir, modifier, enregistrer, UTF-8)
 - [ ] Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)
 - [ ] Dossiers distants par FTP, comme source du gestionnaire (parcourir, copier, déplacer, ouvrir)
 - [ ] Dossiers distants par SFTP
-- [ ] Version `v1.2.0`
+- [ ] Version `v1.3.0`
 
 ---
 

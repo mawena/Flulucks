@@ -299,8 +299,8 @@ Décisions de l'utilisateur, après la phase 5 :
 Décisions de l'utilisateur (`docs/Manuel/maj-20-10-2026.md`) :
 - **Affichage des dossiers** en liste ou en grille, choisi dans les Réglages (en plus du menu de
   l'explorateur). Phase 6, T13.
-- **Lecteurs intégrés et stockages distants**, à planifier après la v1.0.0 (phase 8, devenue phase 9 le
-  2026-10-22, voir § 14) :
+- **Lecteurs intégrés et stockages distants**, à planifier après la v1.0.0 (phase 8, devenue phase 10 le
+  2026-10-22, voir § 14 et § 15) :
   - voir des images, écouter de la musique, éditer des fichiers texte, lire des vidéos dans Portail ;
   - accéder à des dossiers distants par FTP, puis par SFTP, comme sources du gestionnaire de fichiers.
 - Ce qui est lu ou affiché depuis un disque chiffré suit la règle du § 11 : rien n'en est écrit sur le
@@ -320,7 +320,7 @@ Décisions de l'utilisateur (`docs/Manuel/maj-20-10-2026.md`) :
 ## 14. Évolution du 2026-10-22 (suite) : formatage
 
 Décision de l'utilisateur : le **formatage des disques USB** devient la **phase 8** (v1.1.0) ; les lecteurs
-intégrés et les stockages distants passent en **phase 9** (v1.2.0).
+intégrés et les stockages distants passent en phase 9, puis en **phase 10** (v1.3.0, voir § 15).
 - Formater un disque USB branché sur le téléphone, en **FAT32, exFAT, ext4 ou NTFS**, en clair ou **chiffré
   LUKS2** (le système de fichiers choisi dans le volume chiffré), avec une étiquette.
 - Jamais le stockage du téléphone ni une carte SD montée par Android : seulement un disque dont Portail a
@@ -332,3 +332,21 @@ intégrés et les stockages distants passent en **phase 9** (v1.2.0).
   sur des images sur le PC, puis sur une clé USB sacrifiée, jamais sur le vrai disque.
 - Autres options évoquées (changer la phrase de passe, gérer les partitions, effacement sécurisé, vérifier
   un disque) : non retenues pour l'instant.
+
+## 15. Évolution du 2026-10-22 (suite) : compression et outils du gestionnaire
+
+Décision de l'utilisateur : la **phase 9** (v1.2.0) porte la **compression et la décompression**, plus des
+fonctions choisies par le planificateur ; les lecteurs et stockages distants passent en **phase 10** (v1.3.0).
+- **Compression et décompression** : créer une archive ZIP depuis une sélection ; extraire ZIP, 7z, RAR
+  (lecture seule : le format RAR n'est pas libre en écriture), TAR, TAR.GZ et TAR.XZ, d'une source vers
+  n'importe quelle destination (téléphone, carte SD, disque), avec progression et annulation, comme une
+  copie. Une archive hostile (chemins `../`, liens, bombe de décompression) ne sort jamais du dossier de
+  destination et ne remplit pas le disque sans limite.
+- *(décisions du planificateur)* :
+  - **Corbeille** : une suppression depuis Portail déplace dans un dossier caché du même stockage
+    (`.Portail-corbeille`), récupérable 30 jours, vidable à la main ; « Supprimer définitivement » reste
+    possible. Sur un disque chiffré, la corbeille reste dans le volume chiffré.
+  - **Analyse de l'espace** : taille de chaque dossier et liste des plus gros fichiers d'un stockage.
+  - **Propriétés** : taille, dates, propriétaire et droits sur ext4, empreinte SHA-256 calculée à la demande.
+  - **Renommage par lot** : numérotation, remplacement d'un texte, date de prise de vue des photos.
+  - **Filtres rapides** sur l'accueil : photos, vidéos, musique, documents, archives, fichiers récents.
