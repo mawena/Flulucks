@@ -88,4 +88,7 @@ object NativeEngine : Engine {
 
     /** Vide les caches du moteur et du disque (SYNCHRONIZE CACHE sur USB). 0 ou fl_err. */
     external override fun sync(vol: Long): Int
+
+    /** Formate tout le disque (phase 8, fj_format) ; la phrase de passe est mise à zéro par le natif. */
+    external override fun format(disk: Long, opts: ByteArray, pass: ByteArray?, progress: FormatProgress?): Int
 }

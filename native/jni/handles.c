@@ -15,12 +15,15 @@
 
 #include <pthread.h>
 #include <stdatomic.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "fluluks/blockdev.h"
 #include "fluluks/cache.h"
+#include "cJSON.h"
 #include "fluluks/error.h"
+#include "fluluks/format.h"
 #include "fluluks/fs.h"
 #include "fluluks/luks.h"
 #include "fluluks/partition.h"
@@ -216,6 +219,7 @@ typedef struct {
   fl_bdev counted;       /* base, vidages comptés (fj_debug_flushes) */
   _Atomic uint64_t flushes;
   fl_bdev *dev;          /* cache au-dessus de counted : seul utilisé */
+  bool formatting;       /* fj_format en cours (sous g_mu) : fj_mount refusé */
 } jdisk;
 
 static int counted_read(fl_bdev *d, uint64_t lba, uint32_t count, void *buf) {
@@ -481,9 +485,14 @@ void fj_debug_set_mount_hook(void (*fn)(void *), void *arg) {
 int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t passlen, bool want_rw) {
   jdisk *d = tab_acquire(disk, T_DISK);
   if (!d) return FL_EINVAL;
+  pthread_mutex_lock(&g_mu);
+  bool formatting = d->formatting;
+  pthread_mutex_unlock(&g_mu);
   int64_t h;
-  jvol *v = calloc(1, sizeof *v);
-  if (!v) {
+  jvol *v = formatting ? NULL : calloc(1, sizeof *v);
+  if (formatting) {
+    h = FL_EBUSY;
+  } else if (!v) {
     h = FL_ENOMEM;
   } else {
     int rc = vol_open(d->dev, part_index, pass, passlen, want_rw, v);
@@ -747,4 +756,67 @@ int64_t fj_debug_flushes(int64_t disk) {
   int64_t n = (int64_t)atomic_load(&d->flushes);
   tab_release(disk, T_DISK);
   return n;
+}
+
+/* ---- formatage (phase 8) ---- */
+
+static int parse_format_opts(const char *json, fl_fmt_opts *o, char *label, size_t cap) {
+  cJSON *r = json ? cJSON_Parse(json) : NULL;
+  if (!cJSON_IsObject(r)) {
+    cJSON_Delete(r);
+    return FL_EINVAL;
+  }
+  static const char *noms[] = {"fat32", "exfat", "ext4", "ntfs"};
+  static const fl_fmt_fs fss[] = {FL_FMT_FAT32, FL_FMT_EXFAT, FL_FMT_EXT4, FL_FMT_NTFS};
+  const char *fs = cJSON_GetStringValue(cJSON_GetObjectItem(r, "fs"));
+  const cJSON *enc = cJSON_GetObjectItem(r, "encrypted"), *lab = cJSON_GetObjectItem(r, "label");
+  const cJSON *mem = cJSON_GetObjectItem(r, "kdf_mem_kib"), *uid = cJSON_GetObjectItem(r, "uid"),
+              *gid = cJSON_GetObjectItem(r, "gid");
+  int rc = FL_EINVAL;
+  memset(o, 0, sizeof *o);
+  for (size_t i = 0; fs && i < sizeof noms / sizeof noms[0]; i++)
+    if (!strcmp(fs, noms[i])) {
+      o->fs = fss[i];
+      rc = FL_OK;
+    }
+  if ((enc && !cJSON_IsBool(enc)) || (lab && !cJSON_IsString(lab)) || (mem && !cJSON_IsNumber(mem)) ||
+      (uid && !cJSON_IsNumber(uid)) || (gid && !cJSON_IsNumber(gid)))
+    rc = FL_EINVAL;
+  if (rc == FL_OK) {
+    o->encrypted = cJSON_IsTrue(enc);
+    const char *l = lab ? lab->valuestring : "";
+    if (strlen(l) >= cap) rc = FL_EINVAL;
+    else snprintf(label, cap, "%s", l);
+    o->label = label;
+    double m = mem ? mem->valuedouble : 1048576, u = uid ? uid->valuedouble : 1000, g = gid ? gid->valuedouble : 1000;
+    if (m < 0 || m > UINT32_MAX || u < 0 || u > UINT32_MAX || g < 0 || g > UINT32_MAX) rc = FL_EINVAL;
+    o->kdf_mem_kib = (uint32_t)m;
+    o->root_uid = (uint32_t)u;
+    o->root_gid = (uint32_t)g;
+  }
+  cJSON_Delete(r);
+  return rc;
+}
+
+int fj_format(int64_t disk, const char *json, const void *pass, size_t passlen, void (*progress)(int pct, void *arg),
+              void *arg) {
+  fl_fmt_opts o;
+  char label[256];
+  int rc = parse_format_opts(json, &o, label, sizeof label);
+  jdisk *d = tab_acquire(disk, T_DISK);
+  if (!d) return FL_EINVAL;
+  if (rc == FL_OK) {
+    pthread_mutex_lock(&g_mu);
+    if (d->formatting || live_children(disk, T_VOL) > 0) rc = FL_EBUSY;
+    else d->formatting = true; /* plus aucun fj_mount sur ce disque jusqu'à la fin */
+    pthread_mutex_unlock(&g_mu);
+  }
+  if (rc == FL_OK) {
+    rc = d->dev->read_only ? FL_EROFS : fl_format(d->dev, &o, pass, passlen, progress, arg);
+    pthread_mutex_lock(&g_mu);
+    d->formatting = false;
+    pthread_mutex_unlock(&g_mu);
+  }
+  tab_release(disk, T_DISK);
+  return rc;
 }

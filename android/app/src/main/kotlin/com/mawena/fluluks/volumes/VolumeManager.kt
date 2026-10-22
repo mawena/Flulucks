@@ -36,6 +36,8 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.withContext
 
 /**
@@ -76,6 +78,17 @@ object VolumeManager {
         "Éjection incomplète : des données ont pu ne pas être écrites ($detail). Vérifiez le disque sous Ubuntu."
 
     const val MSG_FILES_OPEN = "des fichiers sont encore ouverts"
+
+    const val MSG_FORMAT_OPEN = "Éjectez d'abord les volumes de ce disque"
+    const val MSG_FORMAT_RO = "Disque protégé en écriture"
+    const val MSG_FORMAT_DETACHED = "Disque débranché pendant le formatage : recommencez le formatage"
+    const val MSG_FORMAT_BUSY = "Un formatage est déjà en cours"
+    /** Argon2 du formatage : 1 Gio comme cryptsetup, 256 Mio si la mémoire disponible ne le permet pas. */
+    private const val FORMAT_KDF_KIB = 1_048_576
+    private const val FORMAT_KDF_LOW_KIB = 262_144
+    private val FORMAT_FS = setOf("fat32", "exfat", "ext4", "ntfs")
+    /** Propriétaire de la racine ext4 : premier utilisateur d'Ubuntu. */
+    private const val FORMAT_ROOT_ID = 1000
     private const val RO_USER_REASON = "ouvert en lecture seule à votre demande" // FL_RO_USER
     fun msgModeChange(writable: Boolean, detail: String?) =
         "Impossible de rouvrir le volume en " + (if (writable) "écriture" else "lecture seule") + " : " +
@@ -156,6 +169,10 @@ object VolumeManager {
     val ejecting: StateFlow<Boolean> = _ejecting.asStateFlow()
     /** « Éjection impossible : … » après un échec (le volume reste ouvert), null sinon. */
     val ejectError: StateFlow<String?> = _ejectError.asStateFlow()
+
+    private val _formatting = MutableStateFlow<Int?>(null)
+    /** Pourcentage du formatage en cours, null sinon. */
+    val formatting: StateFlow<Int?> = _formatting.asStateFlow()
 
     /** Écritures non encore synchronisées, par volume ; génération pour ne pas effacer une écriture
      * arrivée pendant la synchronisation. */
@@ -262,7 +279,7 @@ object VolumeManager {
         this.detachWarner = detachWarner
         pendingSync.values.forEach { it() }
         pendingSync.clear(); writeGen.clear(); syncedGen.clear()
-        _ejecting.value = false; _ejectError.value = null
+        _ejecting.value = false; _ejectError.value = null; _formatting.value = null
         diskEntries.clear(); mounts.clear(); mountOrder.clear()
         counter.set(0); imageCounter.set(0); sessionToken = newSessionToken()
         _disks.value = emptyList(); _volumes.value = emptyList()
@@ -457,6 +474,71 @@ object VolumeManager {
         } finally {
             pass?.fill(0) // le natif a déjà mis sa copie à zéro ; la nôtre aussi, sur tous les chemins
         }
+    }
+
+    // ---------------------------------------------------------------- formatage (phase 8)
+
+    /**
+     * Formate tout le disque [diskId] : refus si un de ses volumes est ouvert ([MSG_FORMAT_OPEN]), s'il est
+     * protégé en écriture ([MSG_FORMAT_RO]) ou si un formatage est en cours. Le travail natif (Argon2, écriture
+     * des structures) se fait hors de l'exécuteur, pour ne pas bloquer les autres disques ; le moteur refuse
+     * tout montage de ce disque pendant ce temps. Le disque est relu ensuite, même après un échec (débranché :
+     * [MSG_FORMAT_DETACHED]). [pass] est mis à zéro sur tous les chemins.
+     */
+    suspend fun format(diskId: String, o: FormatOptions, pass: ByteArray?) {
+        try {
+            if (o.fs !in FORMAT_FS || (o.encrypted && (pass == null || pass.isEmpty()))) {
+                throw EngineError(EngineError.FL_EINVAL)
+            }
+            val kdf = when {
+                !o.encrypted -> 0
+                FORMAT_KDF_KIB * 1024L <= 0.8 * availMem() -> FORMAT_KDF_KIB
+                FORMAT_KDF_LOW_KIB * 1024L <= 0.8 * availMem() -> FORMAT_KDF_LOW_KIB
+                else -> throw EngineError(EngineError.FL_ENOMEM, MSG_LOW_MEMORY)
+            }
+            val handle = withContext(dispatcher) {
+                if (mounts.values.any { it.state.diskId == diskId }) {
+                    throw EngineError(EngineError.FL_EBUSY, MSG_FORMAT_OPEN)
+                }
+                if (_formatting.value != null) throw EngineError(EngineError.FL_EBUSY, MSG_FORMAT_BUSY)
+                val entry = diskEntries[diskId]
+                if (entry != null && entry.handle <= 0 && entry.state.error == null) reopen(entry) // éjecté
+                if (entry == null || entry.handle <= 0) throw EngineError(EngineError.FL_ENODEV)
+                _formatting.value = 0
+                entry.handle
+            }
+            val opts = org.json.JSONObject()
+                .put("fs", o.fs).put("encrypted", o.encrypted).put("label", o.label)
+                .put("kdf_mem_kib", kdf).put("uid", FORMAT_ROOT_ID).put("gid", FORMAT_ROOT_ID)
+                .toString().toByteArray(Charsets.UTF_8)
+            val rc = try {
+                withContext(Dispatchers.IO) {
+                    engine.format(handle, opts, pass) { pct -> _formatting.value = pct }
+                }
+            } finally {
+                withContext(NonCancellable + dispatcher) { rescan(diskId) }
+            }
+            if (rc < 0) {
+                throw when (rc) {
+                    EngineError.FL_EROFS -> EngineError(rc, MSG_FORMAT_RO)
+                    EngineError.FL_EBUSY -> EngineError(rc, MSG_FORMAT_OPEN)
+                    EngineError.FL_ENODEV, EngineError.FL_EIO, EngineError.FL_ETIMEDOUT, EngineError.FL_ESTALL ->
+                        EngineError(rc, MSG_FORMAT_DETACHED)
+                    else -> EngineError(rc)
+                }
+            }
+        } finally {
+            pass?.fill(0) // le natif a déjà mis sa copie à zéro ; la nôtre aussi
+            _formatting.value = null
+        }
+    }
+
+    /** Relit la table de partitions d'un disque encore présent (exécuteur). */
+    private fun rescan(diskId: String) {
+        val entry = diskEntries[diskId] ?: return
+        if (entry.handle <= 0) return
+        entry.state = scanState(diskId, entry.state.name, entry.handle, entry.state.hasPermission)
+        publishDisks()
     }
 
     /**

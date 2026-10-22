@@ -754,6 +754,97 @@ static void test_handles_luks2_ntfs(void) {
   nettoyer_ctx(&c);
 }
 
+/* --- formatage (phase 8, T6) ----------------------------------------------------------------- */
+
+static int g_pct[2];
+static void suivre(int pct, void *arg) {
+  (void)arg;
+  g_pct[0] = pct;
+  g_pct[1]++;
+}
+
+/* Image vierge de 64 Mio dans le dossier temporaire ; chemin dans out. */
+static void image_vierge(char *out, size_t cap, const char *nom) {
+  char td[4096];
+  TT_ASSERT_EQ(fu_tmpdir(td, sizeof td), 0);
+  snprintf(out, cap, "%s/%s", td, nom);
+  FILE *f = fopen(out, "wb");
+  TT_ASSERT(f != NULL);
+  fclose(f);
+  TT_ASSERT_EQ(truncate(out, 64 * 1024 * 1024), 0);
+}
+
+/* Index et contenu de l'unique partition du disque. */
+static int partition_unique(int64_t d, char *contenu, size_t cap) {
+  fl_json j;
+  fl_json_init(&j);
+  cJSON *r = json_de(fj_scan(d, &j), &j);
+  fl_json_free(&j);
+  if (!r) return -1;
+  cJSON *parts = cJSON_GetObjectItem(r, "parts");
+  int idx = -1;
+  if (cJSON_GetArraySize(parts) == 1) {
+    cJSON *p = cJSON_GetArrayItem(parts, 0);
+    idx = (int)cJSON_GetObjectItem(p, "index")->valuedouble;
+    snprintf(contenu, cap, "%s", cJSON_GetObjectItem(p, "content")->valuestring);
+  }
+  cJSON_Delete(r);
+  return idx;
+}
+
+static void test_format_par_jni(void) {
+  char img[4200], contenu[32];
+  image_vierge(img, sizeof img, "format-jni.img");
+  int64_t d = fj_open_image(img, false);
+  TT_ASSERT(d > 0);
+  g_pct[0] = g_pct[1] = 0;
+  TT_ASSERT_EQ(fj_format(d, "{\"fs\":\"exfat\",\"encrypted\":false,\"label\":\"Clé\"}", NULL, 0, suivre, NULL),
+               FL_OK);
+  TT_ASSERT_EQ(g_pct[0], 100);
+  TT_ASSERT(g_pct[1] >= 3);
+  int idx = partition_unique(d, contenu, sizeof contenu);
+  TT_ASSERT(idx >= 0);
+  TT_ASSERT_STR_EQ(contenu, "exFAT");
+  int64_t v = fj_mount(d, (uint32_t)idx, NULL, 0, true);
+  TT_ASSERT(v > 0);
+  int64_t f = fj_open_file(v, "/été.txt", FL_O_RDWR | FL_O_CREAT);
+  TT_ASSERT(f > 0);
+  TT_ASSERT_EQ(fj_pwrite(f, "bonjour", 7, 0), 7);
+  TT_ASSERT_EQ(fj_close_file(f), FL_OK);
+  /* volume ouvert : refus, rien d'écrit */
+  TT_ASSERT_EQ(fj_format(d, "{\"fs\":\"ext4\"}", NULL, 0, NULL, NULL), FL_EBUSY);
+  TT_ASSERT_EQ(fj_unmount(v, false), FL_OK);
+
+  /* ext4 chiffré, puis ouvert avec la phrase */
+  const char *pass = "phrase de passe";
+  TT_ASSERT_EQ(fj_format(d, "{\"fs\":\"ext4\",\"encrypted\":true,\"label\":\"Données\",\"kdf_mem_kib\":32768}",
+                         pass, strlen(pass), NULL, NULL),
+               FL_OK);
+  idx = partition_unique(d, contenu, sizeof contenu);
+  TT_ASSERT_STR_EQ(contenu, "LUKS2");
+  TT_ASSERT_EQ(fj_mount(d, (uint32_t)idx, "faux", 4, true), FL_EBADPASS);
+  v = fj_mount(d, (uint32_t)idx, pass, strlen(pass), true);
+  TT_ASSERT(v > 0);
+  TT_ASSERT_EQ(fj_mkdir(v, "/Photos"), FL_OK);
+  TT_ASSERT_EQ(fj_unmount(v, false), FL_OK);
+
+  /* options invalides */
+  TT_ASSERT_EQ(fj_format(d, "pas du json", NULL, 0, NULL, NULL), FL_EINVAL);
+  TT_ASSERT_EQ(fj_format(d, "{\"fs\":\"btrfs\"}", NULL, 0, NULL, NULL), FL_EINVAL);
+  TT_ASSERT_EQ(fj_format(d, "{\"fs\":\"ext4\",\"encrypted\":true}", NULL, 0, NULL, NULL), FL_EINVAL);
+  TT_ASSERT_EQ(fj_format(d, NULL, NULL, 0, NULL, NULL), FL_EINVAL);
+  TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
+
+  /* disque en lecture seule */
+  d = fj_open_image(img, true);
+  TT_ASSERT(d > 0);
+  TT_ASSERT_EQ(fj_format(d, "{\"fs\":\"exfat\"}", NULL, 0, NULL, NULL), FL_EROFS);
+  TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
+  TT_ASSERT_EQ(fj_format(d, "{\"fs\":\"exfat\"}", NULL, 0, NULL, NULL), FL_EINVAL); /* poignée fermée */
+  TT_ASSERT_EQ(fj_debug_used(), 0);
+  unlink(img);
+}
+
 int main(void) {
   srand((unsigned)time(NULL));
   TT_RUN(test_scan_gpt_luks2);
@@ -774,6 +865,7 @@ int main(void) {
   TT_RUN(test_handles_luks2_fat32);
   TT_RUN(test_handles_ntfs);
   TT_RUN(test_handles_luks2_ntfs);
+  TT_RUN(test_format_par_jni);
   if (!tt_failures && g_saute) return 77; /* SKIP_RETURN_CODE de CTest */
   TT_MAIN_END();
 }

@@ -38,6 +38,18 @@ void main() {
     expect(state.sources.map((s) => s.id), ['phone', 'v1']);
   });
 
+  test('formatage : progression suivie', () async {
+    final state = AppState(FakeHostApi());
+    var notified = 0;
+    state.addListener(() => notified++);
+    expect(state.formatProgress, isNull);
+    state.onFormatProgress(42);
+    expect(state.formatProgress, 42);
+    state.onFormatProgress(null);
+    expect(state.formatProgress, isNull);
+    expect(notified, 2);
+  });
+
   test('demande d’accès transmise', () async {
     final api = FakeHostApi();
     final state = AppState(api);

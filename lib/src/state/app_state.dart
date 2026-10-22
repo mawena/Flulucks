@@ -24,6 +24,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   List<SourceMsg> _sources = const [];
   bool _allFilesAccess = false;
   TransferMsg? _transfer;
+  int? _formatProgress;
   ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
   List<FavoriteMsg> _favorites = const [];
   ClipboardItems? _clipboard;
@@ -68,6 +69,9 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
 
   /// Copie ou déplacement en cours, ou le dernier terminé ; null si aucun.
   TransferMsg? get transfer => _transfer;
+
+  /// Pourcentage du formatage en cours (null sinon).
+  int? get formatProgress => _formatProgress;
 
   /// Le résultat d'une opération finie a été montré : plus aucun écran ne le réaffiche.
   void transferResultSeen() {
@@ -168,6 +172,12 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   void onEjectStateChanged(bool ejecting, String? error) {
     _ejecting = ejecting;
     _ejectError = error;
+    notifyListeners();
+  }
+
+  @override
+  void onFormatProgress(int? pct) {
+    _formatProgress = pct;
     notifyListeners();
   }
 

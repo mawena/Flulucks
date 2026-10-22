@@ -23,6 +23,7 @@ import com.mawena.fluluks.files.ViewPrefs
 import com.mawena.fluluks.files.ViewSettings
 import com.mawena.fluluks.volumes.AutoLock
 import com.mawena.fluluks.volumes.DiskState
+import com.mawena.fluluks.volumes.FormatOptions
 import com.mawena.fluluks.volumes.VolumeManager
 import com.mawena.fluluks.volumes.VolumeState
 import io.flutter.plugin.common.BinaryMessenger
@@ -57,6 +58,9 @@ class HostApiImpl(
         scope.launch {
             combine(VolumeManager.ejecting, VolumeManager.ejectError) { e, err -> e to err }
                 .collect { (e, err) -> events.onEjectStateChanged(e, err) { /* réponse ignorée */ } }
+        }
+        scope.launch {
+            VolumeManager.formatting.collect { pct -> events.onFormatProgress(pct?.toLong()) { /* réponse ignorée */ } }
         }
         scope.launch {
             Transfers.state.collect { t -> events.onTransferChanged(t?.let(::transferMsg)) { /* réponse ignorée */ } }
@@ -96,6 +100,29 @@ class HostApiImpl(
     override fun listVolumes(): List<VolumeMsg> = VolumeManager.volumes.value.map(::volumeMsg)
 
     override fun requestPermission(diskId: String) = guarded { VolumeManager.requestPermission(diskId) }
+
+    override fun formatDisk(
+        diskId: String,
+        fs: String,
+        encrypted: Boolean,
+        label: String,
+        passphrase: ByteArray?,
+        callback: (Result<Unit>) -> Unit,
+    ) {
+        scope.launch {
+            val result = try {
+                VolumeManager.format(diskId, FormatOptions(fs, encrypted, label), passphrase)
+                Result.success(Unit)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Result.failure(toFlutterError(e))
+            } finally {
+                passphrase?.fill(0)
+            }
+            callback(result)
+        }
+    }
 
     override fun unlock(
         diskId: String,

@@ -2,6 +2,8 @@ package com.mawena.fluluks
 
 import com.mawena.fluluks.engine.Engine
 import com.mawena.fluluks.engine.EngineError
+import com.mawena.fluluks.engine.FormatProgress
+import com.mawena.fluluks.volumes.FormatOptions
 import com.mawena.fluluks.volumes.VolumeManager
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
@@ -30,6 +32,13 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
     var unmountResult = 0
     var syncs = 0
     var lastWritable: Boolean? = null
+    var scanCalls = 0
+    var formatted = false
+    var formatResult = 0
+    var formatCalls = 0
+    var lastFormatOpts: org.json.JSONObject? = null
+    var lastFormatPass: ByteArray? = null
+    var progressSeen: Int? = null
     private var next = 100L
 
     override fun version() = "fake"
@@ -37,7 +46,20 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
     override fun openImage(path: ByteArray, readOnly: Boolean) = next++
     override fun openUsb(fd: Int, iface: Int, epIn: Int, epOut: Int) = next++
     override fun closeDisk(disk: Long): Int { closedDisks += disk; events += "closeDisk"; return 0 }
-    override fun scan(disk: Long) = """{"sector_size":512,"size":1048576,"table":"gpt","parts":[
+    override fun scan(disk: Long): ByteArray { scanCalls++; return if (formatted) scanFormatted() else scanInitial() }
+    private fun scanFormatted() = """{"sector_size":512,"size":1048576,"table":"mbr","parts":[
+        {"index":1,"first_lba":2048,"size":1046528,"content":"exFAT","label":"Clé","uuid":"u9","supported":true}]}""".toByteArray()
+    override fun format(disk: Long, opts: ByteArray, pass: ByteArray?, progress: FormatProgress?): Int {
+        formatCalls++
+        lastFormatOpts = org.json.JSONObject(String(opts, Charsets.UTF_8))
+        lastFormatPass = pass
+        progress?.onProgress(50)
+        progressSeen = VolumeManager.formatting.value
+        progress?.onProgress(100)
+        if (formatResult == 0) formatted = true
+        return formatResult
+    }
+    private fun scanInitial() = """{"sector_size":512,"size":1048576,"table":"gpt","parts":[
         {"index":1,"first_lba":2048,"size":524288,"content":"LUKS2","label":"","uuid":"u1","supported":true,
          "luks":{"version":2,"cipher":"aes-xts-plain64","primary_damaged":false,"max_kdf_memory_kib":$kdfKib}},
         {"index":2,"first_lba":4096,"size":262144,"content":"ext4","label":"Photos","uuid":"u2","supported":true}]}""".toByteArray()
@@ -484,5 +506,89 @@ class VolumeManagerTest {
         }
         assertEquals(8, engine.mountCalls)
         assertFalse(VolumeManager.volumes.value.any { it.diskId == disk })
+    }
+
+    // ------------------------------------------------------------------ formatage (phase 8)
+
+    private fun formatErr(o: FormatOptions, pass: ByteArray? = null): EngineError = runBlocking {
+        try {
+            VolumeManager.format(disk, o, pass)
+            fail("EngineError attendue"); throw IllegalStateException()
+        } catch (e: EngineError) { e }
+    }
+
+    @Test fun formatRefusedWithOpenVolume() = runBlocking {
+        VolumeManager.mountPlain(disk, 2)
+        val e = formatErr(FormatOptions("exfat", false, "Clé"))
+        assertEquals(VolumeManager.MSG_FORMAT_OPEN, e.message)
+        assertEquals(0, engine.formatCalls)
+    }
+
+    @Test fun formatRescans() = runBlocking {
+        val before = engine.scanCalls
+        VolumeManager.format(disk, FormatOptions("exfat", false, "Clé"), null)
+        assertEquals(1, engine.formatCalls)
+        val o = engine.lastFormatOpts!!
+        assertEquals("exfat", o.getString("fs"))
+        assertFalse(o.getBoolean("encrypted"))
+        assertEquals("Clé", o.getString("label"))
+        assertEquals(1000, o.getInt("uid"))
+        assertEquals(1000, o.getInt("gid"))
+        assertTrue(engine.scanCalls > before)
+        val parts = VolumeManager.disks.value.single { it.id == disk }.scan!!.parts
+        assertEquals(1, parts.size)
+        assertEquals("exFAT", parts[0].content)
+        assertEquals(50, engine.progressSeen)
+        assertEquals(null, VolumeManager.formatting.value)
+    }
+
+    @Test fun formatInterruptedReportsAndRescans() = runBlocking {
+        engine.formatResult = EngineError.FL_ENODEV
+        val before = engine.scanCalls
+        val e = formatErr(FormatOptions("ext4", false, ""))
+        assertEquals(VolumeManager.MSG_FORMAT_DETACHED, e.message)
+        assertTrue(engine.scanCalls > before)
+        assertEquals(null, VolumeManager.formatting.value)
+        engine.formatResult = EngineError.FL_ETIMEDOUT
+        assertEquals(VolumeManager.MSG_FORMAT_DETACHED, formatErr(FormatOptions("ext4", false, "")).message)
+    }
+
+    @Test fun formatReadOnlyDisk() {
+        engine.formatResult = EngineError.FL_EROFS
+        assertEquals(VolumeManager.MSG_FORMAT_RO, formatErr(FormatOptions("exfat", false, "")).message)
+    }
+
+    @Test fun passZeroedAfterFormat() = runBlocking {
+        val pass = "secret".toByteArray()
+        VolumeManager.format(disk, FormatOptions("ext4", true, "Données"), pass)
+        assertSame(pass, engine.lastFormatPass)
+        assertTrue(pass.all { it == 0.toByte() })
+        assertTrue(engine.lastFormatOpts!!.getBoolean("encrypted"))
+        engine.formatResult = EngineError.FL_EIO
+        val pass2 = "secret".toByteArray()
+        formatErr(FormatOptions("ext4", true, ""), pass2)
+        assertTrue(pass2.all { it == 0.toByte() })
+        val pass3 = "secret".toByteArray()
+        formatErr(FormatOptions("btrfs", true, ""), pass3) // refusé avant le moteur
+        assertTrue(pass3.all { it == 0.toByte() })
+    }
+
+    /** Argon2 : 1 Gio, ou 256 Mio si la mémoire disponible ne le permet pas (même règle que le déverrouillage). */
+    @Test fun formatKdfMemoryFollowsAvailableMemory() = runBlocking {
+        VolumeManager.format(disk, FormatOptions("ext4", true, ""), "s".toByteArray())
+        assertEquals(1_048_576, engine.lastFormatOpts!!.getInt("kdf_mem_kib"))
+        setup(avail = 1L shl 30)
+        VolumeManager.format(disk, FormatOptions("ext4", true, ""), "s".toByteArray())
+        assertEquals(262_144, engine.lastFormatOpts!!.getInt("kdf_mem_kib"))
+        setup(avail = 256L shl 20)
+        val e = formatErr(FormatOptions("ext4", true, ""), "s".toByteArray())
+        assertEquals(VolumeManager.MSG_LOW_MEMORY, e.message)
+        assertEquals(0, engine.formatCalls)
+    }
+
+    @Test fun formatUnknownFsRefused() {
+        val e = formatErr(FormatOptions("btrfs", false, ""))
+        assertEquals(EngineError.FL_EINVAL, e.code)
+        assertEquals(0, engine.formatCalls)
     }
 }
