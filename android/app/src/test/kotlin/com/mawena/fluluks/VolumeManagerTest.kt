@@ -335,7 +335,7 @@ class VolumeManagerTest {
         VolumeManager.markSynced(v.id, gen) // une écriture est arrivée depuis : encore à synchroniser
         assertTrue(VolumeManager.hasUnsyncedWrites(v.id))
         VolumeManager.onUsbDetachedName(disk)
-        assertEquals(listOf(VolumeManager.MSG_DETACH_DURING_WRITE), warnings)
+        assertEquals(listOf(VolumeManager.detachAdvice("ext4")), warnings)
     }
 
     @Test fun writeRequestedOnReadOnlyVolumeRemounts() = runBlocking {
@@ -385,11 +385,40 @@ class VolumeManagerTest {
         assertEquals(1, engine.mountCalls)
     }
 
+    /** Phase 7 : le conseil après un débranchement pendant une écriture dépend du système de fichiers. */
+    @Test fun detachAdviceByFs() {
+        val ext4 = VolumeManager.detachAdvice("ext4")
+        assertTrue(ext4, ext4.contains("Ubuntu") && ext4.contains("journal") && ext4.contains("e2fsck"))
+        for (fat in listOf("FAT12", "FAT16", "FAT32", "exFAT")) {
+            val m = VolumeManager.detachAdvice(fat)
+            assertTrue(m, m.contains("chkdsk") && m.contains("fsck.fat") && m.contains("lecture seule"))
+        }
+        val ntfs = VolumeManager.detachAdvice("NTFS")
+        assertTrue(ntfs, ntfs.contains("Windows") && !ntfs.contains("fsck"))
+        val autre = VolumeManager.detachAdvice("")
+        assertTrue(autre, autre.contains("ordinateur") && !autre.contains("journal"))
+        for (m in listOf(ext4, ntfs, autre)) assertTrue(m.startsWith("Disque débranché pendant une écriture"))
+    }
+
+    @Test fun detachWarnsWithFsAdvice() = runBlocking {
+        engine.fs = "FAT32"
+        val v = VolumeManager.mountPlain(disk, 2, writable = true)
+        VolumeManager.noteWrite(v.id)
+        VolumeManager.onUsbDetachedName(disk)
+        assertEquals(listOf(VolumeManager.detachAdvice("FAT32")), warnings)
+    }
+
+    @Test fun detachWithoutWritesSilent() = runBlocking {
+        VolumeManager.mountPlain(disk, 2, writable = true)
+        VolumeManager.onUsbDetachedName(disk)
+        assertTrue(warnings.isEmpty())
+    }
+
     @Test fun detachDuringWriteWarns() = runBlocking {
         val v = VolumeManager.unlock(disk, 1, "secret".toByteArray(), writable = true)
         VolumeManager.noteWrite(v.id)
         VolumeManager.onUsbDetachedName(disk)
-        assertEquals(listOf(VolumeManager.MSG_DETACH_DURING_WRITE), warnings)
+        assertEquals(listOf(VolumeManager.detachAdvice("ext4")), warnings)
         delayer.advance(SYNC)
         assertEquals(0, engine.syncs) // la synchronisation programmée est annulée
         // sans écriture en attente : aucun avertissement
