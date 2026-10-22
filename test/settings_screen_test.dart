@@ -50,7 +50,8 @@ void main() {
             totalBytes: 1000,
             freeBytes: 500,
             readOnly: false,
-            roReason: ''),
+            roReason: '',
+            encrypted: false),
       ]
       ..dirs['phone'] = {
         '/': [EntryMsg(name: 'DCIM', path: '/DCIM', type: 'dir', size: 0, mtime: 1700000000)],

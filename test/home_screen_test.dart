@@ -28,6 +28,7 @@ SourceMsg src(String id, String kind, String label, {String? key}) => SourceMsg(
       freeBytes: 16000000000,
       readOnly: false,
       roReason: '',
+      encrypted: false,
     );
 
 void main() {

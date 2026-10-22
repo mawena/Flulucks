@@ -68,7 +68,7 @@ object Sources {
                     val dir = sv.directory ?: continue
                     val uuid = sv.uuid ?: continue
                     if (!sv.isRemovable || sv.state != Environment.MEDIA_MOUNTED) continue
-                    val label = sv.getDescription(ctx)?.takeIf { it.isNotBlank() } ?: "Carte SD"
+                    val label = sv.getDescription(ctx)?.takeIf { it.isNotBlank() } ?: "Stockage amovible"
                     out += LocalSource("sd:$uuid", "sd:$uuid", label, dir, ::hasAllFilesAccess)
                 }
             }
@@ -79,10 +79,13 @@ object Sources {
 
     fun get(id: String): FileSource? = list().firstOrNull { it.id == id }
 
-    /** Type affiché : `phone`, `sd` ou `disk`. */
+    /**
+     * Type affiché : `phone`, `removable` (stockage amovible monté par Android : carte SD ou clé USB, Android
+     * ne dit pas lequel) ou `disk`.
+     */
     fun kind(s: FileSource): String = when {
         s.id == PHONE -> "phone"
-        s is LocalSource -> "sd"
+        s is LocalSource -> "removable"
         else -> "disk"
     }
 }

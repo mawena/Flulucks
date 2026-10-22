@@ -174,14 +174,14 @@ class HostApiImpl(
                 SourceMsg(
                     id = v.id, stableKey = if (v.partUuid.isBlank()) "disk:${v.diskId}#${v.partIndex}" else "disk:${v.partUuid}",
                     kind = "disk", label = v.title, totalBytes = v.totalBytes, freeBytes = v.freeBytes,
-                    readOnly = v.readOnly, roReason = v.roReason,
+                    readOnly = v.readOnly, roReason = v.roReason, encrypted = v.encrypted,
                 )
             } else {
                 val (free, total) = src.space()
                 val ro = src.readOnlyReason
                 SourceMsg(
                     id = src.id, stableKey = src.stableKey, kind = Sources.kind(src), label = src.label,
-                    totalBytes = total, freeBytes = free, readOnly = ro != null, roReason = ro ?: "",
+                    totalBytes = total, freeBytes = free, readOnly = ro != null, roReason = ro ?: "", encrypted = false,
                 )
             }
         }
@@ -207,14 +207,33 @@ class HostApiImpl(
     override fun deleteEntries(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit) =
         io(callback) { Files.delete(sourceId, paths) }
 
-    override fun openWith(sourceId: String, path: String) = guarded {
-        val chooser = Files.viewIntent(sourceId, path)
-        if (!Files.hasViewer(context, chooser)) throw FlutterError(EngineError.FL_ENOTSUP.toString(), Files.MSG_NO_VIEWER)
-        context.startActivity(chooser)
-    }
+    override fun openWith(sourceId: String, path: String, callback: (Result<Unit>) -> Unit) =
+        startPrepared(callback) {
+            val chooser = Files.viewIntent(sourceId, path)
+            if (!Files.hasViewer(context, chooser)) throw FlutterError(EngineError.FL_ENOTSUP.toString(), Files.MSG_NO_VIEWER)
+            chooser
+        }
 
-    override fun share(sourceId: String, paths: List<String>) = guarded {
-        context.startActivity(Files.shareIntent(sourceId, paths))
+    override fun share(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit) =
+        startPrepared(callback) { Files.shareIntent(sourceId, paths) }
+
+    /**
+     * Intent préparé hors du fil principal (stat du moteur, qui peut attendre une synchronisation en cours),
+     * puis activité lancée sur le fil principal.
+     */
+    private fun startPrepared(callback: (Result<Unit>) -> Unit, build: () -> Intent) {
+        scope.launch {
+            val result = try {
+                val intent = withContext(Dispatchers.IO) { build() }
+                context.startActivity(intent)
+                Result.success(Unit)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Throwable) {
+                Result.failure(toFlutterError(e))
+            }
+            callback(result)
+        }
     }
 
     override fun startTransfer(srcId: String, paths: List<String>, dstId: String, dstDir: String, move: Boolean) = guarded {

@@ -1,5 +1,6 @@
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/painting.dart';
 import 'package:flutter/services.dart';
 
 import '../bridge/fluluks_api.g.dart';
@@ -26,6 +27,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
   List<FavoriteMsg> _favorites = const [];
   ClipboardItems? _clipboard;
+  final _closedNoticed = <String>{}; // stockages disparus dont la fermeture a déjà été annoncée
   (String, String)? _transferDestination;
 
   List<DiskMsg> get disks => _disks;
@@ -136,10 +138,22 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     refreshSources(); // un volume ouvert ou fermé ajoute ou retire un stockage
   }
 
+  /// Vrai la première fois seulement qu'on annonce la disparition de [sourceId] (un message, même avec
+  /// plusieurs explorateurs ouverts dessus).
+  bool takeClosedNotice(String sourceId) => _closedNoticed.add(sourceId);
+
   /// Relit les stockages, l'accès aux fichiers et les favoris (changement d'état, retour au premier plan).
+  /// Un stockage disparu vide le presse-papiers qui le désigne et le cache d'images décodées (vignettes).
   Future<void> refreshSources() async {
     try {
+      final before = _sources.map((s) => s.id).toSet();
       _sources = await api.listSources();
+      final now = _sources.map((s) => s.id).toSet();
+      _closedNoticed.removeAll(now);
+      if (before.difference(now).isNotEmpty) {
+        if (_clipboard != null && !now.contains(_clipboard!.sourceId)) _clipboard = null;
+        PaintingBinding.instance.imageCache.clear();
+      }
       _allFilesAccess = await api.hasAllFilesAccess();
       _favorites = await api.listFavorites();
       notifyListeners();

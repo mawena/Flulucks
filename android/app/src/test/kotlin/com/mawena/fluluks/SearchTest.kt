@@ -25,7 +25,12 @@ class SearchTest {
     /** Le listage peut déclencher une annulation (recherche en cours). */
     private class Engine : MemEngine() {
         var onList: () -> Unit = {}
-        override fun list(vol: Long, path: ByteArray): ByteArray { onList(); return super.list(vol, path) }
+        var failPath: String? = null
+        override fun list(vol: Long, path: ByteArray): ByteArray {
+            onList()
+            if (String(path, Charsets.UTF_8) == failPath) return """{"err":-5}""".toByteArray() // dossier illisible
+            return super.list(vol, path)
+        }
     }
 
     private lateinit var e: Engine
@@ -112,5 +117,12 @@ class SearchTest {
         File(root, "$p/profond.txt").createNewFile()
         File(root, "n0/profond-haut.txt").createNewFile()
         assertEquals(listOf("profond-haut.txt"), Search.run("phone", "/", "profond", false).entries.map { it.name })
+    }
+
+    /** Relecture de la phase 6 : un dossier illisible d'un disque est sauté, la recherche continue. */
+    @Test fun searchSkipsUnreadableDiskFolder() {
+        mk(volId, "/A/cible.txt"); mk(volId, "/B/cible.txt"); mk(volId, "/C/cible.txt")
+        e.failPath = "/B"
+        assertEquals(listOf("/A/cible.txt", "/C/cible.txt"), Search.run(volId, "/", "cible", false).entries.map { it.path }.sorted())
     }
 }

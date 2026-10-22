@@ -51,6 +51,31 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
   SourceMsg? get _source => state.sourceById(widget.sourceId);
   bool get _readOnly => _source?.readOnly ?? true;
 
+  /// Un disque sans UUID de partition a une clé liée au branchement (`disk:usb#n`) : un favori ne
+  /// s'y retrouverait jamais.
+  bool get _canFavorite {
+    final s = _source;
+    return s != null && !(s.kind == 'disk' && s.stableKey.contains('#'));
+  }
+
+  /// Sur un disque chiffré, le nom du dossier resterait visible disque verrouillé : confirmation d'abord.
+  Future<void> _addFavorite(String label) async {
+    if (_source?.encrypted == true) {
+      final ok = await showDialog<bool>(
+        context: context,
+        builder: (c) => AlertDialog(
+          content: const Text(Fr.encryptedFavorite),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(c, false), child: const Text(Fr.cancel)),
+            FilledButton(onPressed: () => Navigator.pop(c, true), child: const Text(Fr.add)),
+          ],
+        ),
+      );
+      if (ok != true || !mounted) return;
+    }
+    await state.addFavorite(widget.sourceId, _path, label);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -71,6 +96,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (_source == null) {
       // stockage disparu (éjection, débranchement, carte retirée) : retour à l'accueil
       _closed = true;
+      if (!state.takeClosedNotice(widget.sourceId)) return; // un autre explorateur s'en est chargé
       final messenger = ScaffoldMessenger.maybeOf(context);
       Navigator.of(context).popUntil((r) => r.isFirst);
       messenger?.showSnackBar(const SnackBar(content: Text(Fr.volumeClosed)));
@@ -101,6 +127,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
         _entries = l;
         _error = null;
         _loading = false;
+        _selected.retainWhere((p) => l.any((e) => e.path == p)); // éléments disparus entre-temps
       });
     } on PlatformException catch (e) {
       if (!mounted || path != _path) return;
@@ -273,9 +300,11 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
         IconButton(
           tooltip: fav == null ? Fr.addFavorite : Fr.removeFavorite,
           icon: Icon(fav == null ? Icons.star_border : Icons.star),
-          onPressed: () => fav == null
-              ? state.addFavorite(widget.sourceId, _path, _path == '/' ? label : nameOf(_path))
-              : state.removeFavorite(fav.key, fav.path),
+          onPressed: fav != null
+              ? () => state.removeFavorite(fav.key, fav.path)
+              : _canFavorite
+                  ? () => _addFavorite(_path == '/' ? label : nameOf(_path))
+                  : null,
         ),
         PopupMenuButton<String>(
           tooltip: Fr.sortBy,

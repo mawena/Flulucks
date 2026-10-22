@@ -261,7 +261,7 @@ dans le même commit que le travail.
 - [x] T7 — Copies : nom temporaire pendant l'écriture (« .nom.portail-partiel »), noms longs rendus uniques
 - [ ] Performances du § 5 mesurées sur le Pixel (listage de 1 000 fichiers, copies téléphone ↔ disque)
 - [ ] *(utilisateur)* Essai d'ext4 en écriture sur le vrai disque *(tâche 13 de la phase 3)*
-- [ ] Points mineurs de la relecture de la phase 6 *(nom assaini de 255 octets, barre de copie qui rejoue
+- [x] T8 — Points mineurs de la relecture de la phase 6 *(nom assaini de 255 octets, barre de copie qui rejoue
       le dernier résultat, « Ouvrir avec » et « Partager » sur le fil principal, vignette gardée après
       l'éjection, favoris d'un disque chiffré en clair, clé USB vue comme carte SD, fichier partiel sous son
       vrai nom, détails de l'explorateur et de la recherche)*

@@ -67,6 +67,8 @@ class Fr {
   static const list = 'Liste';
   static const showHidden = 'Afficher les fichiers cachés';
   static const addFavorite = 'Ajouter aux favoris';
+  static const add = 'Ajouter';
+  static const encryptedFavorite = "Le nom de ce dossier restera visible sur l'accueil, même disque verrouillé";
   static const removeFavorite = 'Retirer des favoris';
   static const favoriteUnavailable = 'Disque non ouvert';
   static const search = 'Rechercher';

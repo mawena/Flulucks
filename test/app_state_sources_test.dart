@@ -13,9 +13,11 @@ SourceMsg source(String id, {String kind = 'phone', String label = 'Téléphone'
       freeBytes: 400,
       readOnly: false,
       roReason: '',
+      encrypted: false,
     );
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized(); // cache d'images vidé quand un stockage disparaît
   test('refresh charge les stockages et l’accès aux fichiers', () async {
     final api = FakeHostApi()
       ..sources = [source('phone')]
@@ -66,5 +68,18 @@ void main() {
     expect(notified, 1);
     await state.cancelTransfer();
     expect(api.transferCancels, 1);
+  });
+
+  test('clipboardClearedWhenSourceGone', () async {
+    final api = FakeHostApi()..sources = [source('phone'), source('v1', kind: 'disk', label: 'Données')];
+    final state = AppState(api);
+    await state.refresh();
+    state.setClipboard('v1', ['/a.txt'], move: false);
+    api.sources = [source('phone')];
+    await state.refreshSources();
+    expect(state.clipboard, isNull);
+    state.setClipboard('phone', ['/b.txt'], move: true);
+    await state.refreshSources();
+    expect(state.clipboard, isNotNull); // source toujours là : gardé
   });
 }

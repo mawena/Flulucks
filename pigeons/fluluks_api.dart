@@ -82,6 +82,7 @@ class SourceMsg {
     required this.freeBytes,
     required this.readOnly,
     required this.roReason,
+    required this.encrypted,
   });
   String id;
   String stableKey;
@@ -91,6 +92,9 @@ class SourceMsg {
   int freeBytes;
   bool readOnly;
   String roReason;
+
+  /// Disque ouvert avec une phrase de passe (un favori y montre un nom de dossier chiffré).
+  bool encrypted;
 }
 
 /// Élément d'un dossier. `type` : `dir`, `file`, `link` ou `other` ; `mtime` en secondes UTC.
@@ -192,7 +196,9 @@ abstract class FluLuksHostApi {
   String rename(String sourceId, String path, String newName);
   @async
   void deleteEntries(String sourceId, List<String> paths);
+  @async
   void openWith(String sourceId, String path);
+  @async
   void share(String sourceId, List<String> paths);
   void startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
   void cancelTransfer();

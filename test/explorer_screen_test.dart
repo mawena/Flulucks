@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluluks/src/app.dart';
@@ -13,16 +14,18 @@ EntryMsg f(String path, {int size = 1000, int mtime = 1700000000}) =>
     EntryMsg(name: path.split('/').last, path: path, type: 'file', size: size, mtime: mtime);
 EntryMsg d(String path) => EntryMsg(name: path.split('/').last, path: path, type: 'dir', size: 0, mtime: 1700000000);
 
-SourceMsg src(String id, {String kind = 'phone', String label = 'Téléphone', bool readOnly = false, String roReason = ''}) =>
+SourceMsg src(String id,
+        {String kind = 'phone', String label = 'Téléphone', bool readOnly = false, String roReason = '', String? key, bool encrypted = false}) =>
     SourceMsg(
       id: id,
-      stableKey: id,
+      stableKey: key ?? id,
       kind: kind,
       label: label,
       totalBytes: 1000,
       freeBytes: 500,
       readOnly: readOnly,
       roReason: roReason,
+      encrypted: encrypted,
     );
 
 /// Une PNG 1 × 1 valide (vignette factice).
@@ -316,5 +319,72 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Terminé'), findsNothing);
     expect(state.transfer, isNull);
+  });
+
+  // --- relecture de la phase 6 (points mineurs)
+
+  testWidgets('oneClosedMessageForStackedExplorers', (tester) async {
+    final api = api0()..dirs['v1']!['/sous'] = [];
+    final state = await pump(tester, api, source: 'v1');
+    tester.state<NavigatorState>(find.byType(Navigator)).push(
+        MaterialPageRoute<void>(builder: (_) => ExplorerScreen(state: state, sourceId: 'v1', path: '/sous')));
+    await tester.pumpAndSettle();
+    api.sources = [src('phone')];
+    await state.refreshSources();
+    await tester.pumpAndSettle();
+    expect(find.byType(ExplorerScreen), findsNothing);
+    expect(find.text('Le disque a été fermé'), findsOneWidget);
+    await tester.pump(const Duration(seconds: 6)); // un second message attendrait son tour ici
+    await tester.pumpAndSettle();
+    expect(find.text('Le disque a été fermé'), findsNothing);
+  });
+
+  testWidgets('selectionPrunedAfterReload', (tester) async {
+    final api = api0();
+    final state = await pump(tester, api);
+    await longPress(tester, 'b.txt');
+    expect(find.text('1 sélectionné(s)'), findsOneWidget);
+    api.dirs['phone']!['/'] = [d('/DCIM'), f('/a.jpg', size: 3000000)]; // b.txt supprimé par une autre application
+    final v = state.viewPrefs;
+    await state.setViewPrefs(ViewPrefsMsg(sort: v.sort, ascending: v.ascending, grid: v.grid, showHidden: true));
+    await tester.pumpAndSettle();
+    expect(find.text('1 sélectionné(s)'), findsNothing);
+  });
+
+  testWidgets('favoriteDisabledWithoutPartUuid', (tester) async {
+    final api = api0()..sources = [src('phone'), src('v1', kind: 'disk', label: 'Données', key: 'disk:image:1#1')];
+    await pump(tester, api, source: 'v1');
+    final star = tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.star_border));
+    expect(star.onPressed, isNull);
+  });
+
+  testWidgets('encryptedFavoriteAsksConfirmation', (tester) async {
+    final api = api0()..sources = [src('phone'), src('v1', kind: 'disk', label: 'Données', key: 'disk:u1', encrypted: true)];
+    await pump(tester, api, source: 'v1');
+    await tester.tap(find.byTooltip('Ajouter aux favoris'));
+    await tester.pumpAndSettle();
+    expect(find.text("Le nom de ce dossier restera visible sur l'accueil, même disque verrouillé"), findsOneWidget);
+    await tester.tap(find.text('Annuler'));
+    await tester.pumpAndSettle();
+    expect(api.favorites, isEmpty);
+    await tester.tap(find.byTooltip('Ajouter aux favoris'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Ajouter'));
+    await tester.pumpAndSettle();
+    expect(api.favorites.length, 1);
+  });
+
+  testWidgets('imageCacheClearedOnClose', (tester) async {
+    final api = api0();
+    final state = await pump(tester, api, source: 'v1');
+    // une vignette décodée du disque, gardée par le cache d'images de Flutter
+    final img = (await tester.runAsync(() => createTestImage(width: 4, height: 4)))!;
+    final cache = PaintingBinding.instance.imageCache;
+    cache.putIfAbsent('vignette', () => OneFrameImageStreamCompleter(SynchronousFuture(ImageInfo(image: img))));
+    expect(cache.currentSize, 1);
+    api.sources = [src('phone')];
+    await state.refreshSources();
+    await tester.pumpAndSettle();
+    expect(cache.currentSize, 0);
   });
 }

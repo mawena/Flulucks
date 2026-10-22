@@ -353,6 +353,7 @@ class SourceMsg {
     required this.freeBytes,
     required this.readOnly,
     required this.roReason,
+    required this.encrypted,
   });
 
   String id;
@@ -371,6 +372,9 @@ class SourceMsg {
 
   String roReason;
 
+  /// Disque ouvert avec une phrase de passe (un favori y montre un nom de dossier chiffré).
+  bool encrypted;
+
   List<Object?> _toList() {
     return <Object?>[
       id,
@@ -381,6 +385,7 @@ class SourceMsg {
       freeBytes,
       readOnly,
       roReason,
+      encrypted,
     ];
   }
 
@@ -398,6 +403,7 @@ class SourceMsg {
       freeBytes: result[5]! as int,
       readOnly: result[6]! as bool,
       roReason: result[7]! as String,
+      encrypted: result[8]! as bool,
     );
   }
 
@@ -410,7 +416,7 @@ class SourceMsg {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(id, other.id) && _deepEquals(stableKey, other.stableKey) && _deepEquals(kind, other.kind) && _deepEquals(label, other.label) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(freeBytes, other.freeBytes) && _deepEquals(readOnly, other.readOnly) && _deepEquals(roReason, other.roReason);
+    return _deepEquals(id, other.id) && _deepEquals(stableKey, other.stableKey) && _deepEquals(kind, other.kind) && _deepEquals(label, other.label) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(freeBytes, other.freeBytes) && _deepEquals(readOnly, other.readOnly) && _deepEquals(roReason, other.roReason) && _deepEquals(encrypted, other.encrypted);
   }
 
   @override
@@ -419,7 +425,7 @@ class SourceMsg {
 
   @override
   String toString() {
-    return 'SourceMsg(id: $id, stableKey: $stableKey, kind: $kind, label: $label, totalBytes: $totalBytes, freeBytes: $freeBytes, readOnly: $readOnly, roReason: $roReason)';
+    return 'SourceMsg(id: $id, stableKey: $stableKey, kind: $kind, label: $label, totalBytes: $totalBytes, freeBytes: $freeBytes, readOnly: $readOnly, roReason: $roReason, encrypted: $encrypted)';
   }
 }
 
