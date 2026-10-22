@@ -269,9 +269,18 @@ dans le même commit que le travail.
       vrai nom, détails de l'explorateur et de la recherche)*
 - [ ] Version `v1.0.0`
 
-### Phase 8 — Formatage des disques USB
-- [ ] Plan de la phase 8 écrit *(demande du 2026-10-22 ; spec § 14)*
-- [ ] Formatage en FAT32, exFAT, ext4 et NTFS, en clair ou chiffré LUKS2
+### Phase 8 — Formatage des disques USB ([plan](2026-10-22-phase8-formatage.md))
+- [x] Plan de la phase 8 écrit *(demande du 2026-10-22 ; spec § 14)*
+- [ ] T1 — Table de partitions à une partition (MBR jusqu'à 2 Tio, GPT au-delà)
+- [ ] T2 — FAT32 et exFAT
+- [ ] T3 — ext4 avec journal
+- [ ] T4 — NTFS
+- [ ] T5 — LUKS2 et formatage complet d'un disque
+- [ ] T6 — Formatage depuis Kotlin
+- [ ] T7 — Écran de formatage
+- [ ] *(utilisateur)* T8 — Essais : montage par le noyau sur le PC, clé USB sacrifiée sur le Pixel
+- [ ] T9 — Documentation
+- [ ] Fusion `feature/formatage` → `develop`
 - [ ] Version `v1.1.0`
 
 ### Phase 9 — Lecteurs intégrés et stockages distants
