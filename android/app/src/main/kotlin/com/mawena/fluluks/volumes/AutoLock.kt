@@ -61,13 +61,15 @@ object AutoLock {
         }.map { it.id }
     }
 
-    /** Verrouille les volumes dus, avec une notification par volume. */
+    /**
+     * Verrouille les volumes dus. L'éjection passe par l'exécuteur du moteur ([VolumeManager.autoLock]),
+     * qui revérifie l'inactivité au dernier moment ; la notification n'est envoyée que si le volume est fermé.
+     */
     fun check(now: Long) {
         val m = validate(minutes())
         for (id in due(now)) {
-            synchronized(this) { VolumeManager.lastActivity(id)?.let { attempted[id] = it } }
-            VolumeManager.eject(id)
-            warn(msgLocked(m))
+            val last = synchronized(this) { VolumeManager.lastActivity(id)?.also { attempted[id] = it } } ?: continue
+            VolumeManager.autoLock(id, last, busy) { warn(msgLocked(m)) }
         }
     }
 

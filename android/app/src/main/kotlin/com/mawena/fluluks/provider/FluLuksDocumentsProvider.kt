@@ -202,7 +202,9 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
             val (_, target) = resolve(targetParentDocumentId)
             requireWritable(vol)
             try {
-                val copy = synchronized(VolumeManager.writeLock) { WriteOps(NativeEngine, vol.handle).copy(path, target) }
+                // chaque morceau compte comme activité : jamais de verrouillage automatique au milieu de la copie
+                val ops = WriteOps(NativeEngine, vol.handle, onChunk = { VolumeManager.noteActivity(vol.state.id) })
+                val copy = synchronized(VolumeManager.writeLock) { ops.copy(path, target) }
                 DocumentIds.encode(vol.state.id, copy)
             } finally {
                 written(vol, target)

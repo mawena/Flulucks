@@ -473,6 +473,22 @@ object VolumeManager {
         if (rc < 0) throw EngineError(rc, msgModeChange(writable, EngineError(rc).message))
     }
 
+    /**
+     * Verrouillage automatique ([AutoLock]) : sur l'exécuteur, au moment où l'éjection passe enfin, le volume
+     * doit être resté inactif depuis [expectedLast] et sans copie ([busy]) ; sinon rien. [onLocked] n'est
+     * appelé que si le volume est réellement fermé (une éjection refusée publie « Éjection impossible »).
+     */
+    fun autoLock(volumeId: String, expectedLast: Long, busy: (String) -> Boolean, onLocked: () -> Unit) {
+        val disk = mounts[volumeId]?.state?.diskId
+        exec.execute {
+            runSafely(disk) {
+                if (!mounts.containsKey(volumeId) || activity[volumeId] != expectedLast || busy(volumeId)) return@runSafely
+                ejectVolumes(listOf(volumeId))
+                if (!mounts.containsKey(volumeId)) onLocked()
+            }
+        }
+    }
+
     fun eject(volumeId: String) {
         val disk = mounts[volumeId]?.state?.diskId
         exec.execute { runSafely(disk) { ejectVolumes(listOf(volumeId)) } }

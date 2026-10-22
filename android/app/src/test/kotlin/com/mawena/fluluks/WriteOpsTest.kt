@@ -164,4 +164,13 @@ class WriteOpsTest {
         }
         assertFalse(e.nodes.containsKey("/t/s")) // rien d'écrit
     }
+
+    /** Relecture finale : une longue copie interne (provider) compte comme activité pour le verrouillage. */
+    @Test fun copyReportsEachChunk() {
+        var chunks = 0
+        val wa = WriteOps(e, 1, onChunk = { chunks++ })
+        dir("/s"); file("/s/gros", ByteArray(WriteOps.COPY_CHUNK * 3 + 1))
+        wa.copy("/s/gros", "/s")
+        assertTrue("$chunks", chunks >= 4)
+    }
 }

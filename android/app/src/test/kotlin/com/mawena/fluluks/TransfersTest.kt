@@ -344,4 +344,12 @@ class TransfersTest {
         assertEquals(2, names.size)
         assertTrue(names.toString(), names.all { it.toByteArray().size <= 255 && it.endsWith(".bin") })
     }
+
+    /** Relecture finale : un « .nom.portail-partiel » laissé par une copie interrompue est remplacé, pas doublé. */
+    @Test fun stalePartialReplaced() {
+        e.nodes["/.a.bin.portail-partiel"] = data(5) // reste d'une copie interrompue (processus tué)
+        local("a.bin", data(mib))
+        assertNull(run("phone", listOf("/a.bin"), volId, "/").error)
+        assertEquals(setOf("/", "/a.bin"), e.nodes.keys)
+    }
 }

@@ -307,14 +307,16 @@ class HostApiImpl(
         }
     }
 
-    private fun toFlutterError(e: Throwable): FlutterError = when (e) {
-        is EngineError -> FlutterError(e.code.toString(), e.message)
-        is FilesException -> FlutterError(e.code.toString(), e.message)
-        is ActivityNotFoundException -> FlutterError(EngineError.FL_ENOTSUP.toString(), Files.MSG_NO_VIEWER)
-        else -> FlutterError(EngineError.FL_EIO.toString(), "Erreur inattendue : l'opération a échoué")
-    }
-
     companion object {
+        /** Erreur rendue à Flutter : code fl_err et message français, jamais le détail d'une exception. */
+        internal fun toFlutterError(e: Throwable): FlutterError = when (e) {
+            is FlutterError -> e // déjà en français (« Aucune application… »)
+            is EngineError -> FlutterError(e.code.toString(), e.message)
+            is FilesException -> FlutterError(e.code.toString(), e.message)
+            is ActivityNotFoundException -> FlutterError(EngineError.FL_ENOTSUP.toString(), Files.MSG_NO_VIEWER)
+            else -> FlutterError(EngineError.FL_EIO.toString(), "Erreur inattendue : l'opération a échoué")
+        }
+
         const val MSG_NO_PARTITION = "Aucune partition reconnue"
         private const val PREFS = "fluluks"
         private const val PREF_READ_ONLY = "lecture_seule"

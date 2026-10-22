@@ -246,8 +246,11 @@ object Transfers {
             var written = 0L
             try {
                 src.openRead(n.src).use { input ->
-                    // nom temporaire : un fichier incomplet (processus tué, disque arraché) ne porte jamais le vrai nom
-                    val (path, o) = dst.createFile(parentDst, partialName(name))
+                    // nom temporaire : un fichier incomplet (processus tué, disque arraché) ne porte jamais le vrai nom ;
+                    // un reste d'une copie interrompue est remplacé (une seule copie à la fois : il est forcément périmé)
+                    val tmp = partialName(name)
+                    dst.stat(DocumentIds.child(parentDst, tmp))?.let { if (it.type == FileType.FILE) dst.delete(it.path) }
+                    val (path, o) = dst.createFile(parentDst, tmp)
                     created = path
                     out = o
                     val buf = ByteArray(WriteOps.COPY_CHUNK)
