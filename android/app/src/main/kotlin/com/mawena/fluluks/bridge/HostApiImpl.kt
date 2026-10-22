@@ -21,6 +21,7 @@ import com.mawena.fluluks.files.TransferState
 import com.mawena.fluluks.files.Transfers
 import com.mawena.fluluks.files.ViewPrefs
 import com.mawena.fluluks.files.ViewSettings
+import com.mawena.fluluks.volumes.AutoLock
 import com.mawena.fluluks.volumes.DiskState
 import com.mawena.fluluks.volumes.VolumeManager
 import com.mawena.fluluks.volumes.VolumeState
@@ -185,6 +186,10 @@ class HostApiImpl(
             }
         }
     }
+
+    override fun getAutoLockMinutes(): Long = AutoLock.readPref(context).toLong()
+
+    override fun setAutoLockMinutes(minutes: Long) = guarded { AutoLock.writePref(context, minutes.toInt()) }
 
     override fun hasAllFilesAccess(): Boolean = Sources.hasAllFilesAccess()
 

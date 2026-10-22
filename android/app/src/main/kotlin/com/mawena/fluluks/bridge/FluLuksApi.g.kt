@@ -841,6 +841,9 @@ interface FluLuksHostApi {
   fun openInFiles(volumeId: String)
   fun getReadOnlyPreference(): Boolean
   fun setReadOnlyPreference(value: Boolean)
+  /** Verrouillage automatique des disques chiffrés, en minutes (0 = jamais ; 5, 15, 30 ou 60). */
+  fun getAutoLockMinutes(): Long
+  fun setAutoLockMinutes(minutes: Long)
   fun listSources(): List<SourceMsg>
   fun hasAllFilesAccess(): Boolean
   fun requestAllFilesAccess()
@@ -1022,6 +1025,39 @@ interface FluLuksHostApi {
             val valueArg = args[0] as Boolean
             val wrapped: List<Any?> = try {
               api.setReadOnlyPreference(valueArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.getAutoLockMinutes$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getAutoLockMinutes())
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.setAutoLockMinutes$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val minutesArg = args[0] as Long
+            val wrapped: List<Any?> = try {
+              api.setAutoLockMinutes(minutesArg)
               listOf(null)
             } catch (exception: Throwable) {
               FluLuksApiPigeonUtils.wrapError(exception)

@@ -172,6 +172,10 @@ abstract class FluLuksHostApi {
   bool getReadOnlyPreference();
   void setReadOnlyPreference(bool value);
 
+  /// Verrouillage automatique des disques chiffrés, en minutes (0 = jamais ; 5, 15, 30 ou 60).
+  int getAutoLockMinutes();
+  void setAutoLockMinutes(int minutes);
+
   // --- gestionnaire de fichiers (phase 6)
   List<SourceMsg> listSources();
   bool hasAllFilesAccess();
