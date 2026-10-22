@@ -20,15 +20,15 @@ Pour chaque format ci-dessous : accueil → carte de la clé → menu **⋮** �
 taper le nom de la clé pour confirmer, attendre la fin (« Disque formaté »), puis ouvrir la clé, y copier
 un fichier, éjecter et la brancher sur Ubuntu.
 
-- [ ] Le menu **Formater…** est grisé, avec « Éjectez d'abord les volumes de ce disque », tant qu'un volume
+- [x] Le menu **Formater…** est grisé, avec « Éjectez d'abord les volumes de ce disque », tant qu'un volume
       de la clé est ouvert.
-- [ ] **exFAT** (choix par défaut), étiquette `Essai` : la clé s'ouvre dans Portail, la copie réussit ;
+- [x] **exFAT** (choix par défaut), étiquette `Essai` : la clé s'ouvre dans Portail, la copie réussit ;
       sous Ubuntu, la clé s'ouvre et le fichier est lisible.
-- [ ] **FAT32**, étiquette `ESSAI` : même chose.
-- [ ] **ext4 chiffré** (LUKS2), étiquette `Données`, une phrase de passe : le formatage prend quelques
+- [x] **FAT32**, étiquette `ESSAI` : même chose.
+- [x] **ext4 chiffré** (LUKS2), étiquette `Données`, une phrase de passe : le formatage prend quelques
       secondes de plus (dérivation de la clé) ; la clé se déverrouille dans Portail avec la phrase ; sous
       Ubuntu, elle demande la phrase, s'ouvre, et le fichier vous appartient (pas besoin de sudo).
-- [ ] **NTFS**, étiquette `Essai` : même chose sous Ubuntu, et sous Windows si possible.
-- [ ] Phrase de passe vide, ou confirmation différente : refusées dans l'écran, rien n'est formaté.
-- [ ] Débrancher la clé **pendant** un formatage : message « Disque débranché pendant le formatage :
+- [x] **NTFS**, étiquette `Essai` : même chose sous Ubuntu, et sous Windows si possible.
+- [x] Phrase de passe vide, ou confirmation différente : refusées dans l'écran, rien n'est formaté.
+- [x] Débrancher la clé **pendant** un formatage : message « Disque débranché pendant le formatage :
       recommencez le formatage », pas de plantage ; en la rebranchant, elle peut être reformatée.

@@ -280,7 +280,7 @@ dans le même commit que le travail.
 - [x] T5 — LUKS2 et formatage complet d'un disque *(en-tête LUKS2 jugé par cryptsetup ; 8 combinaisons jugées par leur outil et blkid ; lwext4 corrigé par 0012 ; script noyau `verify_format_with_kernel.sh`)*
 - [x] T6 — Formatage depuis Kotlin *(fj_format, VolumeManager.format hors de l'exécuteur, Pigeon formatDisk ; JVM 148, Flutter 72 ; après la relecture finale : JVM 152, Flutter 80, FormatInstrumentedTest et suite instrumentée 65/65 sur le Pixel)*
 - [x] T7 — Écran de formatage *(menu « Formater… » de la carte du disque, exFAT par défaut, confirmation par le nom du disque ; Flutter 79)*
-- [ ] *(utilisateur)* T8 — Essais : montage par le noyau sur le PC, clé USB sacrifiée sur le Pixel
+- [x] *(utilisateur)* T8 — Essais : montage par le noyau sur le PC, clé USB sacrifiée sur le Pixel
 - [ ] T9 — Documentation
 - [ ] Fusion `feature/formatage` → `develop`
 - [ ] Version `v1.1.0`
