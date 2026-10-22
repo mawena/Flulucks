@@ -61,8 +61,15 @@ typedef int (*fl_fs_mount_fn)(fl_bdev *dev, bool want_rw, fl_fs **out);
 int fl_ext4_mount(fl_bdev *dev, bool want_rw, fl_fs **out);
 /* FAT12, FAT16, FAT32 et exFAT par FatFs (fat_glue.c, phase 4). */
 int fl_fat_mount(fl_bdev *dev, bool want_rw, fl_fs **out);
+/* Formatage FAT32 ou exFAT de tout `dev` (phase 8, fat_glue.c). */
+int fl_fat_mkfs(fl_bdev *dev, bool exfat, const char *label);
+/* Formatage ext4 avec journal de tout `dev` (phase 8, ext4_glue.c). */
+int fl_ext4_mkfs(fl_bdev *dev, const char *label, const uint8_t uuid[16], uint32_t uid, uint32_t gid);
 /* NTFS par libntfs-3g (ntfs_glue.c, phase 5). */
 int fl_ntfs_mount(fl_bdev *dev, bool want_rw, fl_fs **out);
+/* Formatage NTFS rapide de tout `dev` par mkntfs (phase 8, ntfs_glue.c). rnd : numéro de série (8 octets)
+ * puis GUID (16 octets) du volume. */
+int fl_ntfs_mkfs(fl_bdev *dev, const char *label, uint32_t hidden_sectors, const uint8_t rnd[24]);
 
 /* Lecture seule collante : pose la raison puis read_only (une seule fois, même entre fils : les
  * suivantes sont sans effet). */

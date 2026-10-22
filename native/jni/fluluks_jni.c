@@ -118,28 +118,36 @@ JNIEXPORT jbyteArray JNICALL JNI_FN(scan)(JNIEnv *env, jobject thiz, jlong disk)
   return json_result(env, rc, &j);
 }
 
+/* Copie la phrase de passe (NULL accepté) en mémoire sécurisée, puis met le tableau Java à zéro, sur tous
+ * les chemins. *p à libérer par fl_secure_free(*p, *alloc). */
+static int take_pass(JNIEnv *env, jbyteArray pass, uint8_t **p, size_t *plen, size_t *alloc) {
+  *p = NULL;
+  *plen = *alloc = 0;
+  if (!pass) return FL_OK;
+  int err = FL_OK;
+  jsize n = (*env)->GetArrayLength(env, pass);
+  if (n < 0 || n > PASS_MAX) {
+    err = FL_EINVAL;
+  } else {
+    *alloc = n ? (size_t)n : 1;
+    *p = fl_secure_alloc(*alloc);
+    if (!*p) {
+      err = FL_ENOMEM;
+    } else {
+      if (n) (*env)->GetByteArrayRegion(env, pass, 0, n, (jbyte *)*p);
+      *plen = (size_t)n;
+    }
+  }
+  zero_array(env, pass, n); /* avant toute validation : aussi sur les chemins d'erreur */
+  return err;
+}
+
 JNIEXPORT jlong JNICALL JNI_FN(mount)(JNIEnv *env, jobject thiz, jlong disk, jint part, jbyteArray pass,
                                       jboolean writable) {
   (void)thiz;
-  uint8_t *p = NULL;
-  size_t plen = 0, alloc = 0;
-  int err = FL_OK;
-  if (pass) {
-    jsize n = (*env)->GetArrayLength(env, pass);
-    if (n < 0 || n > PASS_MAX) {
-      err = FL_EINVAL;
-    } else {
-      alloc = n ? (size_t)n : 1;
-      p = fl_secure_alloc(alloc);
-      if (!p) {
-        err = FL_ENOMEM;
-      } else {
-        if (n) (*env)->GetByteArrayRegion(env, pass, 0, n, (jbyte *)p);
-        plen = (size_t)n;
-      }
-    }
-    zero_array(env, pass, n); /* avant toute validation : aussi sur les chemins d'erreur */
-  }
+  uint8_t *p;
+  size_t plen, alloc;
+  int err = take_pass(env, pass, &p, &plen, &alloc);
   jlong r = err;
   if (err == FL_OK) r = part < 0 ? FL_EINVAL : fj_mount(disk, (uint32_t)part, p, plen, writable == JNI_TRUE);
   fl_secure_free(p, alloc);
@@ -277,4 +285,40 @@ JNIEXPORT jint JNICALL JNI_FN(sync)(JNIEnv *env, jobject thiz, jlong vol) {
   (void)env;
   (void)thiz;
   return fj_sync(vol);
+}
+
+/* Formatage (phase 8) : listener (facultatif) reçoit onProgress(int) depuis ce fil. */
+typedef struct {
+  JNIEnv *env;
+  jobject listener;
+  jmethodID on_progress;
+} progress_ctx;
+
+static void on_progress(int pct, void *arg) {
+  progress_ctx *c = arg;
+  if (!c->on_progress) return;
+  (*c->env)->CallVoidMethod(c->env, c->listener, c->on_progress, (jint)pct);
+  if ((*c->env)->ExceptionCheck(c->env)) (*c->env)->ExceptionClear(c->env); /* l'affichage ne doit pas arrêter le formatage */
+}
+
+JNIEXPORT jint JNICALL JNI_FN(format)(JNIEnv *env, jobject thiz, jlong disk, jbyteArray opts, jbyteArray pass,
+                                      jobject listener) {
+  (void)thiz;
+  uint8_t *p;
+  size_t plen, alloc;
+  int err = take_pass(env, pass, &p, &plen, &alloc);
+  char *o = err == FL_OK ? cstr_from(env, opts, &err) : NULL;
+  progress_ctx c = {env, listener, NULL};
+  if (listener) {
+    jclass k = (*env)->GetObjectClass(env, listener);
+    c.on_progress = k ? (*env)->GetMethodID(env, k, "onProgress", "(I)V") : NULL;
+    if ((*env)->ExceptionCheck(env)) {
+      (*env)->ExceptionClear(env);
+      c.on_progress = NULL;
+    }
+  }
+  if (err == FL_OK) err = fj_format(disk, o, p, plen, on_progress, &c);
+  free(o);
+  fl_secure_free(p, alloc);
+  return err;
 }

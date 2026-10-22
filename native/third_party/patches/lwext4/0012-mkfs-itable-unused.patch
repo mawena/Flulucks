@@ -1,0 +1,32 @@
+Sujet : ext4_mkfs garde uninit_bg et marque les tables d'inodes inutilisées
+
+diff --git a/src/ext4_mkfs.c b/src/ext4_mkfs.c
+--- a/src/ext4_mkfs.c
++++ b/src/ext4_mkfs.c
+@@ -401,6 +401,14 @@ static int write_bgroups(struct ext4_blockdev *bd, struct fs_aux_info *aux_info,
+ 
+ 		ext4_bg_set_used_dirs_count(bg_desc, aux_info->sb, 0);
+ 
++		/* FluLuks: no inode of the table was ever used. Upstream left
++		 * bg_itable_unused at 0 ("all used"): once a group is used,
++		 * e2fsck (and the kernel) read its whole inode table, never
++		 * written by mkfs, and found the old data of the disk (or the
++		 * random of an encrypted volume) as corrupt inodes. */
++		ext4_bg_set_itable_unused(bg_desc, aux_info->sb,
++				to_le32(aux_info->sb->inodes_per_group));
++
+ 		ext4_bg_set_flag(bg_desc,
+ 				 EXT4_BLOCK_GROUP_BLOCK_UNINIT |
+ 				 EXT4_BLOCK_GROUP_INODE_UNINIT);
+@@ -770,7 +778,10 @@ int ext4_mkfs(struct ext4_fs *fs, struct ext4_blockdev *bd,
+ 	info->feat_incompat &= ~EXT4_FINCOM_CSUM_SEED;
+ 
+ 	info->feat_ro_compat &= ~EXT4_FRO_COM_METADATA_CSUM;
+-	info->feat_ro_compat &= ~EXT4_FRO_COM_GDT_CSUM;
++	/* FluLuks: uninit_bg (GDT_CSUM) kept, as mke2fs does without
++	 * metadata_csum: without it, e2fsck and the kernel ignore the
++	 * uninit flags and bg_itable_unused, and read inode tables that
++	 * mkfs never wrote. */
+ 	info->feat_ro_compat &= ~EXT4_FRO_COM_DIR_NLINK;
+ 	info->feat_ro_compat &= ~EXT4_FRO_COM_EXTRA_ISIZE;
+ 	info->feat_ro_compat &= ~EXT4_FRO_COM_HUGE_FILE;

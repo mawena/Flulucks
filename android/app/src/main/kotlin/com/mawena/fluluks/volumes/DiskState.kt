@@ -30,3 +30,6 @@ data class VolumeState(
     /** Ouvert avec une phrase de passe (LUKS) : seul ce volume est verrouillé automatiquement. */
     val encrypted: Boolean = false,
 )
+
+/** Options du formatage : `fs` parmi fat32, exfat, ext4, ntfs ; étiquette vide acceptée. */
+data class FormatOptions(val fs: String, val encrypted: Boolean, val label: String)

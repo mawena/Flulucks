@@ -273,28 +273,57 @@ dans le même commit que le travail.
 
 ### Phase 8 — Formatage des disques USB ([plan](2026-10-22-phase8-formatage.md))
 - [x] Plan de la phase 8 écrit *(demande du 2026-10-22 ; spec § 14)*
-- [ ] T1 — Table de partitions à une partition (MBR jusqu'à 2 Tio, GPT au-delà)
-- [ ] T2 — FAT32 et exFAT
-- [ ] T3 — ext4 avec journal
-- [ ] T4 — NTFS
-- [ ] T5 — LUKS2 et formatage complet d'un disque
-- [ ] T6 — Formatage depuis Kotlin
-- [ ] T7 — Écran de formatage
-- [ ] *(utilisateur)* T8 — Essais : montage par le noyau sur le PC, clé USB sacrifiée sur le Pixel
-- [ ] T9 — Documentation
+- [x] T1 — Table de partitions à une partition (MBR jusqu'à 2 Tio, GPT au-delà) *(jugée par sfdisk et sgdisk)*
+- [x] T2 — FAT32 et exFAT *(f_mkfs de FatFs ; fsck.fat et fsck.exfat propres, étiquette dans le secteur de démarrage)*
+- [x] T3 — ext4 avec journal *(ext4_mkfs de lwext4 corrigé par 0011 ; e2fsck propre avant et après écriture)*
+- [x] T4 — NTFS *(mkntfs de ntfs-3g appelé comme bibliothèque, correctif 0007 ; ntfsfix et ntfsjuge propres avant et après écriture)*
+- [x] T5 — LUKS2 et formatage complet d'un disque *(en-tête LUKS2 jugé par cryptsetup ; 8 combinaisons jugées par leur outil et blkid ; lwext4 corrigé par 0012 ; script noyau `verify_format_with_kernel.sh`)*
+- [x] T6 — Formatage depuis Kotlin *(fj_format, VolumeManager.format hors de l'exécuteur, Pigeon formatDisk ; JVM 148, Flutter 72 ; après la relecture finale : JVM 152, Flutter 80, FormatInstrumentedTest et suite instrumentée 65/65 sur le Pixel)*
+- [x] T7 — Écran de formatage *(menu « Formater… » de la carte du disque, exFAT par défaut, confirmation par le nom du disque ; Flutter 79)*
+- [x] *(utilisateur)* T8 — Essais : montage par le noyau sur le PC, clé USB sacrifiée sur le Pixel
+- [x] T9 — Documentation
 - [ ] Fusion `feature/formatage` → `develop`
 - [ ] Version `v1.1.0`
 
-### Phase 9 — Lecteurs intégrés et stockages distants
-- [ ] Plan de la phase 9 écrit
-      *(demande du 2026-10-20, J.1 ; déplacée de la phase 8 à la phase 9 le 2026-10-22)*
+### Phase 9 — Compression, corbeille et outils du gestionnaire
+- [ ] Plan de la phase 9 écrit *(demande du 2026-10-22 ; spec § 15)*
+- [ ] Compresser en ZIP ; extraire ZIP, 7z, RAR (lecture), TAR, TAR.GZ, TAR.XZ, avec progression et annulation
+- [ ] Corbeille sur le téléphone et sur les disques (récupérable 30 jours)
+- [ ] Analyse de l'espace (dossiers et plus gros fichiers)
+- [ ] Propriétés d'un fichier, avec empreinte SHA-256
+- [ ] Renommage par lot
+- [ ] Filtres rapides sur l'accueil (photos, vidéos, musique, documents, archives, récents)
+- [ ] Version `v1.2.0`
+
+### Phase 10 — Lecteurs intégrés et stockages distants
+- [ ] Plan de la phase 10 écrit
+      *(demande du 2026-10-20, J.1 ; déplacée en phase 9 puis en phase 10 le 2026-10-22)*
 - [ ] Visionneuse d'images (glisser d'une photo à l'autre, zoom)
 - [ ] Lecteur de musique (lecture en arrière-plan, file d'attente du dossier)
 - [ ] Éditeur de fichiers texte (ouvrir, modifier, enregistrer, UTF-8)
 - [ ] Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)
 - [ ] Dossiers distants par FTP, comme source du gestionnaire (parcourir, copier, déplacer, ouvrir)
 - [ ] Dossiers distants par SFTP
-- [ ] Version `v1.2.0`
+- [ ] Version `v1.3.0`
+
+### Phase 11 — Vérification et réparation des disques
+- [ ] Plan de la phase 11 écrit *(demande du 2026-10-22 ; spec § 16)*
+- [ ] Vérification en lecture seule avec rapport, pour chaque système de fichiers
+- [ ] Réparation ext4 par e2fsck (e2fsprogs, sur l'accès USB du moteur)
+- [ ] Réparation NTFS par ntfsfix (ntfs-3g)
+- [ ] Réparation FAT32 et exFAT par fsck.fat et fsck.exfat
+- [ ] LUKS : vérification des deux en-têtes, sauvegarde et restauration de l'en-tête
+- [ ] Version `v1.4.0`
+
+### Phase 12 — Gestion des partitions, comme GParted
+- [ ] Plan de la phase 12 écrit *(demande du 2026-10-22 ; spec § 17)*
+- [ ] Vue du disque : partitions et espace libre à l'échelle, système de fichiers, étiquette, taille, place occupée
+- [ ] Taille choisie au formatage ; créer une partition dans un espace libre, en supprimer une, formater une seule partition
+- [ ] Changer l'étiquette d'une partition ; nouvelle table MBR ou GPT
+- [ ] Redimensionner (agrandir, réduire) : ext4 par resize2fs, NTFS par ntfsresize, système de fichiers dans LUKS2 ; FAT32 et exFAT à étudier
+- [ ] Déplacer une partition, si le plan sait le rendre sûr
+- [ ] Opérations préparées, résumées, puis appliquées après confirmation
+- [ ] Version `v1.5.0`
 
 ---
 

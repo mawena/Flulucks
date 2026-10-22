@@ -1,0 +1,40 @@
+diff --git a/src/ext4_mkfs.c b/src/ext4_mkfs.c
+--- a/src/ext4_mkfs.c
++++ b/src/ext4_mkfs.c
+@@ -359,7 +359,15 @@
+ 		uint32_t blk_off = 0;
+ 
+ 		bg_desc = (void *)(aux_info->bg_desc_blk + k * dsc_size);
+-		bg_free_blk = info->blocks_per_group -
++		/* FluLuks: the last group (or the only one, on a filesystem
++		 * smaller than a group) is shorter than blocks_per_group;
++		 * upstream counted it whole, so the free blocks counts of the
++		 * group and of the superblock exceeded the filesystem size. */
++		uint64_t grp_blocks = aux_info->len_blocks -
++				(uint64_t)i * info->blocks_per_group;
++		if (grp_blocks > info->blocks_per_group)
++			grp_blocks = info->blocks_per_group;
++		bg_free_blk = (uint32_t)grp_blocks -
+ 				aux_info->inode_table_blocks;
+ 
+ 		bg_free_blk -= 2;
+@@ -757,6 +765,9 @@
+ 	info->feat_incompat &= ~EXT4_FINCOM_META_BG;
+ 	info->feat_incompat &= ~EXT4_FINCOM_FLEX_BG;
+ 	info->feat_incompat &= ~EXT4_FINCOM_64BIT;
++	/* FluLuks: csum_seed only goes with metadata_csum, disabled below;
++	 * e2fsck reports it as unnecessary otherwise. */
++	info->feat_incompat &= ~EXT4_FINCOM_CSUM_SEED;
+ 
+ 	info->feat_ro_compat &= ~EXT4_FRO_COM_METADATA_CSUM;
+ 	info->feat_ro_compat &= ~EXT4_FRO_COM_GDT_CSUM;
+@@ -852,6 +863,9 @@
+ 
+ 	cache_fini:
+ 	ext4_block_cache_write_back(bd, 0);
++	/* FluLuks: release the buffers left in the cache, as ext4_umount
++	 * does; upstream leaked them. */
++	ext4_bcache_cleanup(&bc);
+ 	ext4_bcache_fini_dynamic(&bc);
+ 
+ 	block_fini:

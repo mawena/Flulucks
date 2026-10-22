@@ -57,6 +57,20 @@ class FakeHostApi implements HostApi {
   Uint8List? passphraseRef;
   List<int>? passphraseCopy;
 
+  /// Formatages demandés : (disque, fs, chiffré, étiquette, phrase copiée).
+  final formats = <(String, String, bool, String, String?)>[];
+  Uint8List? formatPassRef;
+  String? formatError;
+  Completer<void>? formatGate;
+
+  @override
+  Future<void> formatDisk(String diskId, String fs, bool encrypted, String label, Uint8List? passphrase) async {
+    formatPassRef = passphrase;
+    formats.add((diskId, fs, encrypted, label, passphrase == null ? null : utf8.decode(List<int>.of(passphrase))));
+    if (formatGate != null) await formatGate!.future;
+    if (formatError != null) throw PlatformException(code: '-14', message: formatError);
+  }
+
   /// Si non nul, unlock attend ce completer (test de l'état « en cours »).
   Completer<void>? gate;
   String correctPassphrase = 'bonne';

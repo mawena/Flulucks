@@ -41,6 +41,7 @@
 #include "ext4_config.h"
 #include "ext4_errno.h"
 #include "ext4_misc.h"
+#include "ext4_mkfs.h"
 #include "ext4_types.h"
 #include "fluluks/error.h"
 #include "fs/ext4_policy.h"
@@ -917,4 +918,96 @@ int fl_ext4_mount(fl_bdev *dev, bool want_rw, fl_fs **out) {
   fs->priv = v;
   *out = fs;
   return FL_OK;
+}
+
+/* ---------- formatage (phase 8) ---------- */
+
+/* Accès direct au disque pour ext4_mkfs : contrairement à bd_bread, aucun superbloc validé n'est
+ * substitué (le superbloc est celui qu'on est en train d'écrire). */
+typedef struct {
+  struct ext4_blockdev bd;
+  struct ext4_blockdev_iface bdif;
+  fl_bdev *dev;
+  uint8_t *ph_buf;
+} mk_dev;
+
+static int mk_noop(struct ext4_blockdev *bd) {
+  (void)bd;
+  return EOK;
+}
+
+static int mk_bread(struct ext4_blockdev *bd, void *buf, uint64_t blk_id, uint32_t blk_cnt) {
+  mk_dev *m = bd->bdif->p_user;
+  return blk_cnt == 0 || fl_bdev_read(m->dev, blk_id, blk_cnt, buf) == FL_OK ? EOK : EIO;
+}
+
+static int mk_bwrite(struct ext4_blockdev *bd, const void *buf, uint64_t blk_id, uint32_t blk_cnt) {
+  mk_dev *m = bd->bdif->p_user;
+  return blk_cnt == 0 || fl_bdev_write(m->dev, blk_id, blk_cnt, buf) == FL_OK ? EOK : EIO;
+}
+
+static int mk_bflush(struct ext4_blockdev *bd) {
+  mk_dev *m = bd->bdif->p_user;
+  return fl_bdev_flush(m->dev) == FL_OK ? EOK : EIO;
+}
+
+/* ext4 avec journal sur tout `dev`, puis racine attribuée à uid:gid (lwext4 la crée à root). Sous g_lock :
+ * lwext4 a des états globaux (périphériques et points de montage enregistrés). */
+int fl_ext4_mkfs(fl_bdev *dev, const char *label, const uint8_t uuid[16], uint32_t uid, uint32_t gid) {
+  if (dev->read_only) return FL_EROFS;
+  mk_dev *m = calloc(1, sizeof *m);
+  struct ext4_fs *efs = calloc(1, sizeof *efs);
+  if (m) m->ph_buf = malloc(dev->sector_size);
+  if (!m || !efs || !m->ph_buf) {
+    if (m) free(m->ph_buf);
+    free(m);
+    free(efs);
+    return FL_ENOMEM;
+  }
+  m->dev = dev;
+  m->bdif.open = mk_noop;
+  m->bdif.close = mk_noop;
+  m->bdif.bread = mk_bread;
+  m->bdif.bwrite = mk_bwrite;
+  m->bdif.bflush = mk_bflush;
+  m->bdif.ph_bsize = dev->sector_size;
+  m->bdif.ph_bcnt = dev->sector_count;
+  m->bdif.ph_bbuf = m->ph_buf;
+  m->bdif.p_user = m;
+  m->bd.bdif = &m->bdif;
+  m->bd.part_offset = 0;
+  m->bd.part_size = dev->sector_count * dev->sector_size;
+
+  struct ext4_mkfs_info info;
+  memset(&info, 0, sizeof info);
+  info.block_size = 4096;
+  info.journal = true;
+  info.label = label;
+  memcpy(info.uuid, uuid, sizeof info.uuid);
+
+  pthread_mutex_lock(&g_lock);
+  int r = ext4_mkfs(efs, &m->bd, &info, F_SET_EXT4);
+  if (r == EOK) {
+    char name[MP_CAP], mp[MP_CAP];
+    uint32_t id = g_counter++;
+    snprintf(name, sizeof name, "fl%u", (unsigned)id);
+    snprintf(mp, sizeof mp, "/fl%u/", (unsigned)id);
+    r = ext4_device_register(&m->bd, name);
+    if (r == EOK) {
+      r = ext4_mount(name, mp, false);
+      if (r == EOK) {
+        r = ext4_owner_set(mp, uid, gid);
+        int u = ext4_umount(mp);
+        if (r == EOK) r = u;
+      }
+      ext4_device_unregister(name);
+    }
+  }
+  pthread_mutex_unlock(&g_lock);
+  int rc = map_err(r);
+  if (rc == FL_OK) rc = fl_bdev_flush(dev);
+  free(m->ph_buf);
+  free(m);
+  free(efs);
+  return rc;
 }

@@ -45,3 +45,25 @@ out:
   fl_secure_free(d, keylen);
   return rc;
 }
+
+int fl_af_split(const char *hash, const uint8_t *key, size_t keylen, uint32_t stripes, const uint8_t *rnd,
+                uint8_t *dst) {
+  if (!hash || !key || !rnd || !dst || keylen == 0 || stripes == 0) return FL_EINVAL;
+  size_t hl = fl_hash_len(hash);
+  if (hl == 0) return FL_ENOTSUP;
+  uint8_t *d = fl_secure_alloc(keylen);
+  if (!d) return FL_ENOMEM;
+  int rc = FL_OK;
+  memcpy(dst, rnd, (size_t)(stripes - 1) * keylen);
+  for (uint32_t i = 0; i + 1 < stripes; i++) {
+    const uint8_t *blk = dst + (size_t)i * keylen;
+    for (size_t j = 0; j < keylen; j++) d[j] ^= blk[j];
+    rc = diffuse(hash, hl, d, keylen);
+    if (rc != FL_OK) goto out;
+  }
+  uint8_t *last = dst + (size_t)(stripes - 1) * keylen;
+  for (size_t j = 0; j < keylen; j++) last[j] = d[j] ^ key[j];
+out:
+  fl_secure_free(d, keylen);
+  return rc;
+}

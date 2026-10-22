@@ -1,0 +1,29 @@
+# essais de la phase 8 sur le PC, 20261022-202503
+# commit 7f738ea, noyau 6.8.0-147-generic
+## 1. formatage des images (sans root, utilisateur charles-gamligo)
+Internal ctest changing into directory: /home/charles-gamligo/Work/Mawena/Mobile/Flutter/Portail/build/native
+Test project /home/charles-gamligo/Work/Mawena/Mobile/Flutter/Portail/build/native
+    Start  1: generate_fixtures
+1/2 Test  #1: generate_fixtures ................   Passed    0.02 sec
+    Start 21: test_format
+2/2 Test #21: test_format ......................   Passed   25.09 sec
+
+100% tests passed, 0 tests failed out of 2
+
+Total Test time (real) =  25.12 sec
+## 2. vérification par le noyau
+OK     format-exfat-clair-512 (étiquette « Clé »)
+OK     format-exfat-luks-4096 (étiquette « QUATREK »)
+OK     format-exfat-luks-512 (étiquette « Clé »)
+OK     format-ext4-clair-4096 (étiquette « QUATREK »)
+OK     format-ext4-clair-512 (étiquette « Données »)
+OK     format-ext4-luks-512 (étiquette « Données »)
+OK     format-fat32-clair-512 (étiquette « PORTAIL »)
+OK     format-fat32-luks-512 (étiquette « PORTAIL »)
+OK     format-ntfs-clair-512 (étiquette « Disque »)
+OK     format-ntfs-luks-512 (étiquette « Disque »)
+10 image(s), 0 échec(s)
+## 3. nettoyage
+images supprimées
+## fin : tout est vert
+compte rendu : /home/charles-gamligo/Work/Mawena/Mobile/Flutter/Portail/docs/superpowers/research/2026-10-22-essais-phase8/pc-20261022-202503.txt

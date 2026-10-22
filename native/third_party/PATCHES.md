@@ -344,6 +344,33 @@ rejeu du journal est nécessaire), `test_politique_corruption_en_ecriture` (raci
 Test : `test_politique_suppression_gros_creux` (20 Mio de données, 1 octet à 1 Tio, suppression en au
 plus 64 vidages de cache — 10 mesurés —, `e2fsck` propre).
 
+### 17. Formatage : `ext4_mkfs` (0011, phase 8)
+
+Portail formate en ext4 avec `ext4_mkfs` (`native/src/fs/ext4_glue.c`, `fl_ext4_mkfs`). Trois défauts
+d'amont, tous vus par `e2fsck -fn` ou AddressSanitizer :
+- **Dernier groupe compté entier** : `write_bgroups` comptait `blocks_per_group` blocs libres pour chaque
+  groupe, même le dernier, plus court (ou l'unique groupe d'un volume plus petit qu'un groupe) : les
+  compteurs de blocs libres du groupe et du superbloc dépassaient la taille du volume (« Free blocks count
+  wrong »). Le dernier groupe est maintenant compté à sa vraie taille.
+- **`csum_seed` sans `metadata_csum`** : le formatage retire `metadata_csum` mais gardait l'option
+  incompatible `csum_seed`, que `e2fsck` signale comme inutile ; elle est retirée aussi.
+- **Tampons du cache non libérés** : `ext4_mkfs` détruisait son cache de blocs sans `ext4_bcache_cleanup`
+  (que `ext4_umount` appelle) ; les tampons restants fuyaient.
+
+Test : `native/tests/test_format_ext4.c` (volume d'un seul groupe, plusieurs groupes, secteurs de 4 096
+octets ; `e2fsck -fn` propre avant et après écriture par le moteur).
+
+### 18. Formatage : tables d'inodes jamais écrites (0012, phase 8)
+
+`ext4_mkfs` retirait `uninit_bg` (`gdt_csum`) tout en posant `INODE_UNINIT` et `BLOCK_UNINIT` sur chaque
+groupe, et laissait `bg_itable_unused` à 0 (« tout utilisé »). `e2fsck` et le noyau ignoraient donc ces
+drapeaux et lisaient des tables d'inodes que le formatage n'écrit jamais : sur un disque déjà utilisé, ou
+dans un volume LUKS (de l'aléa après déchiffrement), des milliers d'inodes « corrompus ». Le formatage garde
+`uninit_bg`, comme `mke2fs` sans `metadata_csum`, et pose `bg_itable_unused = inodes_per_group` ; la première
+allocation le réduit (`ext4_ialloc_alloc_inode`) et chaque nouvel inode est initialisé à son allocation. Le
+noyau met ensuite les tables à zéro en arrière-plan (`lazy_itable_init`), comme après `mke2fs`. Test :
+`test_format_ext4` (`test_ext4_sur_vieilles_donnees`, image pleine de bruit) et `test_format` (ext4 chiffré).
+
 ## Protections côté FluLuks (sans correctif lwext4)
 
 En écriture, `ext4_glue.c` vérifie chaque opération avant d'appeler lwext4, dont les fonctions de haut
@@ -434,7 +461,10 @@ fin de chaîne. Correctif : au plus `n_fatent` clusters parcourus, sinon `FR_INT
   `f20e36ee68074b845e3629e6bced4706ad053804cbaf062fbae60738f854170c`. Licence GPL version 2 ou ultérieure
   (`native/third_party/ntfs-3g/COPYING`) : l'application qui la lie est soumise à la GPL.
 - Copiés tels quels dans `native/third_party/ntfs-3g/` : `libntfs-3g/*.c` sauf `unix_io.c` et `win32_io.c`,
-  `include/ntfs-3g/*.h`, `COPYING`, `AUTHORS`, `CREDITS`, `README`. La configuration est
+  `include/ntfs-3g/*.h`, `COPYING`, `AUTHORS`, `CREDITS`, `README` ; pour le formatage (phase 8), de la
+  même archive (SHA-256 vérifié le 2026-10-22) : `ntfsprogs/mkntfs.c`, `attrdef.c`/`.h`, `boot.c`/`.h`,
+  `sd.c`/`.h`, `utils.c`/`.h`, compilés à part (cible `fl_mkntfs`, `FL_MKNTFS`, `HAVE_GETOPT_H`,
+  `HAVE_LIBGEN_H`). La configuration est
   `native/cmake/ntfs-3g/config.h` (`NO_NTFS_DEVICE_DEFAULT_IO_OPS`, `HAVE_CLOCK_GETTIME`,
   `MAJOR_IN_SYSMACROS`, ni ACL POSIX, ni xattr, ni EFS) ; l'accès disque est `native/src/fs/ntfs_dev.c`.
 - Compilée avec `-w` (nos sources gardent `-Wall -Wextra -Werror`), en gnu11 avec `_GNU_SOURCE` et
@@ -476,6 +506,19 @@ disque illisible jusqu'à un chkdsk : libntfs-3g refusait tout montage. En lectu
 
 Quand la libération des clusters échoue (runlist hors du volume sur un disque hostile), la runlist
 décompressée n'était pas libérée. Trouvé par ASan dans `test_ntfs_hostile`. S'applique après 0004.
+
+### 7. mkntfs appelé comme bibliothèque (0007, phase 8)
+
+Avec `FL_MKNTFS`, le `main` de `mkntfs.c` devient `fl_mkntfs(dev, sector_size, num_sectors, part_start, label,
+rnd, &dev_taken)` : formatage rapide (`-Q -F`, 255 têtes, 63 secteurs par piste, secteurs cachés = début de
+la partition) sur le `struct ntfs_device` de `ntfs_dev.c`, sans ligne de commande ni opérations de
+périphérique par défaut (le `#error` correspondant est levé). Le numéro de série et le GUID du volume
+viennent de l'aléa de l'appelant (`/dev/urandom`) et non de `random()` initialisé par l'heure : deux
+formatages dans la même seconde avaient le même numéro. Sans condition, `mkntfs_cleanup` libère
+`g_upcaseinfo` (fuite vue par ASan) et remet `g_allocation` à `NULL` (liste libérée puis relue par un second
+formatage dans le même processus : use-after-free vu par ASan). Appelé par `fl_ntfs_mkfs`
+(`native/src/fs/ntfs_glue.c`), sous le verrou global ; jugé par `test_format_ntfs` (`ntfsfix -n`,
+`ntfsjuge.py check`, `ntfslabel`).
 
 ## Protections côté FluLuks pour libntfs-3g (sans correctif)
 

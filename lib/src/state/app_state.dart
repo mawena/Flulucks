@@ -24,6 +24,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   List<SourceMsg> _sources = const [];
   bool _allFilesAccess = false;
   TransferMsg? _transfer;
+  int? _formatProgress;
   ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
   List<FavoriteMsg> _favorites = const [];
   ClipboardItems? _clipboard;
@@ -68,6 +69,9 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
 
   /// Copie ou déplacement en cours, ou le dernier terminé ; null si aucun.
   TransferMsg? get transfer => _transfer;
+
+  /// Pourcentage du formatage en cours (null sinon).
+  int? get formatProgress => _formatProgress;
 
   /// Le résultat d'une opération finie a été montré : plus aucun écran ne le réaffiche.
   void transferResultSeen() {
@@ -172,6 +176,12 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   }
 
   @override
+  void onFormatProgress(int? pct) {
+    _formatProgress = pct;
+    notifyListeners();
+  }
+
+  @override
   void onTransferChanged(TransferMsg? transfer) {
     _transfer = transfer;
     notifyListeners();
@@ -233,6 +243,20 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   Future<void> unlock(String diskId, int partIndex, Uint8List passphrase, {required bool writable}) async {
     await api.unlock(diskId, partIndex, passphrase, writable);
     await refresh();
+  }
+
+  /// Formate tout le disque ; rend null, ou le message d'erreur (affiché par l'écran de formatage). La
+  /// phrase de passe est mise à zéro après l'appel, sur tous les chemins.
+  Future<String?> formatDisk(String diskId, String fs, bool encrypted, String label, Uint8List? passphrase) async {
+    try {
+      await api.formatDisk(diskId, fs, encrypted, label, passphrase);
+      await refresh();
+      return null;
+    } on PlatformException catch (e) {
+      return e.message ?? Fr.genericError;
+    } finally {
+      passphrase?.fillRange(0, passphrase.length, 0);
+    }
   }
 
   Future<void> _guard(Future<void> Function() action) async {

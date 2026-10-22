@@ -50,6 +50,14 @@ set(FL_SOURCES
   src/usb/bot.c
   src/usb/scsi.c
   src/usb/usb_bdev.c
+  src/format/part_write.c
+  src/format/random.c
+  src/format/mkfs_fat.c
+  src/format/mkfs_ext4.c
+  src/format/mkfs_ntfs.c
+  src/format/label.c
+  src/format/luks2_format.c
+  src/format/format.c
 )
 # Transport usbdevfs : Linux et Android seulement.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR ANDROID)
@@ -59,7 +67,7 @@ endif()
 add_library(fluluks STATIC ${FL_SOURCES})
 target_include_directories(fluluks PUBLIC include PRIVATE src)
 target_compile_options(fluluks PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 fl_fatfs fl_ntfs3g Threads::Threads)
+target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 fl_fatfs fl_mkntfs fl_ntfs3g Threads::Threads)
 if(ANDROID)
   target_link_libraries(fluluks PUBLIC log) # fl_ext4_policy_log (logcat)
 endif()
@@ -138,6 +146,19 @@ if(FL_TESTS)
   fl_add_test(test_ntfs_dev)
   fl_add_test(test_ntfs_hostile)
   set_tests_properties(test_ntfs_hostile PROPERTIES TIMEOUT 600)
+  fl_add_test(test_format_part)
+  target_link_libraries(test_format_part PRIVATE fl_testsupport)
+  fl_add_test(test_format_fat)
+  target_link_libraries(test_format_fat PRIVATE fl_testsupport)
+  fl_add_test(test_format_ext4)
+  target_link_libraries(test_format_ext4 PRIVATE fl_testsupport)
+  fl_add_test(test_format_ntfs)
+  target_link_libraries(test_format_ntfs PRIVATE fl_testsupport)
+  fl_add_test(test_format_luks)
+  target_link_libraries(test_format_luks PRIVATE fl_testsupport)
+  fl_add_test(test_format)
+  target_link_libraries(test_format PRIVATE fl_testsupport)
+  set_tests_properties(test_format PROPERTIES TIMEOUT 900)
   fl_add_test(test_cache)
   fl_add_test(test_crc32c)
   add_test(NAME test_crc32c_debit COMMAND test_crc32c debit)
