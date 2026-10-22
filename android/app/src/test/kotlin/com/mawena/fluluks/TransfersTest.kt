@@ -310,4 +310,38 @@ class TransfersTest {
         assertNull(s.error)
         assertEquals(2_000L, s.elapsedMs)
     }
+
+    /** Phase 7 : pendant l'écriture, le fichier porte un nom temporaire ; son vrai nom seulement une fois vérifié. */
+    @Test fun partialHasTemporaryName() {
+        local("a.bin", data(3 * mib))
+        val seen = mutableSetOf<String>()
+        e.onPwrite = { seen += e.nodes.keys.filter { it != "/" } }
+        val s = run("phone", listOf("/a.bin"), volId, "/")
+        assertNull(s.error)
+        assertEquals(setOf("/.a.bin.portail-partiel"), seen)
+        assertEquals(setOf("/", "/a.bin"), e.nodes.keys)
+        assertArrayEquals(data(3 * mib), disk("/a.bin"))
+    }
+
+    @Test fun failureRemovesTemporary() {
+        local("gros.bin", data(3 * mib))
+        e.failPwriteAt = 2
+        e.failPwriteCode = EngineError.FL_EFBIG
+        run("phone", listOf("/gros.bin"), volId, "/")
+        assertEquals(setOf("/"), e.nodes.keys)
+    }
+
+    /** Phase 7 : un nom de 255 octets copié deux fois dans le même dossier : deux fichiers, noms ≤ 255 octets. */
+    @Test fun copyLongNameTwice() {
+        val long = "n".repeat(251) + ".bin" // 255 octets : la limite d'un nom local
+        local(long, data(10))
+        var tooLong = false
+        e.onPwrite = { if (e.nodes.keys.any { it.substringAfterLast('/').toByteArray().size > 255 }) tooLong = true }
+        assertNull(run("phone", listOf("/$long"), volId, "/").error)
+        assertNull(run("phone", listOf("/$long"), volId, "/").error)
+        assertFalse(tooLong)
+        val names = e.nodes.keys.filter { it != "/" }.map { it.substring(1) }
+        assertEquals(2, names.size)
+        assertTrue(names.toString(), names.all { it.toByteArray().size <= 255 && it.endsWith(".bin") })
+    }
 }

@@ -48,6 +48,13 @@ object Transfers {
     const val MSG_SOURCE_GONE = "Stockage fermé : opération interrompue"
     const val MSG_LINKS = "Les liens symboliques et fichiers spéciaux ne sont pas copiés"
     const val MSG_SIZE_MISMATCH = "Copie incomplète : taille différente sur la destination"
+    /** Suffixe du nom temporaire d'un fichier en cours d'écriture : « .nom.portail-partiel ». */
+    const val PARTIAL_SUFFIX = ".portail-partiel"
+
+    /** Nom temporaire de [name], dans la limite de 255 octets. */
+    fun partialName(name: String): String =
+        "." + DocNames.truncateUtf8(name, DocNames.MAX_NAME_BYTES - 1 - PARTIAL_SUFFIX.length) + PARTIAL_SUFFIX
+
     const val MSG_CHANGED = "Fichier modifié pendant le déplacement : l'original est gardé"
     fun msgNoSpace(need: Long, free: Long) =
         "Pas assez de place : ${VolumeManager.humanSize(need)} nécessaires, ${VolumeManager.humanSize(free)} libres"
@@ -239,7 +246,8 @@ object Transfers {
             var written = 0L
             try {
                 src.openRead(n.src).use { input ->
-                    val (path, o) = dst.createFile(parentDst, name)
+                    // nom temporaire : un fichier incomplet (processus tué, disque arraché) ne porte jamais le vrai nom
+                    val (path, o) = dst.createFile(parentDst, partialName(name))
                     created = path
                     out = o
                     val buf = ByteArray(WriteOps.COPY_CHUNK)
@@ -262,6 +270,9 @@ object Transfers {
                     throw FilesException(EngineError.FL_EIO, MSG_SIZE_MISMATCH)
                 }
                 if (written != n.size) st = st.copy(totalBytes = st.totalBytes + (written - n.size))
+                val finalName = DocNames.unique(name) { dst.stat(DocumentIds.child(parentDst, it)) != null }
+                    ?: throw FileNotFoundException("Trop d'éléments portent déjà ce nom")
+                dst.rename(copied, finalName)
                 created = null
                 publish(force = true)
                 return written == n.size && src.stat(n.src)?.size == written
