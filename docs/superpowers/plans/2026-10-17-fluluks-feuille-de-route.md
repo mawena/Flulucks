@@ -315,6 +315,16 @@ dans le même commit que le travail.
 - [ ] LUKS : vérification des deux en-têtes, sauvegarde et restauration de l'en-tête
 - [ ] Version `v1.4.0`
 
+### Phase 12 — Gestion des partitions, comme GParted
+- [ ] Plan de la phase 12 écrit *(demande du 2026-10-22 ; spec § 17)*
+- [ ] Vue du disque : partitions et espace libre à l'échelle, système de fichiers, étiquette, taille, place occupée
+- [ ] Taille choisie au formatage ; créer une partition dans un espace libre, en supprimer une, formater une seule partition
+- [ ] Changer l'étiquette d'une partition ; nouvelle table MBR ou GPT
+- [ ] Redimensionner (agrandir, réduire) : ext4 par resize2fs, NTFS par ntfsresize, système de fichiers dans LUKS2 ; FAT32 et exFAT à étudier
+- [ ] Déplacer une partition, si le plan sait le rendre sûr
+- [ ] Opérations préparées, résumées, puis appliquées après confirmation
+- [ ] Version `v1.5.0`
+
 ---
 
 ## Principes

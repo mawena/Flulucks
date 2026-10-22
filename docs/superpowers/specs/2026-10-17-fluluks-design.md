@@ -365,3 +365,36 @@ l'application, avec les outils de référence de Linux intégrés au moteur nati
   « journal à rejouer ».
 - Le § 4.2 reste la règle : Portail n'écrit sur un système de fichiers douteux que par ces outils, à la
   demande explicite de l'utilisateur.
+
+## 17. Évolution du 2026-10-22 (suite) : gestion des partitions
+
+Décision de l'utilisateur : la **phase 12** (v1.5.0) apporte la **gestion des partitions** d'un disque USB,
+à la manière de GParted, et le choix de la **taille** au formatage.
+- **Choisir la taille** : formater une partition de la taille voulue au lieu de tout le disque ; le reste
+  reste libre.
+- **Voir le disque comme dans GParted** : une barre avec chaque partition et l'espace libre, à
+  l'échelle ; pour chaque partition, son système de fichiers, son étiquette, sa taille et sa place
+  occupée.
+- **Créer** une partition dans un espace libre (taille, système de fichiers, chiffrement LUKS2,
+  étiquette), **supprimer** une partition, **formater une seule partition**, changer son **étiquette**,
+  créer une **nouvelle table** (MBR ou GPT).
+- **Redimensionner** une partition et son système de fichiers, agrandir ou réduire :
+  - ext4 par `resize2fs` (e2fsprogs, déjà intégré en phase 11) ;
+  - NTFS par `ntfsresize` (ntfs-3g) ;
+  - dans un volume LUKS2, le système de fichiers intérieur (la taille du segment LUKS2 suit la
+    partition) ;
+  - *(décision du planificateur)* FAT32 et exFAT n'ont pas d'outil de référence libre pour le
+    redimensionnement : le plan de la phase étudie la question ; à défaut, Portail les refuse en le
+    disant.
+- **Déplacer** une partition (changer son début) *(décision du planificateur)* : seulement si le plan de
+  la phase sait le rendre sûr, car un déplacement interrompu détruit les données.
+- **Sûreté** :
+  - comme dans GParted, les opérations sont préparées, résumées, puis appliquées après confirmation, une
+    à la fois ;
+  - jamais sur un volume ouvert ;
+  - le système de fichiers est vérifié (outils de la phase 11) avant un redimensionnement ;
+  - avertissement : un débranchement pendant un redimensionnement ou un déplacement peut rendre la
+    partition illisible, sauvegardez d'abord ;
+  - toutes les opérations sont jugées sur des images par les outils de référence (`sfdisk`, `sgdisk`,
+    `e2fsck`, `ntfsfix`, `cryptsetup`, montage par le noyau Linux), puis essayées sur une clé USB
+    sacrifiée, jamais sur le vrai disque.
