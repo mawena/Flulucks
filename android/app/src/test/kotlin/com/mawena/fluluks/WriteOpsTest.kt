@@ -173,4 +173,29 @@ class WriteOpsTest {
         wa.copy("/s/gros", "/s")
         assertTrue("$chunks", chunks >= 4)
     }
+
+    /** Fichier que le client vient de fermer : la libération du descripteur proxy (onRelease) arrive en
+     *  différé ; supprimer, renommer ou déplacer attend qu'elle aboutisse au lieu de rendre FL_EBUSY. */
+    @Test fun busyFileWaitsForPendingRelease() {
+        file("/a.txt"); e.busy["/a.txt"] = 3
+        w.delete("/a.txt")
+        assertFalse(e.nodes.containsKey("/a.txt"))
+        file("/b.txt"); e.busy["/b.txt"] = 3
+        assertEquals("/c.txt", w.rename("/b.txt", "c.txt"))
+        dir("/d"); file("/c2.txt"); e.busy["/c2.txt"] = 3
+        assertEquals("/d/c2.txt", w.move("/c2.txt", "/d"))
+    }
+
+    @Test fun fileStillOpenStaysBusy() {
+        val quick = WriteOps(e, 1, busyWaitMs = 100)
+        file("/a.txt"); e.busy["/a.txt"] = Int.MAX_VALUE
+        val t0 = System.nanoTime()
+        try {
+            quick.delete("/a.txt"); fail("supprimé")
+        } catch (x: EngineError) {
+            assertEquals(EngineError.FL_EBUSY, x.code)
+        }
+        assertTrue((System.nanoTime() - t0) / 1_000_000 < 2_000)
+        assertTrue(e.nodes.containsKey("/a.txt"))
+    }
 }

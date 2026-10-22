@@ -299,8 +299,8 @@ Décisions de l'utilisateur, après la phase 5 :
 Décisions de l'utilisateur (`docs/Manuel/maj-20-10-2026.md`) :
 - **Affichage des dossiers** en liste ou en grille, choisi dans les Réglages (en plus du menu de
   l'explorateur). Phase 6, T13.
-- **Lecteurs intégrés et stockages distants**, à planifier après la v1.0.0 (phase 8, devenue phase 9 le
-  2026-10-22, voir § 14) :
+- **Lecteurs intégrés et stockages distants**, à planifier après la v1.0.0 (phase 8, devenue phase 10 le
+  2026-10-22, voir § 14 et § 15) :
   - voir des images, écouter de la musique, éditer des fichiers texte, lire des vidéos dans Portail ;
   - accéder à des dossiers distants par FTP, puis par SFTP, comme sources du gestionnaire de fichiers.
 - Ce qui est lu ou affiché depuis un disque chiffré suit la règle du § 11 : rien n'en est écrit sur le
@@ -320,7 +320,7 @@ Décisions de l'utilisateur (`docs/Manuel/maj-20-10-2026.md`) :
 ## 14. Évolution du 2026-10-22 (suite) : formatage
 
 Décision de l'utilisateur : le **formatage des disques USB** devient la **phase 8** (v1.1.0) ; les lecteurs
-intégrés et les stockages distants passent en **phase 9** (v1.2.0).
+intégrés et les stockages distants passent en phase 9, puis en **phase 10** (v1.3.0, voir § 15).
 - Formater un disque USB branché sur le téléphone, en **FAT32, exFAT, ext4 ou NTFS**, en clair ou **chiffré
   LUKS2** (le système de fichiers choisi dans le volume chiffré), avec une étiquette.
 - Jamais le stockage du téléphone ni une carte SD montée par Android : seulement un disque dont Portail a
@@ -332,3 +332,69 @@ intégrés et les stockages distants passent en **phase 9** (v1.2.0).
   sur des images sur le PC, puis sur une clé USB sacrifiée, jamais sur le vrai disque.
 - Autres options évoquées (changer la phrase de passe, gérer les partitions, effacement sécurisé, vérifier
   un disque) : non retenues pour l'instant.
+
+## 15. Évolution du 2026-10-22 (suite) : compression et outils du gestionnaire
+
+Décision de l'utilisateur : la **phase 9** (v1.2.0) porte la **compression et la décompression**, plus des
+fonctions choisies par le planificateur ; les lecteurs et stockages distants passent en **phase 10** (v1.3.0).
+- **Compression et décompression** : créer une archive ZIP depuis une sélection ; extraire ZIP, 7z, RAR
+  (lecture seule : le format RAR n'est pas libre en écriture), TAR, TAR.GZ et TAR.XZ, d'une source vers
+  n'importe quelle destination (téléphone, carte SD, disque), avec progression et annulation, comme une
+  copie. Une archive hostile (chemins `../`, liens, bombe de décompression) ne sort jamais du dossier de
+  destination et ne remplit pas le disque sans limite.
+- *(décisions du planificateur)* :
+  - **Corbeille** : une suppression depuis Portail déplace dans un dossier caché du même stockage
+    (`.Portail-corbeille`), récupérable 30 jours, vidable à la main ; « Supprimer définitivement » reste
+    possible. Sur un disque chiffré, la corbeille reste dans le volume chiffré.
+  - **Analyse de l'espace** : taille de chaque dossier et liste des plus gros fichiers d'un stockage.
+  - **Propriétés** : taille, dates, propriétaire et droits sur ext4, empreinte SHA-256 calculée à la demande.
+  - **Renommage par lot** : numérotation, remplacement d'un texte, date de prise de vue des photos.
+  - **Filtres rapides** sur l'accueil : photos, vidéos, musique, documents, archives, fichiers récents.
+
+## 16. Évolution du 2026-10-22 (suite) : vérification et réparation
+
+Décision de l'utilisateur : la **phase 11** (v1.4.0) apporte la **réparation des disques** dans
+l'application, avec les outils de référence de Linux intégrés au moteur natif.
+- **Vérifier d'abord, en lecture seule**, et montrer un rapport en français ; réparer seulement après
+  confirmation, avec le conseil de sauvegarder les données importantes avant.
+- ext4 : `e2fsck` (e2fsprogs), branché sur un gestionnaire d'entrées-sorties qui passe par l'accès USB du
+  moteur ; NTFS : `ntfsfix` (ntfs-3g), qui ne remplace pas `chkdsk` de Windows ; FAT32 et exFAT :
+  `fsck.fat` (dosfstools) et `fsck.exfat` (exfatprogs) ; LUKS : vérification des deux copies de l'en-tête,
+  sauvegarde de l'en-tête dans un fichier choisi par l'utilisateur, restauration.
+- Jamais sur un volume ouvert ; un disque réparé ne s'ouvre plus en lecture seule pour « mal éjecté » ou
+  « journal à rejouer ».
+- Le § 4.2 reste la règle : Portail n'écrit sur un système de fichiers douteux que par ces outils, à la
+  demande explicite de l'utilisateur.
+
+## 17. Évolution du 2026-10-22 (suite) : gestion des partitions
+
+Décision de l'utilisateur : la **phase 12** (v1.5.0) apporte la **gestion des partitions** d'un disque USB,
+à la manière de GParted, et le choix de la **taille** au formatage.
+- **Choisir la taille** : formater une partition de la taille voulue au lieu de tout le disque ; le reste
+  reste libre.
+- **Voir le disque comme dans GParted** : une barre avec chaque partition et l'espace libre, à
+  l'échelle ; pour chaque partition, son système de fichiers, son étiquette, sa taille et sa place
+  occupée.
+- **Créer** une partition dans un espace libre (taille, système de fichiers, chiffrement LUKS2,
+  étiquette), **supprimer** une partition, **formater une seule partition**, changer son **étiquette**,
+  créer une **nouvelle table** (MBR ou GPT).
+- **Redimensionner** une partition et son système de fichiers, agrandir ou réduire :
+  - ext4 par `resize2fs` (e2fsprogs, déjà intégré en phase 11) ;
+  - NTFS par `ntfsresize` (ntfs-3g) ;
+  - dans un volume LUKS2, le système de fichiers intérieur (la taille du segment LUKS2 suit la
+    partition) ;
+  - *(décision du planificateur)* FAT32 et exFAT n'ont pas d'outil de référence libre pour le
+    redimensionnement : le plan de la phase étudie la question ; à défaut, Portail les refuse en le
+    disant.
+- **Déplacer** une partition (changer son début) *(décision du planificateur)* : seulement si le plan de
+  la phase sait le rendre sûr, car un déplacement interrompu détruit les données.
+- **Sûreté** :
+  - comme dans GParted, les opérations sont préparées, résumées, puis appliquées après confirmation, une
+    à la fois ;
+  - jamais sur un volume ouvert ;
+  - le système de fichiers est vérifié (outils de la phase 11) avant un redimensionnement ;
+  - avertissement : un débranchement pendant un redimensionnement ou un déplacement peut rendre la
+    partition illisible, sauvegardez d'abord ;
+  - toutes les opérations sont jugées sur des images par les outils de référence (`sfdisk`, `sgdisk`,
+    `e2fsck`, `ntfsfix`, `cryptsetup`, montage par le noyau Linux), puis essayées sur une clé USB
+    sacrifiée, jamais sur le vrai disque.

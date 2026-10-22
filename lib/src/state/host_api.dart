@@ -34,6 +34,7 @@ abstract class HostApi {
   Future<List<FavoriteMsg>> listFavorites();
   Future<void> addFavorite(String sourceId, String path, String label);
   Future<void> removeFavorite(String key, String path);
+  Future<void> formatDisk(String diskId, String fs, bool encrypted, String label, Uint8List? passphrase);
 }
 
 /// Implémentation réelle : délègue au client Pigeon généré.
@@ -107,4 +108,7 @@ class PigeonHostApi implements HostApi {
   Future<void> addFavorite(String sourceId, String path, String label) => _api.addFavorite(sourceId, path, label);
   @override
   Future<void> removeFavorite(String key, String path) => _api.removeFavorite(key, path);
+  @override
+  Future<void> formatDisk(String diskId, String fs, bool encrypted, String label, Uint8List? passphrase) =>
+      _api.formatDisk(diskId, fs, encrypted, label, passphrase);
 }

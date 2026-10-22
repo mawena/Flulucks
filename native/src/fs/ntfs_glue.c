@@ -1088,3 +1088,29 @@ int fl_ntfs_mount(fl_bdev *dev, bool want_rw, fl_fs **out) {
   *out = fs;
   return FL_OK;
 }
+
+/* --- formatage (phase 8) ------------------------------------------------------------------------- */
+
+/* mkntfs de ntfs-3g, sans main (correctif 0007, cible fl_mkntfs). */
+int fl_mkntfs(struct ntfs_device *dev, long sector_size, long long num_sectors, long long part_start,
+              const char *label, const u8 rnd[24], int *dev_taken);
+
+/* Sous g_ntfs_lock : mkntfs a des états globaux et appelle libntfs-3g. Écritures par ntfs_dev (tampon
+ * vidé par la synchronisation finale de mkntfs) ; la première erreur du disque l'emporte. */
+int fl_ntfs_mkfs(fl_bdev *dev, const char *label, uint32_t hidden_sectors, const uint8_t rnd[24]) {
+  pthread_mutex_lock(&g_ntfs_lock);
+  ntfs_dev *dd = NULL;
+  int rc = ntfs_dev_new(dev, true, &dd);
+  if (rc == FL_OK) {
+    int taken = 0;
+    errno = 0;
+    int r = fl_mkntfs(ntfs_dev_device(dd), (long)dev->sector_size, (long long)dev->sector_count,
+                      (long long)hidden_sectors, label, rnd, &taken);
+    int e = errno;
+    rc = ntfs_dev_error(dd);
+    if (rc == FL_OK && r != 0) rc = e == ENOMEM ? FL_ENOMEM : e == ENOSPC ? FL_ENOSPC : FL_EIO;
+    ntfs_dev_free(dd, !taken);
+  }
+  pthread_mutex_unlock(&g_ntfs_lock);
+  return rc;
+}

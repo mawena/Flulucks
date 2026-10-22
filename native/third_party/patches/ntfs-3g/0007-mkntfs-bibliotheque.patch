@@ -1,0 +1,145 @@
+Sujet : mkntfs appelé comme bibliothèque (fl_mkntfs), aléa fourni, état global remis à zéro
+
+Avec FL_MKNTFS (cible fl_mkntfs) :
+- main est remplacé par fl_mkntfs(dev, …) : formatage rapide sur le périphérique de l'appelant
+  (ntfs_dev.c), sans ligne de commande ni ntfs_device_default_io_ops (d'où le #error levé) ;
+- le numéro de série et le GUID du volume viennent de l'aléa de l'appelant (/dev/urandom) au lieu de
+  random() initialisé par l'heure (deux formatages dans la même seconde avaient le même numéro).
+Sans condition : mkntfs_cleanup libère g_upcaseinfo (fuite, ASan) et remet g_allocation à NULL (liste
+libérée puis relue par un second formatage dans le même processus).
+
+--- a/ntfsprogs/mkntfs.c
++++ b/ntfsprogs/mkntfs.c
+@@ -148,7 +148,7 @@
+ 
+ typedef enum { WRITE_STANDARD, WRITE_BITMAP, WRITE_LOGFILE } WRITE_TYPE;
+ 
+-#ifdef NO_NTFS_DEVICE_DEFAULT_IO_OPS
++#if defined(NO_NTFS_DEVICE_DEFAULT_IO_OPS) && !defined(FL_MKNTFS)
+ #error "No default device io operations!  Cannot build mkntfs.  \
+ You need to run ./configure without the --disable-default-device-io-ops \
+ switch if you want to be able to build the NTFS utilities."
+@@ -228,6 +228,13 @@ static struct mkntfs_options {
+ 	char *label;			/* -L, volume label */
+ } opts;
+ 
++#ifdef FL_MKNTFS
++/* Portail : périphérique fourni par l'appelant (pris par mkntfs_open_partition, puis libéré par
++ * mkntfs_cleanup), et aléa du numéro de série (8 octets) et du GUID (16 octets) du volume. */
++static struct ntfs_device *fl_dev;
++static u8 fl_rnd[24];
++#endif
++
+ 
+ /**
+  * mkntfs_license
+@@ -3440,6 +3447,7 @@ static void mkntfs_cleanup(void)
+ 	free(g_rl_mft);		g_rl_mft	= NULL;
+ 	free(g_rl_mft_bmp);	g_rl_mft_bmp	= NULL;
+ 	free(g_rl_mftmirr);	g_rl_mftmirr	= NULL;
++	free(g_upcaseinfo);	g_upcaseinfo	= NULL;
+ 
+ 	p = g_allocation;
+ 	while (p) {
+@@ -3447,6 +3455,7 @@ static void mkntfs_cleanup(void)
+ 		free(p);
+ 		p = q;
+ 	}
++	g_allocation = NULL;
+ }
+ 
+ 
+@@ -3464,7 +3473,12 @@ static BOOL mkntfs_open_partition(ntfs_volume *vol)
+ 	 * Allocate and initialize an ntfs device structure and attach it to
+ 	 * the volume.
+ 	 */
++#ifdef FL_MKNTFS
++	vol->dev = fl_dev;
++	fl_dev = NULL;
++#else
+ 	vol->dev = ntfs_device_alloc(opts.dev_name, 0, &ntfs_device_default_io_ops, NULL);
++#endif
+ 	if (!vol->dev) {
+ 		ntfs_log_perror("Could not create device");
+ 		goto done;
+@@ -4700,8 +4714,12 @@ static BOOL mkntfs_create_root_structures(void)
+ 			bs->clusters_per_index_record,
+ 			bs->clusters_per_index_record);
+ 	/* Generate a 64-bit random number for the serial number. */
++#ifdef FL_MKNTFS
++	memcpy(&bs->volume_serial_number, fl_rnd, 8);
++#else
+ 	bs->volume_serial_number = cpu_to_le64(((u64)random() << 32) |
+ 			((u64)random() & 0xffffffff));
++#endif
+ 	/*
+ 	 * Leave zero for now as NT4 leaves it zero, too. If want it later, see
+ 	 * ../libntfs/bootsect.c for how to calculate it.
+@@ -4749,6 +4767,10 @@ static BOOL mkntfs_create_root_structures(void)
+ 		/* Generate a GUID for the volume. */
+ #ifdef ENABLE_UUID
+ 		uuid_generate((void*)&vol_guid);
++#elif defined(FL_MKNTFS)
++		memcpy(&vol_guid, fl_rnd + 8, 16);
++		((u8*)&vol_guid)[7] = (((u8*)&vol_guid)[7] & 0x0F) | 0x40;
++		((u8*)&vol_guid)[8] = (((u8*)&vol_guid)[8] & 0x3F) | 0x80;
+ #else
+ 		ntfs_generate_guid(&vol_guid);
+ #endif
+@@ -4977,7 +4999,9 @@ static int mkntfs_redirect(struct mkntfs_options *opts2)
+ 		goto done;
+ 	}
+ 	/* Initialize the random number generator with the current time. */
++#ifndef FL_MKNTFS
+ 	srandom(sle64_to_cpu(mkntfs_time())/10000000);
++#endif
+ 	/* Allocate and initialize ntfs_volume structure g_vol. */
+ 	g_vol = ntfs_volume_alloc();
+ 	if (!g_vol) {
+@@ -5174,6 +5198,7 @@ done:
+  * Return:  0  Success, the program worked
+  *	    1  Error, something went wrong
+  */
++#ifndef FL_MKNTFS
+ int main(int argc, char *argv[])
+ {
+ 	int result = 1;
+@@ -5191,3 +5216,38 @@ int main(int argc, char *argv[])
+ 
+ 	return result;
+ }
++#else
++/*
++ * Portail : formatage rapide (-Q) de tout @dev, déjà alloué par l'appelant, comme
++ * « mkntfs -Q -F -s sector_size -p part_start -H 255 -S 63 [-L label] dev num_sectors ».
++ * @dev est libéré par mkntfs si *dev_taken est vrai au retour, sinon il reste à
++ * l'appelant. Rend 0 si le volume est écrit et synchronisé, 1 sinon (errno).
++ */
++int fl_mkntfs(struct ntfs_device *dev, long sector_size, long long num_sectors,
++		long long part_start, const char *label, const u8 rnd[24],
++		int *dev_taken);
++int fl_mkntfs(struct ntfs_device *dev, long sector_size, long long num_sectors,
++		long long part_start, const char *label, const u8 rnd[24],
++		int *dev_taken)
++{
++	int result;
++
++	mkntfs_init_options(&opts);
++	opts.dev_name = dev->d_name;
++	opts.quick_format = TRUE;
++	opts.force = TRUE;
++	opts.sector_size = sector_size;
++	opts.num_sectors = num_sectors;
++	opts.part_start_sect = part_start;
++	opts.heads = 255;
++	opts.sectors_per_track = 63;
++	opts.label = label && *label ? (char*)label : NULL;
++	fl_dev = dev;
++	memcpy(fl_rnd, rnd, sizeof(fl_rnd));
++	result = mkntfs_redirect(&opts);
++	*dev_taken = fl_dev == NULL;
++	fl_dev = NULL;
++	memset(fl_rnd, 0, sizeof(fl_rnd));
++	return result;
++}
++#endif

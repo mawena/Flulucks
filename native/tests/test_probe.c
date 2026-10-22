@@ -58,6 +58,8 @@ static void test_probe_autres(void) {
   sonde("ntfs.img", FL_CONTENT_NTFS, "", &r);
   sonde("swap.img", FL_CONTENT_SWAP, NULL, &r);
   sonde("sig-exfat.img", FL_CONTENT_EXFAT, NULL, &r);
+  sonde("exfat-vide.img", FL_CONTENT_EXFAT, "FLUVIDE", &r); /* étiquette : entrée 0x83 du dossier racine */
+  sonde("exfat-arbre.img", FL_CONTENT_EXFAT, "FLUEXFAT", &r);
   sonde("sig-lvm2.img", FL_CONTENT_LVM2, NULL, &r);
   sonde("sig-bitlocker.img", FL_CONTENT_BITLOCKER, NULL, &r);
   sonde("sig-btrfs.img", FL_CONTENT_BTRFS, NULL, &r);

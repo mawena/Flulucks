@@ -873,6 +873,8 @@ interface FluLuksHostApi {
   fun listFavorites(): List<FavoriteMsg>
   fun addFavorite(sourceId: String, path: String, label: String)
   fun removeFavorite(key: String, path: String)
+  /** Formate tout le disque : fs parmi fat32, exfat, ext4, ntfs ; passphrase si encrypted (mise à zéro). */
+  fun formatDisk(diskId: String, fs: String, encrypted: Boolean, label: String, passphrase: ByteArray?, callback: (Result<Unit>) -> Unit)
 
   companion object {
     /** The codec used by FluLuksHostApi. */
@@ -1436,6 +1438,29 @@ interface FluLuksHostApi {
           channel.setMessageHandler(null)
         }
       }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.formatDisk$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val diskIdArg = args[0] as String
+            val fsArg = args[1] as String
+            val encryptedArg = args[2] as Boolean
+            val labelArg = args[3] as String
+            val passphraseArg = args[4] as ByteArray?
+            api.formatDisk(diskIdArg, fsArg, encryptedArg, labelArg, passphraseArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
     }
   }
 }
@@ -1489,6 +1514,24 @@ class FluLuksEventsApi(private val binaryMessenger: BinaryMessenger, private val
     val channelName = "dev.flutter.pigeon.fluluks.FluLuksEventsApi.onTransferChanged$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
     channel.send(listOf(transferArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(FluLuksApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  /** Pourcentage du formatage en cours ; null quand il n'y en a pas (ou plus). */
+  fun onFormatProgress(pctArg: Long?, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.fluluks.FluLuksEventsApi.onFormatProgress$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(pctArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))

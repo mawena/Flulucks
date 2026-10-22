@@ -212,6 +212,11 @@ abstract class FluLuksHostApi {
   List<FavoriteMsg> listFavorites();
   void addFavorite(String sourceId, String path, String label);
   void removeFavorite(String key, String path);
+
+  // --- formatage (phase 8)
+  /// Formate tout le disque : fs parmi fat32, exfat, ext4, ntfs ; passphrase si encrypted (mise à zéro).
+  @async
+  void formatDisk(String diskId, String fs, bool encrypted, String label, Uint8List? passphrase);
 }
 
 @FlutterApi()
@@ -223,4 +228,7 @@ abstract class FluLuksEventsApi {
 
   /// Copie ou déplacement en cours ou terminé ; null tant qu'aucune opération n'a eu lieu.
   void onTransferChanged(TransferMsg? transfer);
+
+  /// Pourcentage du formatage en cours ; null quand il n'y en a pas (ou plus).
+  void onFormatProgress(int? pct);
 }

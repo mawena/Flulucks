@@ -27,6 +27,18 @@ interface Engine {
     fun rmdir(vol: Long, path: ByteArray): Int
     fun rename(vol: Long, from: ByteArray, to: ByteArray): Int
     fun sync(vol: Long): Int
+
+    /**
+     * Formate tout le disque (phase 8) : `opts` est le JSON UTF-8 de fj_format (fs, encrypted, label,
+     * kdf_mem_kib, uid, gid). Refus FL_EBUSY si un volume du disque est ouvert, FL_EROFS si le disque est
+     * protégé. [progress] reçoit un pourcentage croissant depuis le fil appelant. 0 ou fl_err.
+     */
+    fun format(disk: Long, opts: ByteArray, pass: ByteArray?, progress: FormatProgress?): Int = EngineError.FL_ENOTSUP
+}
+
+/** Progression du formatage, appelée par le moteur natif (méthode `onProgress(I)V`). */
+fun interface FormatProgress {
+    fun onProgress(pct: Int)
 }
 
 /** Drapeaux de [Engine.openFile], ceux de fluluks/fs.h (FL_O_*), combinables. */

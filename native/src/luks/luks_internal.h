@@ -10,6 +10,10 @@
 
 /* Fusion anti-forensique (spec LUKS). src = keylen*stripes octets, key = keylen octets. */
 int fl_af_merge(const char *hash, const uint8_t *src, size_t keylen, uint32_t stripes, uint8_t *key);
+/* Découpage inverse (formatage, phase 8) : dst = keylen*stripes octets ; les stripes-1 premiers blocs
+ * sont l'aléa fourni (rnd, (stripes-1)*keylen octets), le dernier est calculé. */
+int fl_af_split(const char *hash, const uint8_t *key, size_t keylen, uint32_t stripes, const uint8_t *rnd,
+                uint8_t *dst);
 
 /* Périphérique déchiffrant [data_offset_bytes, +data_size_bytes) de dev (0 = jusqu'à la fin).
  * IV du secteur lba = iv_tweak + lba * (iv_large_sectors ? 1 : sector_size/512).

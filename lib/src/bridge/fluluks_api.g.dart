@@ -1395,6 +1395,25 @@ class FluLuksHostApi {
     )
     ;
   }
+
+  /// Formate tout le disque : fs parmi fat32, exfat, ext4, ntfs ; passphrase si encrypted (mise à zéro).
+  Future<void> formatDisk(String diskId, String fs, bool encrypted, String label, Uint8List? passphrase) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.formatDisk$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[diskId, fs, encrypted, label, passphrase]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
 }
 
 abstract class FluLuksEventsApi {
@@ -1407,6 +1426,9 @@ abstract class FluLuksEventsApi {
 
   /// Copie ou déplacement en cours ou terminé ; null tant qu'aucune opération n'a eu lieu.
   void onTransferChanged(TransferMsg? transfer);
+
+  /// Pourcentage du formatage en cours ; null quand il n'y en a pas (ou plus).
+  void onFormatProgress(int? pct);
 
   static void setUp(FluLuksEventsApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
@@ -1466,6 +1488,27 @@ abstract class FluLuksEventsApi {
           final TransferMsg? arg_transfer = args[0] as TransferMsg?;
           try {
             api.onTransferChanged(arg_transfer);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.fluluks.FluLuksEventsApi.onFormatProgress$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final int? arg_pct = args[0] as int?;
+          try {
+            api.onFormatProgress(arg_pct);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

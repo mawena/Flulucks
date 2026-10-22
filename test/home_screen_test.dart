@@ -47,6 +47,8 @@ void main() {
     expect(find.text('Disque USB'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('DCIM'), 100);
     expect(find.text('Favoris'), findsOneWidget);
+    await tester.ensureVisible(find.text('DCIM')); // la carte du disque porte un bouton de menu (phase 8)
+    await tester.pumpAndSettle();
     await tester.tap(find.text('DCIM'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('listDir phone /DCIM false'));
