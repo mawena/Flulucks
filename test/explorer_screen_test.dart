@@ -145,7 +145,9 @@ void main() {
     await tester.pump();
     final (s, paths, dst, dir, move) = api.transfers.single;
     expect([s, ...paths, dst, dir, move], ['phone', '/a.jpg', '/b.txt', 'v1', '/', false]);
-    expect(state.clipboard, isNotNull); // une copie peut être recollée
+    // demande de l'utilisateur (2026-10-22) : « Coller ici » disparaît une fois la copie lancée
+    expect(state.clipboard, isNull);
+    expect(find.text('Coller ici'), findsNothing);
   });
 
   testWidgets('cutPasteMoves', (tester) async {

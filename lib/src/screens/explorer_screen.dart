@@ -251,7 +251,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
       state.clearError();
       return;
     }
-    if (c.move) state.clearClipboard();
+    state.clearClipboard(); // copie ou déplacement lancé : « Coller ici » disparaît
   }
 
   String _subtitle(EntryMsg e) {
