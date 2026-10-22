@@ -237,6 +237,13 @@ static void test_refus_avant_ecriture(void) {
   o.fs = FL_FMT_EXT4;
   o.label = "dix-sept octets!!";
   TT_ASSERT_EQ(fl_format(d, &o, NULL, 0, NULL, NULL), FL_EINVAL);
+  o.fs = FL_FMT_EXFAT; /* caractères refusés par FatFs (f_setlabel) : refus avant d'écrire */
+  const char *interdites[] = {"A:B", "Photos/2024", "x*y", "a?b", "<>", "a|b", "a\\b", "\"", "\x7f"};
+  for (size_t i = 0; i < sizeof interdites / sizeof *interdites; i++) {
+    o.label = interdites[i];
+    TT_ASSERT_EQ(fl_format(d, &o, NULL, 0, NULL, NULL), FL_EINVAL);
+  }
+  o.fs = FL_FMT_EXT4;
   o.label = "Données";
   o.encrypted = true;
   TT_ASSERT_EQ(fl_format(d, &o, PASS, 0, NULL, NULL), FL_EINVAL); /* phrase vide */

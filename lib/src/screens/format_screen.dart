@@ -22,7 +22,7 @@ String _labelLimit(String fs) => switch (fs) {
       'fat32' => Fr.labelLimitFat32,
       'ext4' => Fr.labelLimitBytes(16),
       'ntfs' => Fr.labelLimitChars(32),
-      _ => Fr.labelLimitChars(11),
+      _ => Fr.labelLimitExfat,
     };
 
 /// Vrai si l'étiquette convient au système de fichiers (vide accepté).
@@ -33,7 +33,7 @@ bool labelOk(String fs, String label) {
         label.codeUnits.every((c) => c >= 0x20 && c <= 0x7E && !r'"*+,./:;<=>?[\]|'.contains(String.fromCharCode(c))),
     'ext4' => utf8.encode(label).length <= 16,
     'ntfs' => label.length <= 32, // unités UTF-16, comme Windows
-    _ => label.length <= 11,
+    _ => label.length <= 11 && !label.contains(RegExp(r'[/\\:*?"<>|]')), // refusés par FatFs en exFAT
   };
 }
 

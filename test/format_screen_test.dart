@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluluks/src/app.dart';
+import 'package:fluluks/src/screens/format_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
 import 'package:fluluks/src/strings_fr.dart';
 
@@ -142,7 +143,7 @@ void main() {
   testWidgets('labelLimitShown', (tester) async {
     final (_, api) = await pumpHome(tester, apiWithDisk());
     await openFormat(tester);
-    expect(find.text(Fr.labelLimitChars(11)), findsOneWidget);
+    expect(find.text(Fr.labelLimitExfat), findsOneWidget);
     await tester.tap(find.text('ext4'));
     await tester.pumpAndSettle();
     expect(find.text(Fr.labelLimitBytes(16)), findsOneWidget);
@@ -161,5 +162,13 @@ void main() {
     expect(find.byType(AlertDialog), findsNothing);
     expect(api.formats, isEmpty);
     expect(tester.takeException(), isNull);
+  });
+
+  test('exfatLabelRejectsFatFsForbiddenChars', () {
+    expect(labelOk('exfat', 'Clé 2024'), isTrue);
+    for (final l in ['A:B', 'Photos/2024', 'x*y', 'a?b', '<>', 'a|b', r'a\b', '"']) {
+      expect(labelOk('exfat', l), isFalse, reason: l);
+    }
+    expect(labelOk('ntfs', 'A:B'), isTrue); // NTFS : seulement la longueur
   });
 }

@@ -138,6 +138,7 @@ class Fr {
   static String labelLimitChars(int n) => '$n caractères au plus';
   static String labelLimitBytes(int n) => '$n octets au plus (une lettre accentuée en compte deux)';
   static const labelLimitFat32 = '11 caractères au plus, sans accent';
+  static const labelLimitExfat = r'11 caractères au plus, sans / \ : * ? " < > |';
   static const labelInvalid = 'Étiquette refusée par ce système de fichiers';
   static const formatButton = 'Formater';
   static String formatConfirm(String name, String size) =>

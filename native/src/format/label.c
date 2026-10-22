@@ -34,7 +34,8 @@ int fl_fmt_check_label(fl_fmt_fs fs, const char *label) {
       for (const unsigned char *p = (const unsigned char *)label; *p; p++)
         if (*p < 0x20 || *p > 0x7E || strchr("\"*+,./:;<=>?[\\]|", *p)) return FL_EINVAL;
       return FL_OK;
-    case FL_FMT_EXFAT: return n >= 0 && n <= 11 ? FL_OK : FL_EINVAL;
+    case FL_FMT_EXFAT: /* caractères refusés par f_setlabel de FatFs en exFAT */
+      return n >= 0 && n <= 11 && !strpbrk(label, "\"*/:<>?\\|") ? FL_OK : FL_EINVAL;
     case FL_FMT_EXT4: return n >= 0 && strlen(label) <= 16 ? FL_OK : FL_EINVAL; /* s_volume_name */
     case FL_FMT_NTFS: return n >= 0 && n <= 32 ? FL_OK : FL_EINVAL; /* limite de Windows */
   }
