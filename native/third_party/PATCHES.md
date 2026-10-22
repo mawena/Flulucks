@@ -360,6 +360,17 @@ d'amont, tous vus par `e2fsck -fn` ou AddressSanitizer :
 Test : `native/tests/test_format_ext4.c` (volume d'un seul groupe, plusieurs groupes, secteurs de 4 096
 octets ; `e2fsck -fn` propre avant et après écriture par le moteur).
 
+### 18. Formatage : tables d'inodes jamais écrites (0012, phase 8)
+
+`ext4_mkfs` retirait `uninit_bg` (`gdt_csum`) tout en posant `INODE_UNINIT` et `BLOCK_UNINIT` sur chaque
+groupe, et laissait `bg_itable_unused` à 0 (« tout utilisé »). `e2fsck` et le noyau ignoraient donc ces
+drapeaux et lisaient des tables d'inodes que le formatage n'écrit jamais : sur un disque déjà utilisé, ou
+dans un volume LUKS (de l'aléa après déchiffrement), des milliers d'inodes « corrompus ». Le formatage garde
+`uninit_bg`, comme `mke2fs` sans `metadata_csum`, et pose `bg_itable_unused = inodes_per_group` ; la première
+allocation le réduit (`ext4_ialloc_alloc_inode`) et chaque nouvel inode est initialisé à son allocation. Le
+noyau met ensuite les tables à zéro en arrière-plan (`lazy_itable_init`), comme après `mke2fs`. Test :
+`test_format_ext4` (`test_ext4_sur_vieilles_donnees`, image pleine de bruit) et `test_format` (ext4 chiffré).
+
 ## Protections côté FluLuks (sans correctif lwext4)
 
 En écriture, `ext4_glue.c` vérifie chaque opération avant d'appeler lwext4, dont les fonctions de haut

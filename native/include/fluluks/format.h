@@ -33,6 +33,27 @@ int fl_mkfs_ext4(fl_bdev *part, const char *label, uint32_t root_uid, uint32_t r
  * 32 bits ; 0 dans un volume chiffré). FL_ENOSPC sous 8 Mio. */
 int fl_mkfs_ntfs(fl_bdev *part, const char *label, uint64_t hidden_sectors);
 
+/* LUKS2 comme `cryptsetup luksFormat` : aes-xts-plain64, clé maîtresse de 512 bits, emplacement 0 en
+ * Argon2id (t=4, m=kdf_mem_kib, p=4), deux en-têtes de 16 Kio, données à 16 Mio, secteurs chiffrés de
+ * 512 octets (ou ceux de `part` s'ils sont plus grands). Rend le volume déchiffré (à fermer avant `part`).
+ * FL_EINVAL (phrase vide, kdf_mem_kib < 8 Mio) ou FL_ENOSPC (moins d'un Mio de données) avant toute
+ * écriture. La clé maîtresse ne quitte jamais la mémoire sécurisée. */
+int fl_luks2_format(fl_bdev *part, const void *pass, size_t passlen, uint32_t kdf_mem_kib, fl_bdev **decrypted);
+
+typedef struct {
+  fl_fmt_fs fs;
+  bool encrypted;
+  const char *label;
+  uint32_t kdf_mem_kib;        /* mémoire Argon2 si chiffré */
+  uint32_t root_uid, root_gid; /* ext4 : propriétaire de la racine */
+} fl_fmt_opts;
+
+/* Formate tout `disk` : vérifications (taille minimale, étiquette, phrase) avant toute écriture, table à
+ * une partition, effacement des anciennes signatures, LUKS2 si demandé, système de fichiers, vidage du
+ * cache du disque. progress (facultatif) reçoit un pourcentage croissant, 100 à la fin. */
+int fl_format(fl_bdev *disk, const fl_fmt_opts *o, const void *pass, size_t passlen,
+              void (*progress)(int pct, void *arg), void *arg);
+
 /* `len` octets d'aléa de /dev/urandom ; FL_EIO si la lecture échoue (jamais d'aléa faible). */
 int fl_random(void *buf, size_t len);
 

@@ -8,8 +8,7 @@
 int fl_mkfs_ntfs(fl_bdev *part, const char *label, uint64_t hidden_sectors) {
   if (!part) return FL_EINVAL;
   if (!label) label = "";
-  int n = fl_label_utf16_units(label);
-  if (n < 0 || n > 32) return FL_EINVAL; /* 32 caractères : limite de Windows */
+  if (fl_fmt_check_label(FL_FMT_NTFS, label) != FL_OK) return FL_EINVAL;
   if (hidden_sectors > UINT32_MAX) return FL_EINVAL;
   if (fl_bdev_size_bytes(part) < 8 * MIB) return FL_ENOSPC;
   uint8_t rnd[24];

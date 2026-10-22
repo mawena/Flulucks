@@ -2,6 +2,7 @@
 
 #include "fluluks/error.h"
 #include "fluluks/format.h"
+#include "format/format_internal.h"
 #include "fs/fs_internal.h"
 
 #define MIB (1024ull * 1024ull)
@@ -9,7 +10,7 @@
 int fl_mkfs_ext4(fl_bdev *part, const char *label, uint32_t root_uid, uint32_t root_gid) {
   if (!part) return FL_EINVAL;
   if (!label) label = "";
-  if (strlen(label) > 16) return FL_EINVAL; /* s_volume_name : 16 octets */
+  if (fl_fmt_check_label(FL_FMT_EXT4, label) != FL_OK) return FL_EINVAL;
   if (fl_bdev_size_bytes(part) < 8 * MIB) return FL_ENOSPC; /* journal de 4 Mio au moins compris */
   uint8_t uuid[16];
   int rc = fl_random(uuid, sizeof uuid);

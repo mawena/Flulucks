@@ -3,6 +3,7 @@
 
 #include "fluluks/error.h"
 #include "fluluks/format.h"
+#include "format/format_internal.h"
 #include "part/crc32.h"
 
 #define MIB (1024u * 1024u)
@@ -27,8 +28,7 @@ static int random_guid(uint8_t g[16]) {
   return FL_OK;
 }
 
-/* Écrit `n` secteurs de zéros à partir de `lba`, par paquets d'au plus 1 Mio. */
-static int zero(fl_bdev *d, uint64_t lba, uint64_t n) {
+int fl_fmt_zero(fl_bdev *d, uint64_t lba, uint64_t n) {
   uint32_t per = MIB / d->sector_size;
   uint8_t *z = calloc(per, d->sector_size);
   if (!z) return FL_ENOMEM;
@@ -139,23 +139,35 @@ static int write_gpt(fl_bdev *d, const uint8_t type[16], uint64_t first, uint64_
   return rc;
 }
 
-int fl_part_write_single(fl_bdev *d, fl_fmt_fs fs, bool encrypted, uint64_t *first_lba, uint64_t *count) {
-  if (!d || !first_lba || !count || d->sector_size < 512 || d->sector_size > MIB) return FL_EINVAL;
-  if (fs < FL_FMT_FAT32 || fs > FL_FMT_NTFS) return FL_EINVAL;
-  if (d->read_only) return FL_EROFS;
+int fl_part_layout(const fl_bdev *d, uint64_t *first_lba, uint64_t *count, bool *gpt_out) {
+  if (!d || d->sector_size < 512 || d->sector_size > MIB) return FL_EINVAL;
   uint64_t align = MIB / d->sector_size;
   uint64_t total = d->sector_count;
   if (total < 4 * align) return FL_ENOSPC;
   bool gpt = total * d->sector_size > 2ull * 1024 * 1024 * MIB;
   uint64_t esec = (GPT_ENTRIES * GPT_ENTRY_SIZE + d->sector_size - 1) / d->sector_size;
   uint64_t end = gpt ? total - 1 - esec : total; /* premier secteur hors partition possible */
-  uint64_t first = align;
-  uint64_t n = (end - first) / align * align;
+  uint64_t n = (end - align) / align * align;
   if (!gpt && n > 0xFFFFFFFFull) return FL_EINVAL; /* MBR : 2^32 secteurs au plus */
+  *first_lba = align;
+  *count = n;
+  *gpt_out = gpt;
+  return FL_OK;
+}
+
+int fl_part_write_single(fl_bdev *d, fl_fmt_fs fs, bool encrypted, uint64_t *first_lba, uint64_t *count) {
+  if (!d || !first_lba || !count) return FL_EINVAL;
+  if (fs < FL_FMT_FAT32 || fs > FL_FMT_NTFS) return FL_EINVAL;
+  if (d->read_only) return FL_EROFS;
+  uint64_t first, n;
+  bool gpt;
+  int rc = fl_part_layout(d, &first, &n, &gpt);
+  if (rc != FL_OK) return rc;
+  uint64_t align = MIB / d->sector_size, total = d->sector_count;
 
   /* anciens en-têtes (GPT, LUKS, superblocs) : premier et dernier Mio effacés */
-  int rc = zero(d, 0, align);
-  if (rc == FL_OK) rc = zero(d, total - align, align);
+  rc = fl_fmt_zero(d, 0, align);
+  if (rc == FL_OK) rc = fl_fmt_zero(d, total - align, align);
   if (rc == FL_OK) {
     rc = gpt ? write_gpt(d, (encrypted || fs == FL_FMT_EXT4) ? TYPE_LINUX : TYPE_MSDATA, first, n)
              : write_mbr(d, mbr_type(fs, encrypted), first, n);

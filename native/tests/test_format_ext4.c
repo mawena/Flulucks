@@ -83,6 +83,42 @@ static void test_ext4_propre(void) { cas(512, 64 * MIB); }
 static void test_ext4_secteurs_4096(void) { cas(4096, 64 * MIB); }
 static void test_ext4_plusieurs_groupes(void) { cas(512, 1100 * MIB); } /* > 128 Mio : plusieurs groupes */
 
+/* Disque déjà utilisé (ou volume chiffré : de l'aléa) : les tables d'inodes jamais écrites contiennent de
+ * vieilles données ; e2fsck ne doit pas les lire (bg_itable_unused), ni des inodes réservés non effacés. */
+static void test_ext4_sur_vieilles_donnees(void) {
+  char img[4096];
+  TT_ASSERT_EQ(image(img, sizeof img, "format-ext4-vieux.img", 300 * MIB), 0);
+  int fd = open(img, O_RDWR);
+  TT_ASSERT(fd >= 0);
+  static uint8_t bruit[1 << 20];
+  uint32_t x = 2463534242u;
+  for (uint64_t p = 0; p < 300 * MIB; p += sizeof bruit) {
+    for (size_t i = 0; i < sizeof bruit; i++) {
+      x ^= x << 13;
+      x ^= x >> 17;
+      x ^= x << 5;
+      bruit[i] = (uint8_t)x;
+    }
+    TT_ASSERT_EQ(pwrite(fd, bruit, sizeof bruit, (off_t)p), (ssize_t)sizeof bruit);
+  }
+  close(fd);
+  fl_bdev *d = NULL;
+  TT_ASSERT_EQ(fl_file_bdev_open(img, 512, false, &d), FL_OK);
+  TT_ASSERT_EQ(fl_mkfs_ext4(d, "Vieux", 1000, 1000), FL_OK);
+  juger(img);
+  fl_fs *fs = NULL;
+  TT_ASSERT_EQ(fl_fs_mount(d, FL_CONTENT_EXT4, true, &fs), FL_OK);
+  for (int i = 0; i < 40; i++) {
+    char nom[64];
+    snprintf(nom, sizeof nom, "/d%d", i);
+    TT_ASSERT_EQ(fl_fs_mkdir(fs, nom), FL_OK);
+  }
+  TT_ASSERT_EQ(fl_fs_unmount(fs), FL_OK);
+  fl_bdev_close(d);
+  juger(img);
+  unlink(img);
+}
+
 static void test_refus(void) {
   char img[4096];
   TT_ASSERT_EQ(image(img, sizeof img, "format-ext4-refus.img", 6 * MIB), 0);
@@ -102,6 +138,7 @@ int main(void) {
   TT_RUN(test_ext4_propre);
   TT_RUN(test_ext4_secteurs_4096);
   TT_RUN(test_ext4_plusieurs_groupes);
+  TT_RUN(test_ext4_sur_vieilles_donnees);
   TT_RUN(test_refus);
   TT_MAIN_END();
 }

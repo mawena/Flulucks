@@ -275,7 +275,7 @@ dans le même commit que le travail.
 - [x] T2 — FAT32 et exFAT *(f_mkfs de FatFs ; fsck.fat et fsck.exfat propres, étiquette dans le secteur de démarrage)*
 - [x] T3 — ext4 avec journal *(ext4_mkfs de lwext4 corrigé par 0011 ; e2fsck propre avant et après écriture)*
 - [x] T4 — NTFS *(mkntfs de ntfs-3g appelé comme bibliothèque, correctif 0007 ; ntfsfix et ntfsjuge propres avant et après écriture)*
-- [ ] T5 — LUKS2 et formatage complet d'un disque
+- [x] T5 — LUKS2 et formatage complet d'un disque *(en-tête LUKS2 jugé par cryptsetup ; 8 combinaisons jugées par leur outil et blkid ; lwext4 corrigé par 0012 ; script noyau `verify_format_with_kernel.sh`)*
 - [ ] T6 — Formatage depuis Kotlin
 - [ ] T7 — Écran de formatage
 - [ ] *(utilisateur)* T8 — Essais : montage par le noyau sur le PC, clé USB sacrifiée sur le Pixel
