@@ -9,16 +9,33 @@ d'Android : on ouvre une vidéo dans VLC, un PDF ou une photo dans les applicati
 Elle est née d'un besoin simple : utiliser sur un téléphone non rooté (un Pixel 4 XL) le disque
 LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permettait.
 
-> **État actuel : version 1.0.0 ; gestionnaire de fichiers, lecture et écriture sur ext4, FAT, exFAT et
-> NTFS.** L'écriture a été vérifiée sur PC (batteries de non-corruption jugées par des outils indépendants
+> **État actuel : version 1.1.0 ; gestionnaire de fichiers, lecture et écriture sur ext4, FAT, exFAT et
+> NTFS, formatage des disques USB, en clair ou chiffrés.** L'écriture a été vérifiée sur PC (batteries de non-corruption jugées par des outils indépendants
 > et le noyau Linux, coupures simulées), sur le téléphone avec des images, puis essayée sur une vraie clé
 > et un vrai disque pour chaque système de fichiers (ext4 compris : `e2fsck` propre ensuite sous Ubuntu).
 > Une sauvegarde reste recommandée avant d'écrire sur un disque qui compte. Voir les
 > [limites](#limites-actuelles).
 
-## Ce que fait la version 1.0.0
+## Ce que fait la version 1.1.0
 
-### Robustesse (nouveau en 1.0.0)
+### Formatage des disques USB (nouveau en 1.1.0)
+
+- **Formate un disque entier** depuis le menu **⋮** de sa carte (**Formater…**), en **exFAT** (choix par
+  défaut : Windows, macOS, Linux, téléviseurs), **FAT32** (ancien matériel), **ext4** (Ubuntu) ou **NTFS**
+  (Windows), avec une étiquette.
+- **Chiffrement LUKS2** en option, comme `cryptsetup luksFormat` : aes-xts-plain64, clé de 512 bits,
+  Argon2id (1 Gio de mémoire, 256 Mio si le téléphone en manque). Le disque se déverrouille ensuite dans
+  Portail comme sous Ubuntu, avec la même phrase de passe.
+- **Une seule partition** sur tout le disque, alignée sur 1 Mio : table MBR jusqu'à 2 Tio, GPT au-delà.
+  Les anciennes signatures (GPT de secours, en-tête LUKS, superblocs) sont effacées, pour qu'aucun outil
+  ne voie un reste de l'ancien contenu.
+- **Confirmation en tapant le nom du disque** : rien n'est écrit avant. Tout est vérifié d'abord (étiquette,
+  phrase de passe, taille du disque) : un refus n'efface rien.
+- En ext4, la racine appartient à l'utilisateur 1000, celui d'Ubuntu : les fichiers sont à vous sans sudo.
+- Chaque format a été relu par son outil de référence (`fsck.fat`, `fsck.exfat`, `e2fsck`, `ntfsfix`,
+  `cryptsetup`) et monté par le noyau Linux, puis essayé sur une clé USB depuis le Pixel.
+
+### Robustesse (1.0.0)
 
 - **Verrouillage automatique** des disques chiffrés après 5, 15, 30 minutes ou 1 heure sans activité
   (Réglages ; « Jamais » par défaut). Une copie en cours ou un fichier lu par une autre application (une
@@ -84,6 +101,7 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
     arraché en pleine écriture est vérifié par Windows au branchement suivant.
   - Un disque NTFS n'est ouvert en écriture que s'il a été bien arrêté par Windows (voir les
     [limites](#limites-actuelles)).
+- **Formate un disque** (nouveau en 1.1.0) : voir [plus haut](#formatage-des-disques-usb-nouveau-en-110).
 - **Lecture seule quand il le faut**, avec la raison affichée : interrupteur « Ouvrir les disques en
   lecture seule », disque protégé en écriture, journal à rejouer, système de fichiers marqué en erreur,
   somme de contrôle fausse, option ext4 non prise en charge en écriture, disque FAT ou exFAT mal
@@ -154,6 +172,19 @@ Mesures sur le même téléphone, sur une image (test `PerfInstrumentedTest`, sa
   - le journal des modifications `$UsnJrnl` n'est pas tenu à jour (comme ntfs-3g) : un logiciel de
     sauvegarde Windows qui s'en sert peut rater des changements faits sur le téléphone ;
   - liens symboliques et jonctions : listés, mais pas suivis.
+- **Formatage** :
+  - tout le disque, en une seule partition : pas de partitionnement à la carte, pas de formatage d'une
+    seule partition ;
+  - FAT32 jusqu'à 2 Tio (au-delà, choisissez exFAT), et au moins 34 Mio ; 8 Mio au moins pour les autres
+    formats, 16 Mio de plus s'il est chiffré ;
+  - étiquette : 11 caractères sans accent en FAT32, 11 caractères sans `/ \ : * ? " < > |` en exFAT,
+    16 octets en ext4, 32 caractères en NTFS ;
+  - le formatage est rapide (les données ne sont pas réécrites) : l'ancien contenu reste lisible avec des
+    outils de récupération, sauf sur un disque chiffré. Pour un disque qui a contenu des données en
+    clair sensibles, effacez-le d'abord sur un ordinateur ;
+  - gardez Portail ouvert pendant le formatage : Android peut arrêter une application en arrière-plan, et
+    le disque serait à reformater ;
+  - l'étiquette d'un disque NTFS n'est pas encore affichée sur sa carte.
 - **LVM, BitLocker, btrfs, XFS…** sont signalés comme « non pris en charge ».
 - **Boîtiers USB** : seuls ceux qui proposent le protocole *Bulk-Only Transport* fonctionnent, ce qui est
   le cas de la plupart. Un boîtier en UAS seul est refusé avec un message clair.
@@ -208,7 +239,10 @@ La construction demande les outils listés plus bas, dans [Développement](#dév
    aussi dans le sélecteur de fichiers de toutes les applications.
 5. Pour copier ou déplacer : appui long sur un fichier pour le sélectionner, **Copier** ou **Couper**,
    puis, dans le dossier de destination (sur n'importe quel stockage), **Coller ici**.
-6. Pour finir, touchez **Éjecter**, dans l'application ou dans la notification « Disque ouvert », avant
+6. Pour **formater** un disque (tout son contenu est effacé) : menu **⋮** de sa carte, **Formater…**,
+   choisissez le format, l'étiquette et éventuellement le chiffrement, puis tapez le nom du disque pour
+   confirmer. Éjectez d'abord ses volumes ouverts.
+7. Pour finir, touchez **Éjecter**, dans l'application ou dans la notification « Disque ouvert », avant
    de débrancher le disque. Si vous avez écrit, attendez la fin de « Écriture des données en
    attente… ».
 
@@ -239,9 +273,11 @@ Bibliothèques utilisées :
 - [cJSON](https://github.com/DaveGamble/cJSON) : métadonnées LUKS2 ;
 - [lwext4](https://github.com/gkostka/lwext4) : ext4. Il est corrigé par les patchs de
   `native/third_party/patches/lwext4/` ; le sous-module reste sur le commit amont.
-- [FatFs](https://elm-chan.org/fsw/ff/) R0.16 : FAT12/16/32 et exFAT. Il est copié tel quel dans
-  `native/third_party/fatfs/` et corrigé par `native/third_party/patches/fatfs/` (voir
+- [FatFs](https://elm-chan.org/fsw/ff/) R0.16 : FAT12/16/32 et exFAT, et leur formatage. Il est copié tel
+  quel dans `native/third_party/fatfs/` et corrigé par `native/third_party/patches/fatfs/` (voir
   `native/third_party/PATCHES.md`).
+- [ntfs-3g](https://github.com/tuxera/ntfs-3g) 2022.10.3 : libntfs-3g pour NTFS, et `mkntfs`, appelé
+  comme une bibliothèque, pour le formatage. Corrigé par `native/third_party/patches/ntfs-3g/`.
 
 ## Développement
 
@@ -264,6 +300,7 @@ sudo tools/fixtures/verify_rw_with_kernel.sh build/native/batterie   # images é
 FL_KEEP=1 ctest --test-dir build/native -R test_ntfs_batterie        # garde les images NTFS écrites…
 sudo tools/fixtures/verify_ntfs_with_kernel.sh build/native/tmp/ntfs-batterie-<type>.img \
   build/native/tmp/ntfs-batterie-<type>.manifest                   # …et les fait relire par ntfs3
+sudo tools/fixtures/essais_phase8_pc.sh   # formate 10 images et les fait monter et écrire par le noyau
 
 # moteur natif sur le téléphone (écrit seulement dans /data/local/tmp/fluluks/)
 tools/android/run_native_tests.sh <numéro-adb>
@@ -311,7 +348,7 @@ Le dépôt suit git flow :
 | 5 | NTFS | **v0.4.0** |
 | 6 | Portail : nom, logo, gestionnaire de fichiers (téléphone, carte SD, disques) | **v0.5.0** |
 | 7 | Robustesse : verrouillage automatique, débranchement inattendu, performances, ext4 sur le vrai disque | **v1.0.0** |
-| 8 | Formatage des disques USB : FAT32, exFAT, ext4, NTFS, en clair ou chiffré LUKS2 | v1.1.0 |
+| 8 | Formatage des disques USB : FAT32, exFAT, ext4, NTFS, en clair ou chiffré LUKS2 | **v1.1.0** |
 | 9 | Compression et décompression (ZIP, 7z, RAR, TAR), corbeille, analyse de l'espace, propriétés et SHA-256, renommage par lot, filtres | v1.2.0 |
 | 10 | Visionneuse d'images, lecteurs de musique et de vidéo, éditeur de texte, dossiers distants FTP puis SFTP | v1.3.0 |
 | 11 | Vérification et réparation des disques : e2fsck, ntfsfix, fsck.fat, fsck.exfat, en-têtes LUKS | v1.4.0 |
