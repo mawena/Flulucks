@@ -56,6 +56,7 @@ class Fr {
   static const sortDate = 'Date';
   static const ascending = 'Croissant';
   static const descending = 'Décroissant';
+  static const display = 'Affichage des dossiers';
   static const grid = 'Grille';
   static const list = 'Liste';
   static const showHidden = 'Afficher les fichiers cachés';

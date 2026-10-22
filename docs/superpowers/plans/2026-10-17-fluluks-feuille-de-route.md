@@ -243,7 +243,7 @@ dans le même commit que le travail.
 - [x] T10 — Écran de recherche *(400 ms après la dernière frappe, recherche précédente annulée)*
 - [x] *(utilisateur)* T11 — Essais sur le Pixel *(2026-10-20 : tout est correct selon l'utilisateur)*
 - [x] T12 — Récupération de `feature/portail-save` *(un test repris, branche supprimée)*
-- [ ] T13 — Affichage des dossiers en liste ou en grille, choisi dans les Réglages
+- [x] T13 — Affichage des dossiers en liste ou en grille, choisi dans les Réglages
 - [ ] T14 — Documentation
 - [ ] Fusion `feature/portail` → `develop`
 - [ ] Version `v0.5.0`
