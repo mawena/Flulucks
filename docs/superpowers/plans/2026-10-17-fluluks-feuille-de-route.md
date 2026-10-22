@@ -287,12 +287,20 @@ dans le même commit que le travail.
 
 ### Phase 9 — Compression, corbeille et outils du gestionnaire ([plan](2026-10-22-phase9-compression.md))
 - [x] Plan de la phase 9 écrit *(demande du 2026-10-22 ; spec § 15)*
-- [ ] Compresser en ZIP ; extraire ZIP, 7z, RAR (lecture), TAR, TAR.GZ, TAR.XZ, avec progression et annulation
-- [ ] Corbeille sur le téléphone et sur les disques (récupérable 30 jours)
-- [ ] Analyse de l'espace (dossiers et plus gros fichiers)
-- [ ] Propriétés d'un fichier, avec empreinte SHA-256
-- [ ] Renommage par lot
-- [ ] Filtres rapides sur l'accueil (photos, vidéos, musique, documents, archives, récents)
+- [ ] T1 — libarchive 3.8.10 et liblzma 5.8.4 dans le moteur
+- [ ] T2 — Lecture d'archives : ZIP, 7z, RAR4, RAR5, TAR, TAR.GZ, TAR.XZ, GZ, XZ
+- [ ] T3 — Écriture ZIP (noms UTF-8, ZIP64)
+- [ ] T4 — Poignées d'archive par JNI, sur un descripteur ou un fichier du moteur
+- [ ] T5 — Compresser et extraire d'un stockage à l'autre, avec progression et annulation
+- [ ] T6 — Compresser et extraire depuis l'explorateur
+- [ ] T7 — Corbeille sur le téléphone et sur les disques (récupérable 30 jours)
+- [ ] T8 — Analyse de l'espace (dossiers et plus gros fichiers)
+- [ ] T9 — Propriétés d'un fichier, avec empreinte SHA-256
+- [ ] T10 — Renommage par lot
+- [ ] T11 — Filtres rapides sur l'accueil (photos, vidéos, musique, documents, archives, récents)
+- [ ] *(utilisateur)* T12 — Essais sur le Pixel
+- [ ] T13 — Documentation
+- [ ] Fusion `feature/compression` → `develop`
 - [ ] Version `v1.2.0`
 
 ### Phase 10 — Lecteurs intégrés et stockages distants
