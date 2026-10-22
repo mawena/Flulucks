@@ -438,7 +438,7 @@ object VolumeManager {
                 id = "v" + sessionToken + "-" + counter.incrementAndGet(), diskId = diskId, partIndex = partIndex, title = title,
                 totalBytes = stat.totalBytes, freeBytes = stat.freeBytes,
                 needsRecovery = stat.needsRecovery, roReason = stat.roReason, readOnly = stat.readOnly,
-                partUuid = part.uuid,
+                partUuid = part.uuid, fs = stat.fs, encrypted = pass != null,
             )
             mounts[state.id] = MountEntry(state, vol)
             activity[state.id] = clock()

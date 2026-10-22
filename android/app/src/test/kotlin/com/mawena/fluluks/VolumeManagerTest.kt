@@ -23,6 +23,7 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
     val events = mutableListOf<String>()
     var statfsFails = false
     var label = "MonDisque"
+    var fs = "ext4"
     var readOnly = true
     var roReason = "lecture seule"
     var syncResult = 0
@@ -53,7 +54,7 @@ class FakeEngine(private val kdfKib: Long = 1024) : Engine {
         return if (!force && openFiles > 0) EngineError.FL_EBUSY else if (!force) unmountResult else 0
     }
     override fun statfs(vol: Long) = if (statfsFails) """{"total":""".toByteArray() else
-        """{"total":1000,"free":400,"label":"$label","read_only":$readOnly,"ro_reason":"${if (readOnly) roReason else ""}","needs_recovery":false}""".toByteArray()
+        """{"total":1000,"free":400,"label":"$label","read_only":$readOnly,"ro_reason":"${if (readOnly) roReason else ""}","needs_recovery":false,"fs":"$fs"}""".toByteArray()
     override fun stat(vol: Long, path: ByteArray) = ByteArray(0)
     override fun list(vol: Long, path: ByteArray) = ByteArray(0)
     override fun openFile(vol: Long, path: ByteArray, flags: Int): Long { openFiles++; return next++ }
@@ -103,6 +104,17 @@ class VolumeManagerTest {
     }
 
     @Before fun before() = setup()
+
+    /** Phase 7 : le système de fichiers (conseil au débranchement) et le chiffrement (verrouillage automatique). */
+    @Test fun unlockMarksEncryptedAndFs() = runBlocking {
+        val v = VolumeManager.unlock(disk, 1, "secret".toByteArray())
+        assertTrue(v.encrypted)
+        assertEquals("ext4", v.fs)
+        engine.fs = "FAT32"
+        val p = VolumeManager.mountPlain(disk, 2)
+        assertFalse(p.encrypted)
+        assertEquals("FAT32", p.fs)
+    }
 
     @Test fun unlockPublishesVolume() = runBlocking {
         val v = VolumeManager.unlock(disk, 1, "secret".toByteArray())

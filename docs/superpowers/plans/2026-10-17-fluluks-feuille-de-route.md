@@ -253,6 +253,7 @@ dans le même commit que le travail.
 ### Phase 7 — Robustesse et performances ([plan](2026-10-22-phase7-robustesse.md))
 - [x] Plan de la phase 7 écrit *(spec § 13)*
 - [x] T1 — Logo orange, plus représentatif : arche de portail, dossier et cadenas *(demande du 2026-10-22 ; AppIdentityTest 3/3 sur le Pixel)*
+- [x] T2 — Système de fichiers et chiffrement connus pour chaque volume *(clé « fs » du statfs natif)*
 - [ ] Verrouillage automatique après X minutes d'inactivité (réglage désactivé par défaut, jamais pendant une copie)
 - [ ] Débranchement inattendu : conseil selon le système de fichiers, copies interrompues signalées
 - [ ] Performances du § 5 mesurées sur le Pixel (listage de 1 000 fichiers, copies téléphone ↔ disque)

@@ -174,6 +174,8 @@ static void test_lecture_plain(void) {
   r = json_de(fj_statfs(v, &j), &j);
   TT_ASSERT(r != NULL);
   TT_ASSERT_STR_EQ(cJSON_GetObjectItem(r, "label")->valuestring, "FLUTEST");
+  TT_ASSERT(cJSON_IsString(cJSON_GetObjectItem(r, "fs")));
+  TT_ASSERT_STR_EQ(cJSON_GetObjectItem(r, "fs")->valuestring, "ext4"); /* phase 7 : conseil au débranchement */
   TT_ASSERT(cJSON_IsTrue(cJSON_GetObjectItem(r, "read_only")));
   TT_ASSERT(cJSON_IsFalse(cJSON_GetObjectItem(r, "needs_recovery")));
   TT_ASSERT(cJSON_GetObjectItem(r, "total")->valuedouble > cJSON_GetObjectItem(r, "free")->valuedouble);
@@ -629,6 +631,8 @@ static void corps_fat(ctx_ecr *c, int luks) {
   TT_ASSERT(c->r != NULL);
   TT_ASSERT(cJSON_IsFalse(cJSON_GetObjectItem(c->r, "read_only")));
   TT_ASSERT_STR_EQ(cJSON_GetObjectItem(c->r, "label")->valuestring, "FLUFAT32");
+  TT_ASSERT(cJSON_IsString(cJSON_GetObjectItem(c->r, "fs")));
+  TT_ASSERT_STR_EQ(cJSON_GetObjectItem(c->r, "fs")->valuestring, "FAT32");
   cJSON_Delete(c->r);
   c->r = NULL;
   TT_ASSERT_EQ(fj_mkdir(v, "/jni"), FL_OK);
@@ -699,6 +703,8 @@ static void corps_ntfs(ctx_ecr *c, int luks) {
   TT_ASSERT(c->r != NULL);
   TT_ASSERT(cJSON_IsFalse(cJSON_GetObjectItem(c->r, "read_only")));
   TT_ASSERT_STR_EQ(cJSON_GetObjectItem(c->r, "label")->valuestring, "FLUNTFS");
+  TT_ASSERT(cJSON_IsString(cJSON_GetObjectItem(c->r, "fs")));
+  TT_ASSERT_STR_EQ(cJSON_GetObjectItem(c->r, "fs")->valuestring, "NTFS");
   cJSON_Delete(c->r);
   c->r = NULL;
   TT_ASSERT_EQ(fj_mkdir(v, "/jni"), FL_OK);
