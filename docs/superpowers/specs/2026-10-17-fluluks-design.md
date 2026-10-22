@@ -350,3 +350,18 @@ fonctions choisies par le planificateur ; les lecteurs et stockages distants pas
   - **Propriétés** : taille, dates, propriétaire et droits sur ext4, empreinte SHA-256 calculée à la demande.
   - **Renommage par lot** : numérotation, remplacement d'un texte, date de prise de vue des photos.
   - **Filtres rapides** sur l'accueil : photos, vidéos, musique, documents, archives, fichiers récents.
+
+## 16. Évolution du 2026-10-22 (suite) : vérification et réparation
+
+Décision de l'utilisateur : la **phase 11** (v1.4.0) apporte la **réparation des disques** dans
+l'application, avec les outils de référence de Linux intégrés au moteur natif.
+- **Vérifier d'abord, en lecture seule**, et montrer un rapport en français ; réparer seulement après
+  confirmation, avec le conseil de sauvegarder les données importantes avant.
+- ext4 : `e2fsck` (e2fsprogs), branché sur un gestionnaire d'entrées-sorties qui passe par l'accès USB du
+  moteur ; NTFS : `ntfsfix` (ntfs-3g), qui ne remplace pas `chkdsk` de Windows ; FAT32 et exFAT :
+  `fsck.fat` (dosfstools) et `fsck.exfat` (exfatprogs) ; LUKS : vérification des deux copies de l'en-tête,
+  sauvegarde de l'en-tête dans un fichier choisi par l'utilisateur, restauration.
+- Jamais sur un volume ouvert ; un disque réparé ne s'ouvre plus en lecture seule pour « mal éjecté » ou
+  « journal à rejouer ».
+- Le § 4.2 reste la règle : Portail n'écrit sur un système de fichiers douteux que par ces outils, à la
+  demande explicite de l'utilisateur.

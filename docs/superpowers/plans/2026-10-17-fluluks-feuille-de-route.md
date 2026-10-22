@@ -304,6 +304,15 @@ dans le même commit que le travail.
 - [ ] Dossiers distants par SFTP
 - [ ] Version `v1.3.0`
 
+### Phase 11 — Vérification et réparation des disques
+- [ ] Plan de la phase 11 écrit *(demande du 2026-10-22 ; spec § 16)*
+- [ ] Vérification en lecture seule avec rapport, pour chaque système de fichiers
+- [ ] Réparation ext4 par e2fsck (e2fsprogs, sur l'accès USB du moteur)
+- [ ] Réparation NTFS par ntfsfix (ntfs-3g)
+- [ ] Réparation FAT32 et exFAT par fsck.fat et fsck.exfat
+- [ ] LUKS : vérification des deux en-têtes, sauvegarde et restauration de l'en-tête
+- [ ] Version `v1.4.0`
+
 ---
 
 ## Principes
