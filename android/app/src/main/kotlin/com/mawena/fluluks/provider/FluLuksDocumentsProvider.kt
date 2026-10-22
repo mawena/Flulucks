@@ -139,10 +139,10 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
             try {
                 val size = if (m.truncate) 0L else st.size
                 val target = if (!m.write) null else WriteTarget(vol.state.id, vol.handle, if (m.append) size else 0L) {
-                    notifyChanged(vol.state.id, WriteOps.parentOf(path))
+                    VolumeManager.notifyChanged(vol.state.id, WriteOps.parentOf(path))
                 }
                 val sm = context!!.getSystemService(StorageManager::class.java)
-                sm.openProxyFileDescriptor(m.pfdMode, FileCallback(file, size, target), ioHandler)
+                sm.openProxyFileDescriptor(m.pfdMode, FileCallback(vol.state.id, file, size, target), ioHandler)
             } catch (t: Throwable) {
                 NativeEngine.closeFile(file) // le descripteur n'a pas été créé : le rappel ne sera jamais libéré
                 throw t
@@ -156,7 +156,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         guard("createDocument", parentDocumentId) {
             val (vol, parent) = resolve(parentDocumentId)
             requireWritable(vol)
-            val path = synchronized(writeLock) {
+            val path = synchronized(VolumeManager.writeLock) {
                 WriteOps(NativeEngine, vol.handle).create(parent, displayName, mimeType == Document.MIME_TYPE_DIR)
             }
             written(vol, parent)
@@ -167,7 +167,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         val (vol, path) = resolve(documentId)
         requireWritable(vol)
         try {
-            synchronized(writeLock) { WriteOps(NativeEngine, vol.handle).delete(path) }
+            synchronized(VolumeManager.writeLock) { WriteOps(NativeEngine, vol.handle).delete(path) }
         } finally {
             written(vol, WriteOps.parentOf(path)) // même partiel, le dossier a changé
         }
@@ -176,7 +176,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
     override fun renameDocument(documentId: String?, displayName: String?): String = guard("renameDocument", documentId) {
         val (vol, path) = resolve(documentId)
         requireWritable(vol)
-        val target = synchronized(writeLock) { WriteOps(NativeEngine, vol.handle).rename(path, displayName) }
+        val target = synchronized(VolumeManager.writeLock) { WriteOps(NativeEngine, vol.handle).rename(path, displayName) }
         written(vol, WriteOps.parentOf(path))
         DocumentIds.encode(vol.state.id, target)
     }
@@ -189,7 +189,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
             val (vol, path) = resolve(sourceDocumentId)
             val (_, target) = resolve(targetParentDocumentId)
             requireWritable(vol)
-            val moved = synchronized(writeLock) { WriteOps(NativeEngine, vol.handle).move(path, target) }
+            val moved = synchronized(VolumeManager.writeLock) { WriteOps(NativeEngine, vol.handle).move(path, target) }
             written(vol, WriteOps.parentOf(path), target)
             DocumentIds.encode(vol.state.id, moved)
         }
@@ -202,7 +202,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
             val (_, target) = resolve(targetParentDocumentId)
             requireWritable(vol)
             try {
-                val copy = synchronized(writeLock) { WriteOps(NativeEngine, vol.handle).copy(path, target) }
+                val copy = synchronized(VolumeManager.writeLock) { WriteOps(NativeEngine, vol.handle).copy(path, target) }
                 DocumentIds.encode(vol.state.id, copy)
             } finally {
                 written(vol, target)
@@ -220,23 +220,9 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
     /** Après une modification : synchronisation programmée et vues des dossiers concernés rafraîchies. */
     private fun written(vol: Resolved, vararg parents: String) {
         VolumeManager.noteWrite(vol.state.id)
-        notifyChanged(vol.state.id, *parents)
+        VolumeManager.notifyChanged(vol.state.id, *parents)
     }
 
-    private fun notifyChanged(volumeId: String, vararg parents: String) {
-        val cr = context?.contentResolver ?: return
-        // les curseurs observent l'URI de la racine (voir observe) : on la prévient toujours
-        val uris = LinkedHashSet<Uri>()
-        for (p in parents) uris.add(DocumentsContract.buildChildDocumentsUri(VolumeManager.AUTHORITY, DocumentIds.encode(volumeId, p)))
-        uris.add(DocumentsContract.buildChildDocumentsUri(VolumeManager.AUTHORITY, DocumentIds.encode(volumeId, "/")))
-        for (u in uris) {
-            try {
-                cr.notifyChange(u, null)
-            } catch (e: Exception) {
-                Log.w(TAG, "notifyChange : ${e.javaClass.simpleName}")
-            }
-        }
-    }
 
     /** Mode d'un volume lu au moment de l'appel (le moteur peut passer en lecture seule après une erreur). */
     private class Mode(val readOnly: Boolean, val reason: String)
@@ -253,7 +239,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         if (m.readOnly) throw FileNotFoundException(readOnlyText(m.reason))
     }
 
-    private fun readOnlyText(reason: String) = if (reason.isBlank()) READ_ONLY else "$READ_ONLY : $reason"
+    private fun readOnlyText(reason: String) = ProviderErrors.readOnly(reason)
 
     /** « Volume en lecture seule : <raison> » pour un FL_EROFS du moteur (raison relue via statfs). */
     private fun readOnlyMessage(documentId: String?): String {
@@ -285,6 +271,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         val state = VolumeManager.volume(volId)
         val handle = VolumeManager.nativeVolume(volId)
         if (state == null || handle <= 0) throw FileNotFoundException(VOLUME_CLOSED)
+        VolumeManager.noteActivity(volId)
         return Resolved(state, handle) to path
     }
 
@@ -334,7 +321,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
 
     /** Rappel d'un fichier ; exécuté sur le fil partagé "fluluks-io", donc sérialisé. */
     private class FileCallback(
-        private val file: Long, private var size: Long, private val write: WriteTarget?,
+        private val volumeId: String, private val file: Long, private var size: Long, private val write: WriteTarget?,
     ) : ProxyFileDescriptorCallback() {
         private val released = AtomicBoolean(false)
         private var bytesRead = 0L
@@ -350,6 +337,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
 
         override fun onRead(offset: Long, size: Int, data: ByteArray): Int {
             if (offset < 0 || size < 0 || size > data.size) throw ErrnoException("pread", OsConstants.EINVAL)
+            VolumeManager.noteActivity(volumeId) // une lecture continue (vidéo) garde le volume actif
             if (size == 0) return 0
             val t0 = System.nanoTime()
             var done = 0
@@ -377,6 +365,7 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         override fun onWrite(offset: Long, size: Int, data: ByteArray): Int {
             val w = write ?: throw ErrnoException("pwrite", OsConstants.EBADF)
             if (offset < 0 || size < 0 || size > data.size) throw ErrnoException("pwrite", OsConstants.EINVAL)
+            VolumeManager.noteActivity(volumeId)
             if (size == 0) return 0
             var done = 0
             while (done < size) {
@@ -455,7 +444,6 @@ class FluLuksDocumentsProvider : DocumentsProvider() {
         private const val CHUNK = 128 * 1024
         private const val MAX_WRITE = 4 shl 20 // FJ_PREAD_MAX
         private const val READ_ONLY = "Volume en lecture seule"
-        private val writeLock = Any()
 
         /** Code du moteur → errno rendu au client par onWrite / onFsync. */
         internal fun errnoFor(code: Int): Int = when (ProviderErrors.errno(code)) {

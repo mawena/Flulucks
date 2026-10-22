@@ -99,4 +99,113 @@ class FakeHostApi implements HostApi {
 
   @override
   Future<void> setReadOnlyPreference(bool value) async => readOnlyPreference = value;
+
+  List<SourceMsg> sources = [];
+  bool allFilesAccess = true;
+  int accessRequests = 0;
+
+  @override
+  Future<List<SourceMsg>> listSources() async => sources;
+
+  @override
+  Future<bool> hasAllFilesAccess() async => allFilesAccess;
+
+  @override
+  Future<void> requestAllFilesAccess() async => accessRequests++;
+
+  /// Contenu des dossiers, par `sourceId` puis chemin ; un chemin dans [protectedDirs] est refusé.
+  final dirs = <String, Map<String, List<EntryMsg>>>{};
+  final protectedDirs = <String>{};
+  final calls = <String>[];
+
+  @override
+  Future<List<EntryMsg>> listDir(String sourceId, String path, bool showHidden) async {
+    calls.add('listDir $sourceId $path $showHidden');
+    if (protectedDirs.contains(path)) {
+      throw PlatformException(code: '-1', message: 'Dossier protégé par Android');
+    }
+    final l = dirs[sourceId]?[path] ?? const <EntryMsg>[];
+    return showHidden ? l : l.where((e) => !e.name.startsWith('.')).toList();
+  }
+
+  @override
+  Future<String> createFolder(String sourceId, String parent, String name) async {
+    calls.add('createFolder $sourceId $parent $name');
+    return parent == '/' ? '/$name' : '$parent/$name';
+  }
+
+  @override
+  Future<String> rename(String sourceId, String path, String newName) async {
+    calls.add('rename $sourceId $path $newName');
+    return '${path.substring(0, path.lastIndexOf('/'))}/$newName';
+  }
+
+  @override
+  Future<void> deleteEntries(String sourceId, List<String> paths) async =>
+      calls.add('delete $sourceId ${paths.join(',')}');
+
+  @override
+  Future<void> openWith(String sourceId, String path) async => calls.add('openWith $sourceId $path');
+
+  @override
+  Future<void> share(String sourceId, List<String> paths) async => calls.add('share $sourceId ${paths.join(',')}');
+
+  final transfers = <(String, List<String>, String, String, bool)>[];
+  int transferCancels = 0;
+
+  @override
+  Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move) async =>
+      transfers.add((srcId, paths, dstId, dstDir, move));
+
+  @override
+  Future<void> cancelTransfer() async => transferCancels++;
+
+  /// Réponse de [search] selon la requête ; un completer dans [searchGates] la retarde.
+  SearchResultMsg Function(String query) searchResult = (_) => SearchResultMsg(entries: [], truncated: false);
+  final searchGates = <String, Completer<void>>{};
+  int searchCancels = 0;
+
+  @override
+  Future<SearchResultMsg> search(String sourceId, String path, String query, bool showHidden) async {
+    calls.add('search $sourceId $path $query');
+    final gate = searchGates[query];
+    if (gate != null) await gate.future;
+    return searchResult(query);
+  }
+
+  @override
+  Future<void> cancelSearch() async => searchCancels++;
+
+  /// Octets rendus par [thumbnail] selon le chemin (null : pas de vignette).
+  final thumbs = <String, Uint8List>{};
+  final thumbRequests = <String>[];
+
+  @override
+  Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx) async {
+    thumbRequests.add(path);
+    return thumbs[path];
+  }
+
+  ViewPrefsMsg viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
+  List<FavoriteMsg> favorites = [];
+
+  @override
+  Future<ViewPrefsMsg> getViewPrefs() async => viewPrefs;
+
+  @override
+  Future<void> setViewPrefs(ViewPrefsMsg prefs) async => viewPrefs = prefs;
+
+  @override
+  Future<List<FavoriteMsg>> listFavorites() async => favorites;
+
+  @override
+  Future<void> addFavorite(String sourceId, String path, String label) async {
+    final key = sources.firstWhere((s) => s.id == sourceId).stableKey;
+    if (favorites.any((f) => f.key == key && f.path == path)) return;
+    favorites = [...favorites, FavoriteMsg(key: key, path: path, label: label, sourceId: sourceId)];
+  }
+
+  @override
+  Future<void> removeFavorite(String key, String path) async =>
+      favorites = favorites.where((f) => !(f.key == key && f.path == path)).toList();
 }

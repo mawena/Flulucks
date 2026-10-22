@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FileProvider du gestionnaire de fichiers (Ouvrir avec, Partager) : stockage du téléphone et cartes SD
+     (/storage/XXXX-XXXX, hors de external-path). LocalSource n'y donne que des chemins sous ses racines. -->
+<paths>
+    <external-path name="telephone" path="." />
+    <root-path name="stockage" path="storage" />
+</paths>

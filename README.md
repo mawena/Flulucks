@@ -1,19 +1,43 @@
-# FluLuks
+# Portail
 
-FluLuks est une application Android qui ouvre les **disques externes chiffrés avec LUKS** et branchés en
-USB-C, **sans root**, ainsi que les clés et disques en clair formatés en ext4, FAT, exFAT ou NTFS. Le contenu du disque apparaît dans l'application **Fichiers** d'Android : on ouvre
-une vidéo dans VLC, un PDF ou une photo dans les applications habituelles.
+Portail (anciennement FluLuks) est un **gestionnaire de fichiers** Android qui ouvre aussi les **disques
+externes chiffrés avec LUKS** branchés en USB-C, **sans root**, ainsi que les clés et disques en clair
+formatés en ext4, FAT, exFAT ou NTFS. Il parcourt le téléphone, la carte SD et les disques USB, et copie
+ou déplace d'un stockage à l'autre. Le contenu des disques apparaît aussi dans l'application **Fichiers**
+d'Android : on ouvre une vidéo dans VLC, un PDF ou une photo dans les applications habituelles.
 
 Elle est née d'un besoin simple : utiliser sur un téléphone non rooté (un Pixel 4 XL) le disque
 LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permettait.
 
-> **État actuel : version 0.4.0, lecture et écriture sur ext4, FAT, exFAT et NTFS.** L'écriture a été
+> **État actuel : version 0.5.0, gestionnaire de fichiers ; lecture et écriture sur ext4, FAT, exFAT et
+> NTFS.** L'écriture a été
 > vérifiée sur PC (batteries de non-corruption jugées par des outils indépendants et le noyau Linux,
 > coupures simulées) et sur le téléphone avec des images. FAT, exFAT et NTFS ont été essayés sur une vraie
 > clé ou un vrai disque, **pas encore ext4** : faites une sauvegarde avant d'écrire sur un disque qui
 > compte, ou activez « Ouvrir les disques en lecture seule ». Voir les [limites](#limites-actuelles).
 
-## Ce que fait la version 0.4.0
+## Ce que fait la version 0.5.0
+
+### Gestionnaire de fichiers (nouveau en 0.5.0)
+
+- **Un accueil pour tous les stockages** : le téléphone, la carte SD, les disques USB (à déverrouiller,
+  ouvrir ou éjecter) et les favoris.
+- **Explorateur** : naviguer, ouvrir avec une autre application, partager, créer un dossier, renommer et
+  supprimer, sur le téléphone comme sur un disque.
+- **Copier et déplacer entre tous les stockages** (téléphone ↔ carte SD ↔ disque, ou d'un disque à
+  l'autre), avec la progression dans une barre et un bouton pour annuler. Les noms interdits sur la
+  destination (`:` ou `?` vers FAT, exFAT ou NTFS, par exemple) sont remplacés.
+- **Recherche** par nom dans le dossier ouvert et ses sous-dossiers, sans tenir compte des majuscules
+  ni des accents ; 500 résultats au plus.
+- **Vignettes** des photos et des vidéos, **affichage en liste ou en grille** (choisi dans les Réglages ou
+  dans le menu de l'explorateur), **tri** par nom, taille ou date, fichiers cachés affichés ou non.
+- **Favoris** : un dossier d'un disque reste en favori d'une session à l'autre, et s'ouvre dès que le
+  disque est ouvert.
+- **Réglages** : lecture seule des disques, affichage en liste ou en grille, fichiers cachés, accès aux
+  fichiers du téléphone.
+- **Nouveau nom et nouveau logo** : un dossier en forme de bouclier, avec une serrure.
+
+### Disques USB
 
 - **Détecte** un disque USB de stockage de masse branché en USB-C, et demande la permission d'accès.
 - **Lit les tables de partitions** GPT et MBR (partitions étendues comprises), ainsi qu'un disque sans
@@ -59,23 +83,39 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
   encore ouvert par une autre application est fermé de force après la synchronisation.
 - **Interface en français.**
 
+### Accès à tous les fichiers
+
+Pour parcourir le téléphone et la carte SD, Portail demande la permission Android **« Accès à tous les
+fichiers »** (`MANAGE_EXTERNAL_STORAGE`). C'est la seule qui permet à un gestionnaire de fichiers de voir
+tous les dossiers, et non les seuls médias. Le Play Store la réserve à certaines applications ; Portail
+s'installant à la main, elle est acceptable ici.
+
+Sans elle, l'accueil affiche une carte « Accès aux fichiers du téléphone » : les disques USB restent
+utilisables, mais le téléphone et la carte SD ne sont pas parcourus. Pour la retirer : *Paramètres
+Android → Applications → Portail → Accès à tous les fichiers*.
+
 Mesures sur un Pixel 4 XL avec le vrai disque (LUKS2, Argon2id à 1 Gio de mémoire) :
 - déverrouillage en 4,3 s environ ;
 - lecture d'une vidéo dans VLC à environ 65 Mo/s.
 
 ### Limites actuelles
 
+- **Dossiers protégés du téléphone** : Android interdit à toute application, même avec l'accès à tous les
+  fichiers, de lire `Android/data` et `Android/obb`. Portail affiche « Dossier protégé par Android ».
+- **Liens symboliques et fichiers spéciaux** : listés, mais ni suivis ni copiés ; une copie qui en
+  rencontre le signale à la fin (« Les liens symboliques et fichiers spéciaux ne sont pas copiés »).
+
 - **Écriture non essayée sur un vrai disque USB.** Elle est vérifiée sur PC et, sur le téléphone, avec
   des images et un faux disque USB simulé ; l'essai sur un vrai disque (tâche 13 de la phase 3) reste à
   faire. Sauvegardez avant d'écrire sur un disque important.
 - **Écriture refusée** (le volume s'ouvre en lecture seule, avec la raison) sur un ext4 sans journal,
   sans extents (ancien ext3 converti), à journal externe, avec un journal à sommes v1 ou v2, ou avec
-  une option inconnue de FluLuks. Le journal doit avoir été rejoué (disque bien démonté sous Ubuntu).
+  une option inconnue de Portail. Le journal doit avoir été rejoué (disque bien démonté sous Ubuntu).
 - **Écriture FAT et exFAT** : vérifiée sur PC (`fsck.fat`, `fsck.exfat`, un lecteur indépendant,
   coupures simulées, images hostiles), sur le téléphone avec des images, puis essayée sur une vraie clé.
 - **FAT ou exFAT mal éjecté** : une clé débranchée sans « Éjecter » (ou retirée d'un ordinateur sans
   éjection) s'ouvre en lecture seule, jusqu'à sa vérification sur un ordinateur (chkdsk sous Windows,
-  `fsck.fat` ou `fsck.exfat` sous Linux). FluLuks ne répare pas un système de fichiers FAT abîmé.
+  `fsck.fat` ou `fsck.exfat` sous Linux). Portail ne répare pas un système de fichiers FAT abîmé.
 - **Écriture NTFS** : vérifiée sur PC (un lecteur NTFS indépendant écrit pour les tests, `ntfsfix -n`,
   coupures simulées, images hostiles), sur le téléphone avec des images, puis essayée sur un vrai disque.
   La relecture par le pilote ntfs3 du noyau Linux (script fourni) reste à faire. Sauvegardez avant d'écrire
@@ -89,7 +129,7 @@ Mesures sur un Pixel 4 XL avec le vrai disque (LUKS2, Argon2id à 1 Gio de mémo
     que le disque (disque cloné sur un plus petit).
 - **Limites NTFS** :
   - fichiers **compressés** par Windows : lus, mais pas modifiés (« Fichier non modifiable ici ») ;
-    aucun fichier créé par FluLuks n'est compressé ;
+    aucun fichier créé par Portail n'est compressé ;
   - fichiers **chiffrés** par Windows (EFS) : listés, mais ni lus ni modifiés ;
   - un nom de plus de 255 octets en UTF-8 n'est pas listé ;
   - les fichiers créés n'ont pas de droits Windows particuliers (« Tout le monde ») ;
@@ -117,6 +157,9 @@ Mesures sur un Pixel 4 XL avec le vrai disque (LUKS2, Argon2id à 1 Gio de mémo
   ext4 inconnue, d'un journal à rejouer ou d'une somme de contrôle fausse, et l'application affiche la
   raison. Après une erreur d'écriture en cours de session, plus rien n'est écrit : le disque garde la
   dernière transaction validée, que le journal sait récupérer.
+- **Rien d'un disque chiffré n'est écrit sur le téléphone à votre insu.** Les vignettes sont gardées en
+  mémoire seulement (32 Mio au plus), et vidées à l'éjection ; les résultats de recherche ne sont pas
+  enregistrés. Seule une action explicite (copier, partager, ouvrir avec) sort un fichier du disque.
 
 ## Installation
 
@@ -125,8 +168,8 @@ L'application n'est pas publiée sur le Play Store. Elle s'installe à la main d
 Il faut Android 8.0 (API 26) ou plus récent. L'application a été testée sur un Pixel 4 XL sous Android 13.
 
 ```sh
-git clone --recurse-submodules <url-du-dépôt> FluLuks
-cd FluLuks
+git clone --recurse-submodules <url-du-dépôt> Portail
+cd Portail
 flutter pub get
 flutter build apk --release
 adb install -r build/app/outputs/flutter-apk/app-release.apk
@@ -136,29 +179,36 @@ La construction demande les outils listés plus bas, dans [Développement](#dév
 
 ## Utilisation
 
-1. Branchez le disque sur le port USB-C du téléphone. Android propose d'ouvrir FluLuks : acceptez, puis
+1. Au premier lancement, touchez **Autoriser** sur la carte « Accès aux fichiers du téléphone », puis
+   activez Portail dans la page Android qui s'ouvre. L'accueil liste alors le téléphone et la carte SD :
+   touchez-en un pour le parcourir.
+2. Branchez le disque sur le port USB-C du téléphone. Android propose d'ouvrir Portail : acceptez, puis
    autorisez l'accès au périphérique USB.
-2. Dans l'écran **Disques**, touchez **Déverrouiller** sur la partition chiffrée et saisissez la phrase
-   de passe. Une partition en clair s'ouvre avec **Ouvrir**.
-3. Touchez **Ouvrir dans Fichiers**. Le disque apparaît aussi dans le sélecteur de fichiers de toutes les
-   applications.
-4. Pour finir, touchez **Éjecter**, dans l'application ou dans la notification « Disque ouvert », avant
+3. Dans **Disques USB**, touchez **Déverrouiller** sur la partition chiffrée et saisissez la phrase de
+   passe. Une partition en clair s'ouvre avec **Ouvrir**.
+4. Touchez **Parcourir** pour l'explorer dans Portail, ou **Ouvrir dans Fichiers**. Le disque apparaît
+   aussi dans le sélecteur de fichiers de toutes les applications.
+5. Pour copier ou déplacer : appui long sur un fichier pour le sélectionner, **Copier** ou **Couper**,
+   puis, dans le dossier de destination (sur n'importe quel stockage), **Coller ici**.
+6. Pour finir, touchez **Éjecter**, dans l'application ou dans la notification « Disque ouvert », avant
    de débrancher le disque. Si vous avez écrit, attendez la fin de « Écriture des données en
    attente… ».
 
-Pour n'ouvrir les disques qu'en lecture, activez **Ouvrir les disques en lecture seule** dans l'écran
-**Disques** avant de déverrouiller.
+Pour n'ouvrir les disques qu'en lecture, activez **Ouvrir les disques en lecture seule** dans les
+**Réglages** avant de déverrouiller.
 
 ## Comment ça marche
 
-Sans root, Android interdit dm-crypt, `mount` et les pilotes de systèmes de fichiers du noyau. FluLuks
+Sans root, Android interdit dm-crypt, `mount` et les pilotes de systèmes de fichiers du noyau. Portail
 refait donc toute la chaîne dans l'espace utilisateur :
 
 ```
-Interface Flutter (Dart)       écrans Disques et Déverrouillage, liés par Pigeon
-Couche Kotlin                  UsbManager, service au premier plan, DocumentsProvider
+Interface Flutter (Dart)       accueil, explorateur, recherche, réglages, liés par Pigeon
+Couche Kotlin                  UsbManager, service au premier plan, DocumentsProvider,
+                               sources de fichiers (téléphone, carte SD, disques), copies, vignettes
 Moteur natif C11 (JNI)         USB (Bulk-Only Transport + SCSI) → cache de blocs → GPT/MBR
-                               → LUKS1/LUKS2 → ext4 (lwext4) · FAT/exFAT (FatFs) → API fichiers unifiée
+                               → LUKS1/LUKS2 → ext4 (lwext4) · FAT/exFAT (FatFs) · NTFS (libntfs-3g)
+                               → API fichiers unifiée
 ```
 
 Le moteur natif ne dépend pas de Flutter. Le DocumentsProvider fonctionne même quand l'interface est
@@ -217,9 +267,10 @@ Plus de détails sur le moteur, l'outil `fluluks-cli` et la vérification par le
 | Dossier | Contenu |
 |---|---|
 | `native/` | Moteur C11, couche JNI, tests natifs, lwext4, FatFs, libntfs-3g et leurs correctifs |
-| `android/app/src/main/kotlin/` | USB, gestionnaire de volumes, service, DocumentsProvider, pont Pigeon |
+| `android/app/src/main/kotlin/` | USB, gestionnaire de volumes, service, DocumentsProvider, gestionnaire de fichiers (`files/`), pont Pigeon |
 | `lib/`, `pigeons/` | Interface Flutter et définition du pont |
-| `tools/` | Génération des images de test, scripts téléphone et clé USB de test |
+| `tools/` | Génération des images de test, scripts téléphone, clé USB de test, rendu du logo |
+| `assets/logo/` | Logo source (SVG) |
 | `docs/superpowers/` | Conception, plans de chaque phase, feuille de route et essais |
 
 ### Branches
@@ -239,14 +290,16 @@ Le dépôt suit git flow :
 | 3 | ext4 en écriture (essai sur un vrai disque à faire) | **v0.2.1** |
 | 4 | FAT16 / FAT32 / exFAT | **v0.3.0** |
 | 5 | NTFS | **v0.4.0** |
-| 6 | Finitions : explorateur intégré, copies avec progression, réglages, robustesse | v1.0.0 |
+| 6 | Portail : nom, logo, gestionnaire de fichiers (téléphone, carte SD, disques) | **v0.5.0** |
+| 7 | Robustesse : verrouillage automatique, débranchement inattendu, performances, ext4 sur le vrai disque | v1.0.0 |
+| 8 | Visionneuse d'images, lecteurs de musique et de vidéo, éditeur de texte, dossiers distants FTP puis SFTP | v1.1.0 |
 
 Suivi détaillé, étape par étape : [docs/superpowers/plans/2026-10-17-fluluks-feuille-de-route.md](docs/superpowers/plans/2026-10-17-fluluks-feuille-de-route.md).
 Conception : [docs/superpowers/specs/2026-10-17-fluluks-design.md](docs/superpowers/specs/2026-10-17-fluluks-design.md).
 
 ## Licence
 
-Aucune licence n'est encore choisie pour le code de FluLuks. Mais l'application est liée à libntfs-3g
+Aucune licence n'est encore choisie pour le code de Portail. Mais l'application est liée à libntfs-3g
 (GPL version 2 ou ultérieure, depuis la phase 5) et à une partie de lwext4 sous GPL : distribuée, elle doit
 l'être sous GPL, avec ses sources. FatFs est sous une licence de type BSD à une clause, compatible avec la
 GPL. Les licences des bibliothèques sont dans `native/third_party/` (`ntfs-3g/COPYING`,

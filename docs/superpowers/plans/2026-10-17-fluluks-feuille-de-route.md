@@ -228,11 +228,39 @@ dans le même commit que le travail.
       cas hostile « liste d'attributs » ; corrigés, suite rapide 34/34, Pixel 15/15)*
 - [x] Version `v0.4.0`
 
-### Phase 6 — Finitions et robustesse
-- [ ] Plan de la phase 6 écrit
-- [ ] *(explorateur intégré complet, copies avec progression, réglages, verrouillage automatique,
-      débranchement inattendu, performances)*
+### Phase 6 — Portail : nom, logo et gestionnaire de fichiers ([plan](2026-10-20-phase6-portail.md))
+- [x] Plan de la phase 6 écrit *(spec § 11 : nom Portail, logo dossier-bouclier, gestionnaire de fichiers
+      complet avec accès à tous les fichiers)*
+- [x] T1 — Nom « Portail » et logo *(icône adaptative avec silhouette monochrome, icône de notification ; rendu vérifié sur le Pixel)*
+- [x] T2 — Sources de fichiers (téléphone, carte SD, disques) et accès au téléphone *(verrou d'écriture partagé avec le provider ; provider 36/36 sur le Pixel)*
+- [x] T3 — Lister, créer, renommer, supprimer, ouvrir avec, partager *(FileProvider pour le téléphone ; tests instrumentés à passer sur le Pixel)*
+- [x] T4 — Copier et déplacer entre stockages *(noms assainis vers les disques et la carte SD ; essai 8 Mio à passer sur le Pixel)*
+- [x] T5 — Recherche *(sans casse ni accents, 500 résultats et profondeur 64 au plus)*
+- [x] T6 — Vignettes des photos et vidéos *(cache de 32 Mio en mémoire seulement, vidé à l'éjection ; essai réel à passer sur le Pixel)*
+- [x] T7 — Tri, affichage et favoris *(favoris par clé stable, résolus vers le volume ouvert)*
+- [x] T8 — Écran d'accueil et Réglages *(capture sur le Pixel lors des essais de T11)*
+- [x] T9 — Explorateur *(liste et grille, vignettes, tri, sélection, presse-papiers, barre de copie ; captures lors des essais de T11)*
+- [x] T10 — Écran de recherche *(400 ms après la dernière frappe, recherche précédente annulée)*
+- [x] *(utilisateur)* T11 — Essais sur le Pixel *(2026-10-20 : tout est correct selon l'utilisateur)*
+- [x] T12 — Récupération de `feature/portail-save` *(un test repris, branche supprimée)*
+- [x] T13 — Affichage des dossiers en liste ou en grille, choisi dans les Réglages
+- [x] T14 — Documentation *(README : gestionnaire de fichiers, accès à tous les fichiers, vignettes en mémoire, limites, phases 7 et 8)*
+- [x] Fusion `feature/portail` → `develop` *(après relecture finale : `Android/data` affiché vide, chemins absolus
+      dans les messages, source supprimée pendant un téléchargement, vignettes qui bloquaient le listage,
+      carte SD retirée non suivie ; corrigés, JVM 114/114, Flutter 60/60, Pixel 59/59)*
+- [ ] Version `v0.5.0`
+
+### Phase 7 — Robustesse et performances
+- [ ] Plan de la phase 7 écrit
+- [ ] *(verrouillage automatique, débranchement inattendu, performances du § 5, essai d'ext4 en écriture
+      sur le vrai disque)*
 - [ ] Version `v1.0.0`
+
+### Phase 8 — Lecteurs intégrés et stockages distants
+- [ ] Plan de la phase 8 écrit
+- [ ] *(visionneuse d'images, lecteur de musique, éditeur de texte, lecteur vidéo, dossiers distants FTP
+      puis SFTP)*
+- [ ] Version `v1.1.0`
 
 ---
 

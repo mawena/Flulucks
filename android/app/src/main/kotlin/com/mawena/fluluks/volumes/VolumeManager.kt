@@ -21,6 +21,7 @@ import com.mawena.fluluks.engine.EngineError
 import com.mawena.fluluks.engine.NativeEngine
 import com.mawena.fluluks.engine.ScanResult
 import com.mawena.fluluks.engine.VolumeStat
+import com.mawena.fluluks.files.Thumbnails
 import com.mawena.fluluks.service.VolumeService
 import com.mawena.fluluks.usb.UsbDisks
 import org.json.JSONException
@@ -91,6 +92,25 @@ object VolumeManager {
         }
     }
     @Volatile private var delayer: Delayer? = null
+
+    /** Horloge des activités (ms, monotone) ; injectable pour les tests. */
+    @Volatile private var clock: () -> Long = { android.os.SystemClock.elapsedRealtime() }
+
+    /**
+     * Verrou des écritures sur les volumes : le DocumentsProvider et le gestionnaire de fichiers le prennent
+     * pour toute suite « vérification puis écriture » (nom unique, création, suppression récursive…).
+     */
+    val writeLock = Any()
+
+    private val activity = ConcurrentHashMap<String, Long>()
+
+    /** Le volume vient de servir (lecture, écriture, listage) : base du verrouillage automatique. */
+    fun noteActivity(volumeId: String) {
+        if (mounts.containsKey(volumeId)) activity[volumeId] = clock()
+    }
+
+    /** Heure (horloge de [noteActivity]) de la dernière activité du volume, ou null s'il n'est pas ouvert. */
+    fun lastActivity(volumeId: String): Long? = activity[volumeId]
 
     /** Avertissement de débranchement pendant une écriture (notification) ; injectable pour les tests. */
     @Volatile private var detachWarner: (String) -> Unit = { msg -> appContext?.let { VolumeService.warn(it, msg) } }
@@ -222,7 +242,10 @@ object VolumeManager {
         devices: () -> Map<String, UsbDevice> = { emptyMap() },
         delayer: Delayer? = null,
         detachWarner: (String) -> Unit = {},
+        clock: () -> Long = { 0L },
     ) {
+        this.clock = clock
+        activity.clear()
         deviceList = devices
         engineOverride = engine
         executorOverride = executor
@@ -415,8 +438,10 @@ object VolumeManager {
                 id = "v" + sessionToken + "-" + counter.incrementAndGet(), diskId = diskId, partIndex = partIndex, title = title,
                 totalBytes = stat.totalBytes, freeBytes = stat.freeBytes,
                 needsRecovery = stat.needsRecovery, roReason = stat.roReason, readOnly = stat.readOnly,
+                partUuid = part.uuid,
             )
             mounts[state.id] = MountEntry(state, vol)
+            activity[state.id] = clock()
             mountOrder.add(state.id)
             publishVolumes()
             return state
@@ -506,6 +531,8 @@ object VolumeManager {
         mountOrder.remove(volumeId)
         pendingSync.remove(volumeId)?.invoke()
         writeGen.remove(volumeId); syncedGen.remove(volumeId)
+        activity.remove(volumeId)
+        Thumbnails.drop(volumeId) // vignettes du disque oubliées avec lui
     }
 
     /** Débranchement : démontage de force (le disque n'est plus là). */
@@ -657,6 +684,24 @@ object VolumeManager {
             ContextCompat.startForegroundService(ctx, Intent(ctx, VolumeService::class.java))
         } catch (e: Exception) { // ex. démarrage interdit en arrière-plan : les volumes restent ouverts
             Log.w(TAG, "service non démarré : ${e.javaClass.simpleName}")
+        }
+    }
+
+    /**
+     * Après une modification d'un volume : les vues des dossiers [parents] et de la racine se rafraîchissent
+     * (les curseurs du provider observent l'URI de la racine).
+     */
+    fun notifyChanged(volumeId: String, vararg parents: String) {
+        val cr = appContext?.contentResolver ?: return
+        val uris = LinkedHashSet<Uri>()
+        for (p in parents) uris.add(DocumentsContract.buildChildDocumentsUri(AUTHORITY, DocumentIds.encode(volumeId, p)))
+        uris.add(DocumentsContract.buildChildDocumentsUri(AUTHORITY, DocumentIds.encode(volumeId, "/")))
+        for (u in uris) {
+            try {
+                cr.notifyChange(u, null)
+            } catch (e: Exception) {
+                Log.w(TAG, "notifyChange : ${e.javaClass.simpleName}")
+            }
         }
     }
 
