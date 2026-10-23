@@ -381,7 +381,25 @@ dans le même commit que le travail.
 - [ ] Version `v1.6.0`
 
 ### Phase 14 — Chiffrement de fichiers, de dossiers et coffres ([plan](2026-10-23-phase14-chiffrement.md))
-- [ ] Plan de la phase 14 écrit *(demande du 2026-10-23 ; spec § 22)*
+- [x] Plan de la phase 14 écrit *(demande du 2026-10-23 ; spec § 22)*
+- [ ] T1 — Moteur : scrypt et format age (chiffrement en flux, lecture à accès aléatoire, juge Python)
+- [ ] T2 — Moteur : ZIP chiffré AES-256 et archives ZIP protégées par mot de passe (libarchive sur mbedTLS)
+- [ ] T3 — Moteur : coffres LUKS2 dans un fichier, formatage sans table, emplacements de clé sûrs en cas de coupure
+- [ ] T4 — Poignées JNI et moteur Kotlin : chiffrement, déchiffrement, coffres en cascade sous leur fichier
+- [ ] T5 — Chiffrer, déchiffrer, vérifier, changer le mot de passe d'un fichier ; original supprimé après vérification
+- [ ] T6 — Ouvrir un fichier chiffré sans copie en clair (source déchiffrée en mémoire, fournisseur de flux)
+- [ ] T7 — Saisie des mots de passe : force, générateur de mots de passe et de phrases, copie protégée
+- [ ] T8 — Écrans Chiffrer et Déchiffrer dans l'explorateur, ZIP protégés, partage d'un fichier chiffré
+- [ ] T9 — Coffres (Kotlin) : création, ouverture comme un stockage, fermeture avant le stockage porteur
+- [ ] T10 — Coffres (écrans) : création, section « Coffres » de l'accueil, ouvrir, fermer, parcourir
+- [ ] T11 — Mot de passe et clé de secours d'un coffre
+- [ ] T12 — Déverrouillage biométrique d'un coffre (visage ou empreinte)
+- [ ] T13 — Coffres fermés à l'écran éteint, masqués dans les captures
+- [ ] T14 — Documentation
+- [ ] T15 — Essais instrumentés sur le Pixel
+- [ ] *(utilisateur)* T16 — Essais sur le Pixel
+- [ ] Relecture finale de toute la branche
+- [ ] Fusion `feature/chiffrement` → `develop`
 - [ ] Version `v1.7.0`
 
 ### Phase 15 — Vérification et réparation des disques

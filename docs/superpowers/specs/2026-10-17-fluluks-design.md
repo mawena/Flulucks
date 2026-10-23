@@ -524,3 +524,86 @@ phase 14 (v1.7.0, § 16) et la gestion des partitions la phase 15 (v1.8.0, § 17
 - **Bibliothèques** *(décision du planificateur)* : JSch et Bouncy Castle (§ 18), déjà présents ; **xterm 4.0.0**
   (Dart, licence MIT) pour l'affichage du terminal, seule nouvelle dépendance d'exécution, avec ses dépendances
   `convert`, `equatable`, `quiver` et `zmodem` (BSD, MIT, Apache-2.0, MIT).
+
+## 22. Évolution du 2026-10-23 (suite) : chiffrement de fichiers, de dossiers et coffres (phase 14)
+
+Demande de l'utilisateur : « en phase 14 ajoute une option de chiffrement de fichier, de dossier et de création de coffre
+de fichiers avec chacun leur mot de passe », puis « n'hésite pas à ajouter des features pertinentes dans la partie
+chiffrement ». Une **phase 14** (**v1.7.0**) ajoute le chiffrement à Portail. La réparation des disques devient la
+phase 15 (v1.8.0, § 16) et la gestion des partitions la phase 16 (v1.9.0, § 17).
+*(Formats, valeurs et fonctions marquées « proposition du planificateur » : décisions du planificateur, à valider aux
+essais.)*
+- **Un mot de passe par élément** : chaque fichier chiffré, chaque dossier chiffré et chaque coffre a le sien, choisi à
+  la création, saisi à chaque usage et **jamais mémorisé** (pas d'option « Mémoriser »). **Sans le mot de passe, rien
+  n'est récupérable** : ni Portail ni personne ne peut l'ouvrir. L'écran de création le dit, demande la confirmation du
+  mot de passe et montre sa force ; 8 caractères au moins.
+- **Fichiers et dossiers chiffrés** : action **Chiffrer…** (menu ⋮ d'un élément et barre de sélection), deux formats au
+  choix :
+  - **Chiffrement fort** (par défaut) : format **age** (`age-encryption.org/v1`, destinataire « scrypt ») : dérivation
+    du mot de passe par scrypt, contenu authentifié par ChaCha20-Poly1305 par morceaux de 64 Kio (une modification,
+    une troncature ou un mot de passe faux sont détectés). Un fichier devient `nom.ext.age` ; un dossier devient
+    `nom.zip.age` (un ZIP chiffré tout entier : les **noms des fichiers sont cachés** aussi). Lisible sur un ordinateur
+    avec l'outil libre `age` (Linux, Windows, macOS) : `age -d nom.ext.age > nom.ext`.
+  - **ZIP chiffré (AES-256)**, pour l'échange : ZIP au chiffrement WinZip AES-256, ouvert par 7-Zip, WinRAR, `7z` et
+    `bsdtar` sous Linux. L'écran avertit : les **noms et tailles des fichiers restent visibles**, et la dérivation du
+    mot de passe y est faible (un mot de passe long est d'autant plus nécessaire).
+  - Plusieurs éléments sélectionnés : un fichier chiffré par élément, ou tous réunis dans un seul (nom choisi).
+  - Destination : le même dossier par défaut, ou n'importe quel stockage, **dossier distant compris**.
+  - **Supprimer l'original** (case, décochée par défaut) : seulement après **vérification** du fichier chiffré (relu et
+    déchiffré en entier, empreinte comparée) et si l'original n'a pas changé pendant le chiffrement ; suppression
+    **définitive** (la corbeille garderait la version en clair). Mise en garde honnête : sur une mémoire flash
+    (téléphone, carte SD, clé USB), une suppression ne garantit pas que les anciennes données soient irrécupérables ;
+    sur un disque chiffré LUKS, l'original n'a jamais été en clair sur le support.
+- **Déchiffrer** : toucher un fichier `.age` (ou un ZIP protégé) demande son mot de passe, puis propose :
+  - **Ouvrir** (fichier seul) : le contenu est déchiffré **à la volée, en mémoire**, et s'ouvre dans les lecteurs de
+    Portail ou dans une autre application, avec accès aléatoire (avance rapide d'une vidéo) ; rien n'est écrit ;
+  - **Déchiffrer vers…** : une copie en clair dans le dossier choisi (même dossier par défaut) ; un dossier chiffré
+    (`.zip.age`) est extrait directement, sans ZIP intermédiaire en clair ;
+  - **Vérifier** *(proposition du planificateur)* : tout est déchiffré sans rien écrire ; « Fichier intact » ou
+    l'endroit abîmé ;
+  - **Changer le mot de passe** *(proposition du planificateur)* d'un fichier `.age` : seul l'en-tête est réécrit (par un
+    fichier temporaire puis un renommage) ; non proposé pour un ZIP chiffré.
+  - Les **archives ZIP protégées par mot de passe** (AES ou ancien chiffrement ZIP), venues d'ailleurs, s'extraient
+    désormais avec leur mot de passe (§ 15). Les 7z et RAR chiffrés restent refusés, en le disant.
+- **Coffres de fichiers** : un coffre est un **fichier conteneur chiffré LUKS2** (`nom.luks`) qui contient un système
+  de fichiers **exFAT** (par défaut) ou **ext4**, ouvert par le moteur de Portail comme un disque :
+  - **Créer un coffre** (accueil, ou « Nouveau coffre » dans un dossier) : nom, emplacement (téléphone, carte SD ou
+    volume ouvert d'un disque USB ; jamais un dossier distant), taille fixe (256 Mio, 1 Gio, 4 Gio, 16 Gio ou au
+    choix, de 32 Mio à la place libre moins une réserve ; 4 Gio moins un octet sur un stockage FAT32), système de
+    fichiers, mot de passe. La place est réservée à la création (écrite), avec progression et annulation.
+  - **Ouvrir un coffre** : il devient un stockage du gestionnaire (parcourir, copier, déplacer, lecteurs, corbeille dans
+    le coffre) et une racine de l'application **Fichiers** d'Android, comme un disque ; section **Coffres** de l'accueil
+    (coffres connus : fermé, ouvert, indisponible si son stockage n'est pas là). Le § 4.2 s'applique à l'intérieur.
+  - **Interopérable** : un coffre s'ouvre sous Linux par `cryptsetup open nom.luks coffre` (ou un double-clic après
+    `udisksctl loop-setup -f nom.luks`) ; Portail ouvre aussi un conteneur LUKS1 ou LUKS2 créé sous Linux.
+  - **Fermer** : synchronisation, démontage, clé effacée. Un coffre se ferme aussi au **verrouillage automatique** (§ 13)
+    et **avant** l'éjection ou le débranchement du disque qui le porte. Tant qu'il est ouvert, son fichier ne peut être
+    ni supprimé, ni déplacé, ni renommé, ni copié. Un coffre ne s'ouvre pas dans un autre coffre ; la taille ne change
+    pas après la création.
+  - **Changer le mot de passe** d'un coffre fermé *(proposition du planificateur)*, sans réécrire son contenu (nouvel
+    emplacement de clé LUKS2, comme `cryptsetup luksChangeKey`), sûr même interrompu.
+  - **Clé de secours** *(proposition du planificateur)* : une seconde clé, générée par Portail (24 caractères), montrée
+    une seule fois, qui ouvre le coffre si le mot de passe est oublié ; retirable.
+  - **Déverrouillage biométrique** *(proposition du planificateur)*, désactivé par défaut, coffre par coffre : un secret
+    aléatoire, distinct du mot de passe, ouvre un emplacement LUKS2 réservé ; il est scellé par une clé du Keystore
+    qui exige la biométrie forte d'Android (visage du Pixel 4 XL, ou empreinte) et qui devient inutilisable si une
+    nouvelle biométrie est enregistrée. Le mot de passe n'est toujours jamais mémorisé.
+- **Saisie des mots de passe** *(proposition du planificateur)* : indicateur de force (très faible à excellent) ;
+  **générateur** de mots de passe (20 caractères) et de **phrases de passe** (6 mots tirés au hasard) ; copie
+  « sensible » dans le presse-papiers, effacée après 60 s.
+- **Confidentialité** *(proposition du planificateur)* : réglage « Fermer les coffres quand l'écran s'éteint » ; réglage
+  « Masquer les coffres et les fichiers déchiffrés dans les captures et les applications récentes » ; les deux
+  désactivés par défaut.
+- **Sûreté** :
+  - rien en clair n'est écrit sur le stockage du téléphone pendant un chiffrement, un déchiffrement ou une ouverture,
+    sauf la copie en clair que l'utilisateur demande explicitement à cet endroit (§ 11, § 18) ;
+  - écritures sous un nom temporaire (`.nom.portail-partiel`) puis renommage ; supprimées en cas d'échec ou
+    d'annulation ;
+  - mots de passe en octets, remis à zéro après usage, jamais dans un journal, un message ou un fichier ; clés
+    maîtresses en mémoire native seulement ;
+  - les formats sont jugés par des outils indépendants : un juge Python pour age et pour le ZIP AES, `cryptsetup`,
+    `fsck.exfat`, `e2fsck` et le noyau Linux pour les coffres.
+- **Bibliothèques** *(décision du planificateur)* : mbedTLS (ChaCha20-Poly1305, HKDF, HMAC, AES), Argon2 et
+  libarchive, déjà présents (libarchive branché sur mbedTLS pour le ZIP AES) ; **scrypt** de Tarsnap (fichier de
+  référence, BSD à deux clauses), seul code tiers nouveau ; liste de mots **EFF** pour les phrases de passe (CC BY 3.0).
+  Aucune nouvelle dépendance Java ni Dart : la biométrie passe par l'API d'Android (`BiometricPrompt`, API 28 et plus).
