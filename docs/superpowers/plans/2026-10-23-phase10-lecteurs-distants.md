@@ -381,5 +381,5 @@ positionMs?)`, événement `onPlayerChanged(PlayerMsg?)`), `app_state.dart`, `ho
 - [x] README (lecteurs, dossiers distants, limites : pas de corbeille distante, FTP en clair, liens non suivis ;
   licences des nouvelles bibliothèques), feuille de route cochée ; commit `docs: lecteurs intégrés et dossiers
   distants`.
-- [ ] Relecture finale de toute la branche, puis fusion `feature/lecteurs-distants` → `develop`, `release/1.3.0`
+- [x] Relecture finale de toute la branche, puis fusion `feature/lecteurs-distants` → `develop`, `release/1.3.0`
   (pubspec `1.3.0+10`), `main`, étiquette signée `v1.3.0`. Pas de push sans l'accord de l'utilisateur.
