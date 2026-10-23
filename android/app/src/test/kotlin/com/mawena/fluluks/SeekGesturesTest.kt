@@ -23,6 +23,45 @@ class SeekGesturesTest {
 
     // --- glissement ---
 
+    // --- deux doigts (relecture finale de la phase 12) ---
+
+    @Test fun pinchIsLeftToPlayer() {
+        assertTrue(g.down(400f, 500f, 0, w, false, pb).dispatch)
+        assertTrue(g.pointerDown().dispatch) // second doigt : le geste reste au lecteur
+        val m = g.move(500f, 500f) // le premier doigt s'écarte à l'horizontale
+        assertTrue(m.dispatch)
+        assertNull(m.effect)
+        assertTrue(g.pointerUp().dispatch)
+        val up = g.up(300f, 500f, 400)
+        assertNull(up.effect)
+        // aucun double toucher ne part de ce geste
+        g.down(300f, 500f, 500, w, false, pb)
+        assertNull(g.up(300f, 500f, 550).effect)
+    }
+
+    @Test fun secondFingerCancelsDrag() {
+        g.down(100f, 500f, 0, w, false, pb)
+        assertTrue(g.move(200f, 500f).effect is Preview)
+        val second = g.pointerDown()
+        assertFalse(second.dispatch)
+        assertEquals(DragEnd(60_000, 0), second.effect) // aperçu caché, aucun saut
+        assertNull(g.move(900f, 500f).effect) // l'indice 0 peut désigner l'autre doigt : ignoré
+        assertFalse(g.pointerUp().dispatch)
+        val up = g.up(900f, 500f, 600)
+        assertFalse(up.dispatch)
+        assertNull(up.effect)
+    }
+
+    @Test fun secondFingerDuringHeldTapIsIgnored() {
+        g.down(800f, 500f, 0, w, false, pb)
+        g.up(800f, 500f, 100) // premier toucher
+        assertFalse(g.down(800f, 500f, 200, w, false, pb).dispatch) // second toucher retenu
+        assertFalse(g.pointerDown().dispatch)
+        val up = g.up(800f, 500f, 300)
+        assertFalse(up.dispatch)
+        assertNull(up.effect) // pas de saut de 10 s
+    }
+
     @Test fun dragRightPreviewsThenSeeksOnRelease() {
         assertTrue(g.down(100f, 500f, 0, w, false, pb).dispatch)
         val start = g.move(140f, 502f) // au-delà du seuil : le geste est pris au lecteur

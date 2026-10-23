@@ -40,9 +40,10 @@ class SeekGestures(
 
     /**
      * `PASS` : geste laissé au lecteur ; `PRESSED` : toucher passé au lecteur, qui peut devenir un toucher ou un
-     * glissement ; `HELD` : toucher retenu (second d'un double, ou de la série) ; `DRAGGING` : glissement.
+     * glissement ; `HELD` : toucher retenu (second d'un double, ou de la série) ; `DRAGGING` : glissement ;
+     * `IGNORED` : geste à plusieurs doigts commencé pendant un toucher retenu ou un glissement, ignoré jusqu'au lever.
      */
-    private enum class Phase { IDLE, PASS, PRESSED, HELD, DRAGGING }
+    private enum class Phase { IDLE, PASS, PRESSED, HELD, DRAGGING, IGNORED }
 
     private var phase = Phase.IDLE
     private var downX = 0f
@@ -88,8 +89,35 @@ class SeekGestures(
         return if (phase == Phase.HELD) HOLD else PASS
     }
 
+    /**
+     * Un autre doigt se pose (pincement, geste à deux doigts) : jamais un glissement ni un saut. Toucher passé au
+     * lecteur : le geste lui reste ; glissement : aperçu caché sans sauter ; toucher retenu : abandonné.
+     */
+    fun pointerDown(): Outcome = when (phase) {
+        Phase.PRESSED -> {
+            phase = Phase.PASS
+            moved = true
+            PASS
+        }
+        Phase.DRAGGING -> {
+            phase = Phase.IGNORED
+            Outcome(false, effect = Effect.DragEnd(playback.positionMs, 0))
+        }
+        Phase.HELD -> {
+            phase = Phase.IGNORED
+            streakSide = 0
+            HOLD
+        }
+        Phase.IGNORED -> HOLD
+        else -> PASS
+    }
+
+    /** Un des doigts se lève, d'autres restent : le geste garde son sort. */
+    fun pointerUp(): Outcome = if (phase == Phase.IGNORED) HOLD else PASS
+
     fun move(x: Float, y: Float): Outcome = when (phase) {
         Phase.IDLE, Phase.PASS -> PASS
+        Phase.IGNORED -> HOLD
         Phase.DRAGGING -> Outcome(false, effect = preview(x))
         Phase.PRESSED, Phase.HELD -> {
             val pressed = phase == Phase.PRESSED
@@ -117,6 +145,7 @@ class SeekGestures(
         val tap = !moved && timeMs - downTime <= tapMaxMs
         return when (was) {
             Phase.DRAGGING -> Outcome(false, effect = dragEnd())
+            Phase.IGNORED -> HOLD
             Phase.PRESSED -> {
                 if (tap) candidate = Triple(downX, downY, timeMs)
                 PASS

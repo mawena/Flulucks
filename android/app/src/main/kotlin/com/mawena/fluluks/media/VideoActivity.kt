@@ -110,6 +110,9 @@ class VideoActivity : Activity() {
             MotionEvent.ACTION_MOVE -> gestures.move(ev.x, ev.y)
             MotionEvent.ACTION_UP -> gestures.up(ev.x, ev.y, ev.eventTime)
             MotionEvent.ACTION_CANCEL -> gestures.cancel()
+            // autre doigt : pincement ou geste à deux doigts, jamais un saut
+            MotionEvent.ACTION_POINTER_DOWN -> gestures.pointerDown()
+            MotionEvent.ACTION_POINTER_UP -> gestures.pointerUp()
             else -> null
         } ?: return super.dispatchTouchEvent(ev)
         if (ev.actionMasked == MotionEvent.ACTION_DOWN && o.dispatch) controllerWasVisible = playerView.isControllerFullyVisible
