@@ -361,24 +361,43 @@ dans le même commit que le travail.
 - [ ] Fusion `feature/lecteur-video` → `develop`
 - [ ] Version `v1.5.0`
 
-### Phase 13 — Vérification et réparation des disques
-- [ ] Plan de la phase 13 écrit *(demande du 2026-10-22 ; spec § 16 ; phase 11, puis phase 12, jusqu'au 2026-10-23)*
+### Phase 13 — Connexions SSH : terminal, clés, tunnels ([plan](2026-10-23-phase13-ssh.md))
+- [x] Plan de la phase 13 écrit *(demande du 2026-10-23 ; spec § 21)*
+- [ ] T1 — Connexions SSH fiables et expliquées : messages précis, Tester la connexion, keyboard-interactive, `mawena.cloud:2244`
+- [ ] T2 — Sessions de terminal (Kotlin) : PTY xterm, sortie par lots, 8 sessions
+- [ ] T3 — Sessions gardées en arrière-plan : service et notification « Tout fermer »
+- [ ] T4 — Écran Terminal (xterm) : thème, copier-coller, pincement, Reconnecter
+- [ ] T5 — Barre de touches : Échap, Tab, Ctrl, Alt, flèches
+- [ ] T6 — Sessions multiples, bouton Terminal, Ouvrir un terminal ici
+- [ ] T7 — Trousseau de clés SSH : générer, importer, clé publique
+- [ ] T8 — Installer la clé publique sur le serveur
+- [ ] T9 — Commandes enregistrées
+- [ ] T10 — Tunnels (redirection de port locale)
+- [ ] T11 — Documentation
+- [ ] T12 — Essais instrumentés sur le Pixel
+- [ ] *(utilisateur)* T13 — Essais sur le Pixel
+- [ ] Relecture finale de toute la branche
+- [ ] Fusion `feature/ssh` → `develop`
+- [ ] Version `v1.6.0`
+
+### Phase 14 — Vérification et réparation des disques
+- [ ] Plan de la phase 14 écrit *(demande du 2026-10-22 ; spec § 16 ; phase 11, puis 12, puis 13, jusqu'au 2026-10-23)*
 - [ ] Vérification en lecture seule avec rapport, pour chaque système de fichiers
 - [ ] Réparation ext4 par e2fsck (e2fsprogs, sur l'accès USB du moteur)
 - [ ] Réparation NTFS par ntfsfix (ntfs-3g)
 - [ ] Réparation FAT32 et exFAT par fsck.fat et fsck.exfat
 - [ ] LUKS : vérification des deux en-têtes, sauvegarde et restauration de l'en-tête
-- [ ] Version `v1.6.0`
+- [ ] Version `v1.7.0`
 
-### Phase 14 — Gestion des partitions, comme GParted
-- [ ] Plan de la phase 14 écrit *(demande du 2026-10-22 ; spec § 17 ; phase 12, puis phase 13, jusqu'au 2026-10-23)*
+### Phase 15 — Gestion des partitions, comme GParted
+- [ ] Plan de la phase 15 écrit *(demande du 2026-10-22 ; spec § 17 ; phase 12, puis 13, puis 14, jusqu'au 2026-10-23)*
 - [ ] Vue du disque : partitions et espace libre à l'échelle, système de fichiers, étiquette, taille, place occupée
 - [ ] Taille choisie au formatage ; créer une partition dans un espace libre, en supprimer une, formater une seule partition
 - [ ] Changer l'étiquette d'une partition ; nouvelle table MBR ou GPT
 - [ ] Redimensionner (agrandir, réduire) : ext4 par resize2fs, NTFS par ntfsresize, système de fichiers dans LUKS2 ; FAT32 et exFAT à étudier
 - [ ] Déplacer une partition, si le plan sait le rendre sûr
 - [ ] Opérations préparées, résumées, puis appliquées après confirmation
-- [ ] Version `v1.7.0`
+- [ ] Version `v1.8.0`
 
 ---
 

@@ -353,7 +353,7 @@ fonctions choisies par le planificateur ; les lecteurs et stockages distants pas
 
 ## 16. Évolution du 2026-10-22 (suite) : vérification et réparation
 
-Décision de l'utilisateur : la **phase 13** (v1.6.0 ; numérotée 11, puis 12, avant le 2026-10-23, voir § 19 et § 20) apporte la **réparation des disques** dans
+Décision de l'utilisateur : la **phase 14** (v1.7.0 ; numérotée 11, puis 12, puis 13, avant le 2026-10-23, voir § 19, § 20 et § 21) apporte la **réparation des disques** dans
 l'application, avec les outils de référence de Linux intégrés au moteur natif.
 - **Vérifier d'abord, en lecture seule**, et montrer un rapport en français ; réparer seulement après
   confirmation, avec le conseil de sauvegarder les données importantes avant.
@@ -368,7 +368,7 @@ l'application, avec les outils de référence de Linux intégrés au moteur nati
 
 ## 17. Évolution du 2026-10-22 (suite) : gestion des partitions
 
-Décision de l'utilisateur : la **phase 14** (v1.7.0 ; numérotée 12, puis 13, avant le 2026-10-23, voir § 19 et § 20) apporte la **gestion des partitions** d'un disque USB,
+Décision de l'utilisateur : la **phase 15** (v1.8.0 ; numérotée 12, puis 13, puis 14, avant le 2026-10-23, voir § 19, § 20 et § 21) apporte la **gestion des partitions** d'un disque USB,
 à la manière de GParted, et le choix de la **taille** au formatage.
 - **Choisir la taille** : formater une partition de la taille voulue au lieu de tout le disque ; le reste
   reste libre.
@@ -379,7 +379,7 @@ Décision de l'utilisateur : la **phase 14** (v1.7.0 ; numérotée 12, puis 13, 
   étiquette), **supprimer** une partition, **formater une seule partition**, changer son **étiquette**,
   créer une **nouvelle table** (MBR ou GPT).
 - **Redimensionner** une partition et son système de fichiers, agrandir ou réduire :
-  - ext4 par `resize2fs` (e2fsprogs, déjà intégré en phase 13) ;
+  - ext4 par `resize2fs` (e2fsprogs, déjà intégré en phase 14) ;
   - NTFS par `ntfsresize` (ntfs-3g) ;
   - dans un volume LUKS2, le système de fichiers intérieur (la taille du segment LUKS2 suit la
     partition) ;
@@ -392,7 +392,7 @@ Décision de l'utilisateur : la **phase 14** (v1.7.0 ; numérotée 12, puis 13, 
   - comme dans GParted, les opérations sont préparées, résumées, puis appliquées après confirmation, une
     à la fois ;
   - jamais sur un volume ouvert ;
-  - le système de fichiers est vérifié (outils de la phase 13) avant un redimensionnement ;
+  - le système de fichiers est vérifié (outils de la phase 14) avant un redimensionnement ;
   - avertissement : un débranchement pendant un redimensionnement ou un déplacement peut rendre la
     partition illisible, sauvegardez d'abord ;
   - toutes les opérations sont jugées sur des images par les outils de référence (`sfdisk`, `sgdisk`,
@@ -477,3 +477,50 @@ phase 13 (v1.6.0, § 16) et la gestion des partitions la phase 14 (v1.7.0, § 17
     barre de progression visibles.
 - **Inchangé** : lecture par l'URI de contenu de la source, sous-titres en mémoire (rien d'un disque chiffré n'est écrit
   sur le téléphone), écran allumé pendant la lecture, arrêt avec un message si le stockage est fermé.
+
+## 21. Évolution du 2026-10-23 (suite) : connexions SSH (phase 13)
+
+Demande de l'utilisateur, après les essais de la v1.4.0 : « ajoute les connexions SSH en phase 13 et d'autres features
+venant de toi », et la connexion SFTP à son serveur (`mawena.cloud`, port 2244) échoue avec « Connexion impossible au
+serveur ». Une **phase 13** (**v1.6.0**) fait de Portail un client SSH complet. La réparation des disques devient la
+phase 14 (v1.7.0, § 16) et la gestion des partitions la phase 15 (v1.8.0, § 17).
+*(Contenu au-delà du terminal : décisions du planificateur, à valider aux essais.)*
+- **Terminal SSH** : ouvrir une session interactive sur un serveur SFTP enregistré (§ 18 : mêmes adresse, port,
+  utilisateur, empreinte, mot de passe ou clé), dans un terminal compatible xterm (256 couleurs, UTF-8, applications
+  plein écran comme `htop`, `nano`, `vim`, `tmux`). La taille du terminal suit l'écran (rotation, clavier).
+  - Barre de touches au-dessus du clavier : Échap, Tab, Ctrl et Alt (maintenus pour la touche suivante), flèches,
+    Origine, Fin, Page préc., Page suiv., et les caractères `~ | / -`.
+  - Copier (appui long, sélection), coller (un collage de plusieurs lignes est confirmé : il exécuterait des
+    commandes), taille du texte par pincement, thème clair ou sombre de Portail, sonnerie par une vibration légère.
+  - **Plusieurs sessions** ouvertes en même temps (8 au plus), qui **restent ouvertes** quand on quitte l'écran ou
+    l'application : une notification « Sessions SSH ouvertes » les signale et propose « Tout fermer ». Une session
+    coupée (réseau, serveur) le dit et propose « Reconnecter ».
+  - Entrées : bouton **Terminal** sur la tuile d'un serveur SFTP ; **Ouvrir un terminal ici** dans l'explorateur d'un
+    dossier SFTP (la session démarre dans ce dossier) ; section « Sessions SSH » de l'accueil tant qu'une session est
+    ouverte.
+- **Connexions fiables et expliquées** :
+  - messages d'échec précis (connexion refusée, serveur injoignable, aucun algorithme commun, connexion fermée par le
+    serveur, trop d'essais, clé refusée…) au lieu de « Connexion impossible au serveur » ; détails techniques
+    (journal de la tentative) visibles et copiables, sans aucun secret ;
+  - bouton **Tester la connexion** dans le formulaire d'un serveur ;
+  - authentification **keyboard-interactive** (serveurs qui demandent le mot de passe ou un code à usage unique par
+    PAM) : le mot de passe répond aux invites de mot de passe, les autres invites (code de vérification) sont
+    posées à l'utilisateur ;
+  - le cas de `mawena.cloud:2244` est reproduit et corrigé en premier.
+- **Clés SSH** : un trousseau de clés dans Portail : **générer** une clé (Ed25519 par défaut, ou RSA 4096), avec ou
+  sans phrase de passe ; importer une clé OpenSSH ; choisir la clé de chaque serveur ; copier ou partager la **clé
+  publique** ; **installer la clé sur le serveur** (ajout à `~/.ssh/authorized_keys`, droits 700 et 600, sans jamais
+  retirer ni dupliquer une ligne). Les clés importées par serveur en phase 10 rejoignent le trousseau.
+- **Commandes enregistrées** : des commandes nommées, propres à un serveur ou communes, envoyées d'un toucher dans le
+  terminal, avec ou sans Entrée.
+- **Tunnels** : redirection de port locale (comme `ssh -L`) : un port du téléphone, ouvert seulement sur
+  `127.0.0.1`, mène à un hôte et un port vus depuis le serveur (une interface web d'administration, une base de
+  données) ; démarrée à la main ou à l'ouverture de la session.
+- **Sûreté et confidentialité** :
+  - empreinte du serveur vérifiée comme au § 18 pour le terminal et les tunnels ; jamais acceptée en silence ;
+  - secrets (mots de passe, phrases, codes) jamais écrits ni journalisés, gardés en octets et remis à zéro ; le
+    contenu du terminal reste en mémoire (aucun historique sur le téléphone) ;
+  - réglage « Masquer le terminal dans les captures et les applications récentes », désactivé par défaut.
+- **Bibliothèques** *(décision du planificateur)* : JSch et Bouncy Castle (§ 18), déjà présents ; **xterm 4.0.0**
+  (Dart, licence MIT) pour l'affichage du terminal, seule nouvelle dépendance d'exécution, avec ses dépendances
+  `convert`, `equatable`, `quiver` et `zmodem` (BSD, MIT, Apache-2.0, MIT).
