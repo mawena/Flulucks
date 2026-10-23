@@ -202,3 +202,53 @@ target_link_libraries(fl_mkntfs PUBLIC fl_ntfs3g)
 target_compile_definitions(fl_mkntfs PRIVATE FL_MKNTFS HAVE_GETOPT_H HAVE_LIBGEN_H _GNU_SOURCE _FILE_OFFSET_BITS=64)
 set_target_properties(fl_mkntfs PROPERTIES C_EXTENSIONS ON)
 target_compile_options(fl_mkntfs PRIVATE -w)
+
+# --- liblzma de xz 5.8.4 (phase 9) ---------------------------------------------------------------
+# Copie d'amont non modifiée dans third_party/xz (src/liblzma et les en-têtes de src/common ; voir
+# third_party/PATCHES.md). Construite sans fils d'exécution (pas de *_mt.c), tous les filtres ; les
+# définitions remplacent le config.h de xz (mêmes noms que son CMakeLists.txt).
+set(XZ_DIR ${TP}/xz/src)
+file(GLOB_RECURSE LZMA_SOURCES CONFIGURE_DEPENDS ${XZ_DIR}/liblzma/*.c)
+list(FILTER LZMA_SOURCES EXCLUDE REGEX "(_tablegen|_consts_gen|_small|_mt|/outqueue|/hardware_cputhreads|/hardware_physmem)\\.c$")
+add_library(fl_lzma STATIC ${LZMA_SOURCES})
+target_include_directories(fl_lzma SYSTEM PUBLIC ${XZ_DIR}/liblzma/api)
+target_include_directories(fl_lzma PRIVATE ${XZ_DIR}/common ${XZ_DIR}/liblzma/common ${XZ_DIR}/liblzma/check
+  ${XZ_DIR}/liblzma/lz ${XZ_DIR}/liblzma/rangecoder ${XZ_DIR}/liblzma/lzma ${XZ_DIR}/liblzma/delta
+  ${XZ_DIR}/liblzma/simple)
+target_compile_definitions(fl_lzma PUBLIC LZMA_API_STATIC)
+set(_lzma_filters LZMA1 LZMA2 DELTA X86 POWERPC IA64 ARM ARMTHUMB ARM64 SPARC RISCV)
+set(_lzma_defs HAVE_STDBOOL_H HAVE__BOOL HAVE_STDINT_H HAVE_INTTYPES_H HAVE_CHECK_CRC32 HAVE_CHECK_CRC64
+  HAVE_CHECK_SHA256 HAVE_ENCODERS HAVE_DECODERS HAVE_MF_HC3 HAVE_MF_HC4 HAVE_MF_BT2 HAVE_MF_BT3 HAVE_MF_BT4
+  HAVE_LZIP_DECODER HAVE_MICROLZMA TUKLIB_SYMBOL_PREFIX=lzma_ HAVE_VISIBILITY=0)
+foreach(f IN LISTS _lzma_filters)
+  list(APPEND _lzma_defs HAVE_ENCODER_${f} HAVE_DECODER_${f})
+endforeach()
+target_compile_definitions(fl_lzma PRIVATE ${_lzma_defs})
+set_target_properties(fl_lzma PROPERTIES C_EXTENSIONS ON)
+target_compile_definitions(fl_lzma PRIVATE _GNU_SOURCE)
+target_compile_options(fl_lzma PRIVATE -w)
+
+# --- libarchive 3.8.10 (phase 9) -----------------------------------------------------------------
+# Copie d'amont non modifiée dans third_party/libarchive (dossier libarchive/ ; voir third_party/PATCHES.md).
+# config.h généré par son CMakeLists.txt pour glibc et pour Bionic (API 26), dans cmake/libarchive/. Tout
+# est compilé dans la bibliothèque statique ; seuls les formats activés par notre code sont liés.
+set(LIBARCHIVE_DIR ${TP}/libarchive/libarchive)
+file(GLOB LIBARCHIVE_SOURCES CONFIGURE_DEPENDS ${LIBARCHIVE_DIR}/*.c)
+list(FILTER LIBARCHIVE_SOURCES EXCLUDE REGEX "(windows|_bhfi|archive_disk_acl_[a-z]+)\\.c$")
+if(ANDROID)
+  set(LIBARCHIVE_CONFIG ${CMAKE_CURRENT_LIST_DIR}/libarchive/android)
+else()
+  set(LIBARCHIVE_CONFIG ${CMAKE_CURRENT_LIST_DIR}/libarchive/linux)
+endif()
+find_package(ZLIB REQUIRED)
+add_library(fl_libarchive STATIC ${LIBARCHIVE_SOURCES})
+target_include_directories(fl_libarchive SYSTEM PUBLIC ${LIBARCHIVE_DIR})
+target_include_directories(fl_libarchive PRIVATE ${LIBARCHIVE_CONFIG})
+if(ANDROID)
+  # archive.h inclut android_lf.h (contrib/android/include de libarchive) : public, nos sources l'incluent aussi
+  target_include_directories(fl_libarchive SYSTEM PUBLIC ${LIBARCHIVE_CONFIG})
+endif()
+target_compile_definitions(fl_libarchive PRIVATE HAVE_CONFIG_H _GNU_SOURCE _FILE_OFFSET_BITS=64)
+target_link_libraries(fl_libarchive PUBLIC fl_lzma ZLIB::ZLIB)
+set_target_properties(fl_libarchive PROPERTIES C_EXTENSIONS ON)
+target_compile_options(fl_libarchive PRIVATE -w)

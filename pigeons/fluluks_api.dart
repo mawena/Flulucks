@@ -116,6 +116,7 @@ class EntryMsg {
 /// Avancement d'une copie ou d'un déplacement ; `error` peut accompagner `finished`.
 class TransferMsg {
   TransferMsg({
+    required this.kind,
     required this.move,
     required this.currentName,
     required this.fileIndex,
@@ -139,6 +140,134 @@ class TransferMsg {
 
   /// Durée de l'opération en millisecondes (débit affiché à la fin).
   int elapsedMs;
+
+  /// `copy`, `move`, `compress` ou `extract`.
+  String kind;
+}
+
+/// Élément de la corbeille d'un stockage : `id` est son nom dans la corbeille, `name` et `originalPath` disent
+/// d'où il vient ; `deletedAt` en millisecondes (0 si inconnue).
+class TrashItemMsg {
+  TrashItemMsg({
+    required this.id,
+    required this.name,
+    required this.originalPath,
+    required this.deletedAt,
+    required this.size,
+    required this.isDir,
+  });
+  String id;
+  String name;
+  String originalPath;
+  int deletedAt;
+  int size;
+  bool isDir;
+}
+
+/// Propriétés d'un élément ; `mode`, `uid`, `gid` et `permissions` (« rwxr-xr-x ») sur ext4 seulement ; `fs` :
+/// système de fichiers d'un volume de disque, vide pour le téléphone.
+class DetailsMsg {
+  DetailsMsg({
+    required this.name,
+    required this.path,
+    required this.type,
+    required this.size,
+    required this.mtime,
+    this.mode,
+    this.uid,
+    this.gid,
+    this.permissions,
+    required this.fs,
+  });
+  String name;
+  String path;
+  String type;
+  int size;
+  int mtime;
+  int? mode;
+  int? uid;
+  int? gid;
+  String? permissions;
+  String fs;
+}
+
+/// Règle de renommage par lot : `mode` `number` (`base`, `start`), `replace` (`find`, `replace`, `caseSensitive`)
+/// ou `photoDate`.
+class RenameRuleMsg {
+  RenameRuleMsg({
+    required this.mode,
+    required this.base,
+    required this.start,
+    required this.find,
+    required this.replace,
+    required this.caseSensitive,
+  });
+  String mode;
+  String base;
+  int start;
+  String find;
+  String replace;
+  bool caseSensitive;
+}
+
+/// Nouveau nom d'un élément du lot ; `conflict` : raison du refus (null si permis).
+class RenamePreviewMsg {
+  RenamePreviewMsg({required this.path, required this.newName, this.conflict});
+  String path;
+  String newName;
+  String? conflict;
+}
+
+/// Fichier d'un filtre rapide de l'accueil : stockage (téléphone, carte SD) et chemin dans ce stockage.
+class FilterItemMsg {
+  FilterItemMsg({required this.sourceId, required this.path, required this.name, required this.size, required this.mtime});
+  String sourceId;
+  String path;
+  String name;
+  int size;
+  int mtime;
+}
+
+/// Taille d'un dossier et de son contenu ; `truncated` si le calcul s'est arrêté avant la fin.
+class FolderSizeMsg {
+  FolderSizeMsg({required this.size, required this.files, required this.dirs, required this.truncated});
+  int size;
+  int files;
+  int dirs;
+  bool truncated;
+}
+
+/// Élément d'un dossier analysé (taille totale pour un dossier).
+class SpaceItemMsg {
+  SpaceItemMsg({required this.name, required this.path, required this.isDir, required this.size, required this.fileCount});
+  String name;
+  String path;
+  bool isDir;
+  int size;
+  int fileCount;
+}
+
+/// Occupation d'un dossier : enfants du plus gros au plus petit (200 au plus, le reste résumé par `otherCount` et
+/// `otherBytes`), plus gros fichiers sous lui ; `truncated` si l'analyse s'est arrêtée avant la fin.
+class SpaceReportMsg {
+  SpaceReportMsg({
+    required this.path,
+    required this.totalBytes,
+    required this.fileCount,
+    required this.children,
+    required this.biggest,
+    required this.truncated,
+    required this.otherCount,
+    required this.otherBytes,
+  });
+  String path;
+  int totalBytes;
+  int fileCount;
+  List<SpaceItemMsg> children;
+  List<EntryMsg> biggest;
+  bool truncated;
+  int otherCount;
+  int otherBytes;
 }
 
 /// Résultats d'une recherche ; `truncated` au-delà de 500.
@@ -194,17 +323,59 @@ abstract class FluLuksHostApi {
   String createFolder(String sourceId, String parent, String name);
   @async
   String rename(String sourceId, String path, String newName);
+  /// `permanent` faux : à la corbeille du stockage (définitif pour ce qui y est déjà).
   @async
-  void deleteEntries(String sourceId, List<String> paths);
+  void deleteEntries(String sourceId, List<String> paths, bool permanent);
+  @async
+  List<TrashItemMsg> listTrash(String sourceId);
+  @async
+  void restoreTrash(String sourceId, List<String> ids);
+  @async
+  void purgeTrash(String sourceId, List<String> ids);
+  @async
+  void emptyTrash(String sourceId);
   @async
   void openWith(String sourceId, String path);
   @async
   void share(String sourceId, List<String> paths);
   void startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
+
+  /// Compresse `paths` dans un ZIP `name` sous `dstDir` (même stockage) ; même créneau que les copies.
+  void startCompress(String srcId, List<String> paths, String dstDir, String name);
+
+  /// Extrait `archive` sous `dstDir` de `dstId`, dans un dossier au nom de l'archive si `intoNewFolder`.
+  void startExtract(String srcId, String archive, String dstId, String dstDir, bool intoNewFolder);
   void cancelTransfer();
   @async
   SearchResultMsg search(String sourceId, String path, String query, bool showHidden);
   void cancelSearch();
+
+  /// Analyse de l'espace sous `path` (une à la fois) ; `spaceChildren` relit un dossier de la dernière analyse.
+  @async
+  SpaceReportMsg analyzeSpace(String sourceId, String path);
+  @async
+  SpaceReportMsg spaceChildren(String sourceId, String path);
+  void cancelAnalysis();
+
+  /// Propriétés ; taille d'un dossier et SHA-256 d'un fichier calculés à la demande, arrêtés par `cancelHash`
+  /// (`sha256` rend alors null ; progression par `onHashProgress`).
+  @async
+  DetailsMsg details(String sourceId, String path);
+  @async
+  FolderSizeMsg folderSize(String sourceId, String path);
+  @async
+  String? sha256(String sourceId, String path);
+  void cancelHash();
+
+  /// Filtre rapide (`photos`, `videos`, `music`, `documents`, `archives`, `recent`) : 500 fichiers au plus, du plus récent.
+  @async
+  List<FilterItemMsg> quickFilter(String filter);
+
+  /// Renommage par lot : aperçu, puis tout ou rien (refusé si un nom est en conflit).
+  @async
+  List<RenamePreviewMsg> previewRename(String sourceId, List<String> paths, RenameRuleMsg rule);
+  @async
+  void applyRename(String sourceId, List<String> paths, RenameRuleMsg rule);
   @async
   Uint8List? thumbnail(String sourceId, String path, int sizePx);
   ViewPrefsMsg getViewPrefs();
@@ -231,4 +402,7 @@ abstract class FluLuksEventsApi {
 
   /// Pourcentage du formatage en cours ; null quand il n'y en a pas (ou plus).
   void onFormatProgress(int? pct);
+
+  /// Pourcentage du calcul d'empreinte en cours ; null à la fin.
+  void onHashProgress(int? pct);
 }

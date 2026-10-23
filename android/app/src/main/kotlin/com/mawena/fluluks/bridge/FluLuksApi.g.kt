@@ -533,7 +533,9 @@ data class TransferMsg (
   val cancelled: Boolean,
   val error: String? = null,
   /** Durée de l'opération en millisecondes (débit affiché à la fin). */
-  val elapsedMs: Long
+  val elapsedMs: Long,
+  /** `copy`, `move`, `compress` ou `extract`. */
+  val kind: String
 )
  {
   companion object {
@@ -548,7 +550,8 @@ data class TransferMsg (
       val cancelled = pigeonVar_list[7] as Boolean
       val error = pigeonVar_list[8] as String?
       val elapsedMs = pigeonVar_list[9] as Long
-      return TransferMsg(move, currentName, fileIndex, fileCount, doneBytes, totalBytes, finished, cancelled, error, elapsedMs)
+      val kind = pigeonVar_list[10] as String
+      return TransferMsg(move, currentName, fileIndex, fileCount, doneBytes, totalBytes, finished, cancelled, error, elapsedMs, kind)
     }
   }
   fun toList(): List<Any?> {
@@ -563,6 +566,7 @@ data class TransferMsg (
       cancelled,
       error,
       elapsedMs,
+      kind,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -573,7 +577,7 @@ data class TransferMsg (
       return true
     }
     val other = other as TransferMsg
-    return FluLuksApiPigeonUtils.deepEquals(this.move, other.move) && FluLuksApiPigeonUtils.deepEquals(this.currentName, other.currentName) && FluLuksApiPigeonUtils.deepEquals(this.fileIndex, other.fileIndex) && FluLuksApiPigeonUtils.deepEquals(this.fileCount, other.fileCount) && FluLuksApiPigeonUtils.deepEquals(this.doneBytes, other.doneBytes) && FluLuksApiPigeonUtils.deepEquals(this.totalBytes, other.totalBytes) && FluLuksApiPigeonUtils.deepEquals(this.finished, other.finished) && FluLuksApiPigeonUtils.deepEquals(this.cancelled, other.cancelled) && FluLuksApiPigeonUtils.deepEquals(this.error, other.error) && FluLuksApiPigeonUtils.deepEquals(this.elapsedMs, other.elapsedMs)
+    return FluLuksApiPigeonUtils.deepEquals(this.move, other.move) && FluLuksApiPigeonUtils.deepEquals(this.currentName, other.currentName) && FluLuksApiPigeonUtils.deepEquals(this.fileIndex, other.fileIndex) && FluLuksApiPigeonUtils.deepEquals(this.fileCount, other.fileCount) && FluLuksApiPigeonUtils.deepEquals(this.doneBytes, other.doneBytes) && FluLuksApiPigeonUtils.deepEquals(this.totalBytes, other.totalBytes) && FluLuksApiPigeonUtils.deepEquals(this.finished, other.finished) && FluLuksApiPigeonUtils.deepEquals(this.cancelled, other.cancelled) && FluLuksApiPigeonUtils.deepEquals(this.error, other.error) && FluLuksApiPigeonUtils.deepEquals(this.elapsedMs, other.elapsedMs) && FluLuksApiPigeonUtils.deepEquals(this.kind, other.kind)
   }
 
   override fun hashCode(): Int {
@@ -588,10 +592,499 @@ data class TransferMsg (
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.cancelled)
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.error)
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.elapsedMs)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.kind)
     return result
   }
   override fun toString(): String {
-    return "TransferMsg(move=$move, currentName=$currentName, fileIndex=$fileIndex, fileCount=$fileCount, doneBytes=$doneBytes, totalBytes=$totalBytes, finished=$finished, cancelled=$cancelled, error=$error, elapsedMs=$elapsedMs)"
+    return "TransferMsg(move=$move, currentName=$currentName, fileIndex=$fileIndex, fileCount=$fileCount, doneBytes=$doneBytes, totalBytes=$totalBytes, finished=$finished, cancelled=$cancelled, error=$error, elapsedMs=$elapsedMs, kind=$kind)"
+  }
+}
+
+/**
+ * Élément de la corbeille d'un stockage : `id` est son nom dans la corbeille, `name` et `originalPath` disent
+ * d'où il vient ; `deletedAt` en millisecondes (0 si inconnue).
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class TrashItemMsg (
+  val id: String,
+  val name: String,
+  val originalPath: String,
+  val deletedAt: Long,
+  val size: Long,
+  val isDir: Boolean
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): TrashItemMsg {
+      val id = pigeonVar_list[0] as String
+      val name = pigeonVar_list[1] as String
+      val originalPath = pigeonVar_list[2] as String
+      val deletedAt = pigeonVar_list[3] as Long
+      val size = pigeonVar_list[4] as Long
+      val isDir = pigeonVar_list[5] as Boolean
+      return TrashItemMsg(id, name, originalPath, deletedAt, size, isDir)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      id,
+      name,
+      originalPath,
+      deletedAt,
+      size,
+      isDir,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as TrashItemMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.id, other.id) && FluLuksApiPigeonUtils.deepEquals(this.name, other.name) && FluLuksApiPigeonUtils.deepEquals(this.originalPath, other.originalPath) && FluLuksApiPigeonUtils.deepEquals(this.deletedAt, other.deletedAt) && FluLuksApiPigeonUtils.deepEquals(this.size, other.size) && FluLuksApiPigeonUtils.deepEquals(this.isDir, other.isDir)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.id)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.name)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.originalPath)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.deletedAt)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.size)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.isDir)
+    return result
+  }
+  override fun toString(): String {
+    return "TrashItemMsg(id=$id, name=$name, originalPath=$originalPath, deletedAt=$deletedAt, size=$size, isDir=$isDir)"
+  }
+}
+
+/**
+ * Propriétés d'un élément ; `mode`, `uid`, `gid` et `permissions` (« rwxr-xr-x ») sur ext4 seulement ; `fs` :
+ * système de fichiers d'un volume de disque, vide pour le téléphone.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class DetailsMsg (
+  val name: String,
+  val path: String,
+  val type: String,
+  val size: Long,
+  val mtime: Long,
+  val mode: Long? = null,
+  val uid: Long? = null,
+  val gid: Long? = null,
+  val permissions: String? = null,
+  val fs: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): DetailsMsg {
+      val name = pigeonVar_list[0] as String
+      val path = pigeonVar_list[1] as String
+      val type = pigeonVar_list[2] as String
+      val size = pigeonVar_list[3] as Long
+      val mtime = pigeonVar_list[4] as Long
+      val mode = pigeonVar_list[5] as Long?
+      val uid = pigeonVar_list[6] as Long?
+      val gid = pigeonVar_list[7] as Long?
+      val permissions = pigeonVar_list[8] as String?
+      val fs = pigeonVar_list[9] as String
+      return DetailsMsg(name, path, type, size, mtime, mode, uid, gid, permissions, fs)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      name,
+      path,
+      type,
+      size,
+      mtime,
+      mode,
+      uid,
+      gid,
+      permissions,
+      fs,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as DetailsMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.name, other.name) && FluLuksApiPigeonUtils.deepEquals(this.path, other.path) && FluLuksApiPigeonUtils.deepEquals(this.type, other.type) && FluLuksApiPigeonUtils.deepEquals(this.size, other.size) && FluLuksApiPigeonUtils.deepEquals(this.mtime, other.mtime) && FluLuksApiPigeonUtils.deepEquals(this.mode, other.mode) && FluLuksApiPigeonUtils.deepEquals(this.uid, other.uid) && FluLuksApiPigeonUtils.deepEquals(this.gid, other.gid) && FluLuksApiPigeonUtils.deepEquals(this.permissions, other.permissions) && FluLuksApiPigeonUtils.deepEquals(this.fs, other.fs)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.name)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.path)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.type)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.size)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.mtime)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.mode)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.uid)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.gid)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.permissions)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.fs)
+    return result
+  }
+  override fun toString(): String {
+    return "DetailsMsg(name=$name, path=$path, type=$type, size=$size, mtime=$mtime, mode=$mode, uid=$uid, gid=$gid, permissions=$permissions, fs=$fs)"
+  }
+}
+
+/**
+ * Règle de renommage par lot : `mode` `number` (`base`, `start`), `replace` (`find`, `replace`, `caseSensitive`)
+ * ou `photoDate`.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class RenameRuleMsg (
+  val mode: String,
+  val base: String,
+  val start: Long,
+  val find: String,
+  val replace: String,
+  val caseSensitive: Boolean
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): RenameRuleMsg {
+      val mode = pigeonVar_list[0] as String
+      val base = pigeonVar_list[1] as String
+      val start = pigeonVar_list[2] as Long
+      val find = pigeonVar_list[3] as String
+      val replace = pigeonVar_list[4] as String
+      val caseSensitive = pigeonVar_list[5] as Boolean
+      return RenameRuleMsg(mode, base, start, find, replace, caseSensitive)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      mode,
+      base,
+      start,
+      find,
+      replace,
+      caseSensitive,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as RenameRuleMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.mode, other.mode) && FluLuksApiPigeonUtils.deepEquals(this.base, other.base) && FluLuksApiPigeonUtils.deepEquals(this.start, other.start) && FluLuksApiPigeonUtils.deepEquals(this.find, other.find) && FluLuksApiPigeonUtils.deepEquals(this.replace, other.replace) && FluLuksApiPigeonUtils.deepEquals(this.caseSensitive, other.caseSensitive)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.mode)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.base)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.start)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.find)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.replace)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.caseSensitive)
+    return result
+  }
+  override fun toString(): String {
+    return "RenameRuleMsg(mode=$mode, base=$base, start=$start, find=$find, replace=$replace, caseSensitive=$caseSensitive)"
+  }
+}
+
+/**
+ * Nouveau nom d'un élément du lot ; `conflict` : raison du refus (null si permis).
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class RenamePreviewMsg (
+  val path: String,
+  val newName: String,
+  val conflict: String? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): RenamePreviewMsg {
+      val path = pigeonVar_list[0] as String
+      val newName = pigeonVar_list[1] as String
+      val conflict = pigeonVar_list[2] as String?
+      return RenamePreviewMsg(path, newName, conflict)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      path,
+      newName,
+      conflict,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as RenamePreviewMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.path, other.path) && FluLuksApiPigeonUtils.deepEquals(this.newName, other.newName) && FluLuksApiPigeonUtils.deepEquals(this.conflict, other.conflict)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.path)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.newName)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.conflict)
+    return result
+  }
+  override fun toString(): String {
+    return "RenamePreviewMsg(path=$path, newName=$newName, conflict=$conflict)"
+  }
+}
+
+/**
+ * Fichier d'un filtre rapide de l'accueil : stockage (téléphone, carte SD) et chemin dans ce stockage.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class FilterItemMsg (
+  val sourceId: String,
+  val path: String,
+  val name: String,
+  val size: Long,
+  val mtime: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): FilterItemMsg {
+      val sourceId = pigeonVar_list[0] as String
+      val path = pigeonVar_list[1] as String
+      val name = pigeonVar_list[2] as String
+      val size = pigeonVar_list[3] as Long
+      val mtime = pigeonVar_list[4] as Long
+      return FilterItemMsg(sourceId, path, name, size, mtime)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      sourceId,
+      path,
+      name,
+      size,
+      mtime,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as FilterItemMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.sourceId, other.sourceId) && FluLuksApiPigeonUtils.deepEquals(this.path, other.path) && FluLuksApiPigeonUtils.deepEquals(this.name, other.name) && FluLuksApiPigeonUtils.deepEquals(this.size, other.size) && FluLuksApiPigeonUtils.deepEquals(this.mtime, other.mtime)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.sourceId)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.path)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.name)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.size)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.mtime)
+    return result
+  }
+  override fun toString(): String {
+    return "FilterItemMsg(sourceId=$sourceId, path=$path, name=$name, size=$size, mtime=$mtime)"
+  }
+}
+
+/**
+ * Taille d'un dossier et de son contenu ; `truncated` si le calcul s'est arrêté avant la fin.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class FolderSizeMsg (
+  val size: Long,
+  val files: Long,
+  val dirs: Long,
+  val truncated: Boolean
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): FolderSizeMsg {
+      val size = pigeonVar_list[0] as Long
+      val files = pigeonVar_list[1] as Long
+      val dirs = pigeonVar_list[2] as Long
+      val truncated = pigeonVar_list[3] as Boolean
+      return FolderSizeMsg(size, files, dirs, truncated)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      size,
+      files,
+      dirs,
+      truncated,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as FolderSizeMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.size, other.size) && FluLuksApiPigeonUtils.deepEquals(this.files, other.files) && FluLuksApiPigeonUtils.deepEquals(this.dirs, other.dirs) && FluLuksApiPigeonUtils.deepEquals(this.truncated, other.truncated)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.size)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.files)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.dirs)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.truncated)
+    return result
+  }
+  override fun toString(): String {
+    return "FolderSizeMsg(size=$size, files=$files, dirs=$dirs, truncated=$truncated)"
+  }
+}
+
+/**
+ * Élément d'un dossier analysé (taille totale pour un dossier).
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class SpaceItemMsg (
+  val name: String,
+  val path: String,
+  val isDir: Boolean,
+  val size: Long,
+  val fileCount: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): SpaceItemMsg {
+      val name = pigeonVar_list[0] as String
+      val path = pigeonVar_list[1] as String
+      val isDir = pigeonVar_list[2] as Boolean
+      val size = pigeonVar_list[3] as Long
+      val fileCount = pigeonVar_list[4] as Long
+      return SpaceItemMsg(name, path, isDir, size, fileCount)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      name,
+      path,
+      isDir,
+      size,
+      fileCount,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as SpaceItemMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.name, other.name) && FluLuksApiPigeonUtils.deepEquals(this.path, other.path) && FluLuksApiPigeonUtils.deepEquals(this.isDir, other.isDir) && FluLuksApiPigeonUtils.deepEquals(this.size, other.size) && FluLuksApiPigeonUtils.deepEquals(this.fileCount, other.fileCount)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.name)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.path)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.isDir)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.size)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.fileCount)
+    return result
+  }
+  override fun toString(): String {
+    return "SpaceItemMsg(name=$name, path=$path, isDir=$isDir, size=$size, fileCount=$fileCount)"
+  }
+}
+
+/**
+ * Occupation d'un dossier : enfants du plus gros au plus petit (200 au plus, le reste résumé par `otherCount` et
+ * `otherBytes`), plus gros fichiers sous lui ; `truncated` si l'analyse s'est arrêtée avant la fin.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class SpaceReportMsg (
+  val path: String,
+  val totalBytes: Long,
+  val fileCount: Long,
+  val children: List<SpaceItemMsg>,
+  val biggest: List<EntryMsg>,
+  val truncated: Boolean,
+  val otherCount: Long,
+  val otherBytes: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): SpaceReportMsg {
+      val path = pigeonVar_list[0] as String
+      val totalBytes = pigeonVar_list[1] as Long
+      val fileCount = pigeonVar_list[2] as Long
+      val children = pigeonVar_list[3] as List<SpaceItemMsg>
+      val biggest = pigeonVar_list[4] as List<EntryMsg>
+      val truncated = pigeonVar_list[5] as Boolean
+      val otherCount = pigeonVar_list[6] as Long
+      val otherBytes = pigeonVar_list[7] as Long
+      return SpaceReportMsg(path, totalBytes, fileCount, children, biggest, truncated, otherCount, otherBytes)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      path,
+      totalBytes,
+      fileCount,
+      children,
+      biggest,
+      truncated,
+      otherCount,
+      otherBytes,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as SpaceReportMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.path, other.path) && FluLuksApiPigeonUtils.deepEquals(this.totalBytes, other.totalBytes) && FluLuksApiPigeonUtils.deepEquals(this.fileCount, other.fileCount) && FluLuksApiPigeonUtils.deepEquals(this.children, other.children) && FluLuksApiPigeonUtils.deepEquals(this.biggest, other.biggest) && FluLuksApiPigeonUtils.deepEquals(this.truncated, other.truncated) && FluLuksApiPigeonUtils.deepEquals(this.otherCount, other.otherCount) && FluLuksApiPigeonUtils.deepEquals(this.otherBytes, other.otherBytes)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.path)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.totalBytes)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.fileCount)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.children)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.biggest)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.truncated)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.otherCount)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.otherBytes)
+    return result
+  }
+  override fun toString(): String {
+    return "SpaceReportMsg(path=$path, totalBytes=$totalBytes, fileCount=$fileCount, children=$children, biggest=$biggest, truncated=$truncated, otherCount=$otherCount, otherBytes=$otherBytes)"
   }
 }
 
@@ -780,15 +1273,55 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          SearchResultMsg.fromList(it)
+          TrashItemMsg.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ViewPrefsMsg.fromList(it)
+          DetailsMsg.fromList(it)
         }
       }
       137.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          RenameRuleMsg.fromList(it)
+        }
+      }
+      138.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          RenamePreviewMsg.fromList(it)
+        }
+      }
+      139.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          FilterItemMsg.fromList(it)
+        }
+      }
+      140.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          FolderSizeMsg.fromList(it)
+        }
+      }
+      141.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          SpaceItemMsg.fromList(it)
+        }
+      }
+      142.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          SpaceReportMsg.fromList(it)
+        }
+      }
+      143.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          SearchResultMsg.fromList(it)
+        }
+      }
+      144.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          ViewPrefsMsg.fromList(it)
+        }
+      }
+      145.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           FavoriteMsg.fromList(it)
         }
@@ -822,16 +1355,48 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is SearchResultMsg -> {
+      is TrashItemMsg -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is ViewPrefsMsg -> {
+      is DetailsMsg -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is FavoriteMsg -> {
+      is RenameRuleMsg -> {
         stream.write(137)
+        writeValue(stream, value.toList())
+      }
+      is RenamePreviewMsg -> {
+        stream.write(138)
+        writeValue(stream, value.toList())
+      }
+      is FilterItemMsg -> {
+        stream.write(139)
+        writeValue(stream, value.toList())
+      }
+      is FolderSizeMsg -> {
+        stream.write(140)
+        writeValue(stream, value.toList())
+      }
+      is SpaceItemMsg -> {
+        stream.write(141)
+        writeValue(stream, value.toList())
+      }
+      is SpaceReportMsg -> {
+        stream.write(142)
+        writeValue(stream, value.toList())
+      }
+      is SearchResultMsg -> {
+        stream.write(143)
+        writeValue(stream, value.toList())
+      }
+      is ViewPrefsMsg -> {
+        stream.write(144)
+        writeValue(stream, value.toList())
+      }
+      is FavoriteMsg -> {
+        stream.write(145)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -860,13 +1425,39 @@ interface FluLuksHostApi {
   fun listDir(sourceId: String, path: String, showHidden: Boolean, callback: (Result<List<EntryMsg>>) -> Unit)
   fun createFolder(sourceId: String, parent: String, name: String, callback: (Result<String>) -> Unit)
   fun rename(sourceId: String, path: String, newName: String, callback: (Result<String>) -> Unit)
-  fun deleteEntries(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit)
+  /** `permanent` faux : à la corbeille du stockage (définitif pour ce qui y est déjà). */
+  fun deleteEntries(sourceId: String, paths: List<String>, permanent: Boolean, callback: (Result<Unit>) -> Unit)
+  fun listTrash(sourceId: String, callback: (Result<List<TrashItemMsg>>) -> Unit)
+  fun restoreTrash(sourceId: String, ids: List<String>, callback: (Result<Unit>) -> Unit)
+  fun purgeTrash(sourceId: String, ids: List<String>, callback: (Result<Unit>) -> Unit)
+  fun emptyTrash(sourceId: String, callback: (Result<Unit>) -> Unit)
   fun openWith(sourceId: String, path: String, callback: (Result<Unit>) -> Unit)
   fun share(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit)
   fun startTransfer(srcId: String, paths: List<String>, dstId: String, dstDir: String, move: Boolean)
+  /** Compresse `paths` dans un ZIP `name` sous `dstDir` (même stockage) ; même créneau que les copies. */
+  fun startCompress(srcId: String, paths: List<String>, dstDir: String, name: String)
+  /** Extrait `archive` sous `dstDir` de `dstId`, dans un dossier au nom de l'archive si `intoNewFolder`. */
+  fun startExtract(srcId: String, archive: String, dstId: String, dstDir: String, intoNewFolder: Boolean)
   fun cancelTransfer()
   fun search(sourceId: String, path: String, query: String, showHidden: Boolean, callback: (Result<SearchResultMsg>) -> Unit)
   fun cancelSearch()
+  /** Analyse de l'espace sous `path` (une à la fois) ; `spaceChildren` relit un dossier de la dernière analyse. */
+  fun analyzeSpace(sourceId: String, path: String, callback: (Result<SpaceReportMsg>) -> Unit)
+  fun spaceChildren(sourceId: String, path: String, callback: (Result<SpaceReportMsg>) -> Unit)
+  fun cancelAnalysis()
+  /**
+   * Propriétés ; taille d'un dossier et SHA-256 d'un fichier calculés à la demande, arrêtés par `cancelHash`
+   * (`sha256` rend alors null ; progression par `onHashProgress`).
+   */
+  fun details(sourceId: String, path: String, callback: (Result<DetailsMsg>) -> Unit)
+  fun folderSize(sourceId: String, path: String, callback: (Result<FolderSizeMsg>) -> Unit)
+  fun sha256(sourceId: String, path: String, callback: (Result<String?>) -> Unit)
+  fun cancelHash()
+  /** Filtre rapide (`photos`, `videos`, `music`, `documents`, `archives`, `recent`) : 500 fichiers au plus, du plus récent. */
+  fun quickFilter(filter: String, callback: (Result<List<FilterItemMsg>>) -> Unit)
+  /** Renommage par lot : aperçu, puis tout ou rien (refusé si un nom est en conflit). */
+  fun previewRename(sourceId: String, paths: List<String>, rule: RenameRuleMsg, callback: (Result<List<RenamePreviewMsg>>) -> Unit)
+  fun applyRename(sourceId: String, paths: List<String>, rule: RenameRuleMsg, callback: (Result<Unit>) -> Unit)
   fun thumbnail(sourceId: String, path: String, sizePx: Long, callback: (Result<ByteArray?>) -> Unit)
   fun getViewPrefs(): ViewPrefsMsg
   fun setViewPrefs(prefs: ViewPrefsMsg)
@@ -1199,7 +1790,87 @@ interface FluLuksHostApi {
             val args = message as List<Any?>
             val sourceIdArg = args[0] as String
             val pathsArg = args[1] as List<String>
-            api.deleteEntries(sourceIdArg, pathsArg) { result: Result<Unit> ->
+            val permanentArg = args[2] as Boolean
+            api.deleteEntries(sourceIdArg, pathsArg, permanentArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.listTrash$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            api.listTrash(sourceIdArg) { result: Result<List<TrashItemMsg>> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.restoreTrash$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val idsArg = args[1] as List<String>
+            api.restoreTrash(sourceIdArg, idsArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.purgeTrash$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val idsArg = args[1] as List<String>
+            api.purgeTrash(sourceIdArg, idsArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.emptyTrash$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            api.emptyTrash(sourceIdArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(FluLuksApiPigeonUtils.wrapError(error))
@@ -1275,6 +1946,49 @@ interface FluLuksHostApi {
         }
       }
       run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.startCompress$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val srcIdArg = args[0] as String
+            val pathsArg = args[1] as List<String>
+            val dstDirArg = args[2] as String
+            val nameArg = args[3] as String
+            val wrapped: List<Any?> = try {
+              api.startCompress(srcIdArg, pathsArg, dstDirArg, nameArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.startExtract$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val srcIdArg = args[0] as String
+            val archiveArg = args[1] as String
+            val dstIdArg = args[2] as String
+            val dstDirArg = args[3] as String
+            val intoNewFolderArg = args[4] as Boolean
+            val wrapped: List<Any?> = try {
+              api.startExtract(srcIdArg, archiveArg, dstIdArg, dstDirArg, intoNewFolderArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
         val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelTransfer$separatedMessageChannelSuffix", codec)
         if (api != null) {
           channel.setMessageHandler { _, reply ->
@@ -1324,6 +2038,206 @@ interface FluLuksHostApi {
               FluLuksApiPigeonUtils.wrapError(exception)
             }
             reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.analyzeSpace$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathArg = args[1] as String
+            api.analyzeSpace(sourceIdArg, pathArg) { result: Result<SpaceReportMsg> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.spaceChildren$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathArg = args[1] as String
+            api.spaceChildren(sourceIdArg, pathArg) { result: Result<SpaceReportMsg> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelAnalysis$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.cancelAnalysis()
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.details$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathArg = args[1] as String
+            api.details(sourceIdArg, pathArg) { result: Result<DetailsMsg> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.folderSize$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathArg = args[1] as String
+            api.folderSize(sourceIdArg, pathArg) { result: Result<FolderSizeMsg> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.sha256$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathArg = args[1] as String
+            api.sha256(sourceIdArg, pathArg) { result: Result<String?> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelHash$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.cancelHash()
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.quickFilter$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val filterArg = args[0] as String
+            api.quickFilter(filterArg) { result: Result<List<FilterItemMsg>> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.previewRename$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathsArg = args[1] as List<String>
+            val ruleArg = args[2] as RenameRuleMsg
+            api.previewRename(sourceIdArg, pathsArg, ruleArg) { result: Result<List<RenamePreviewMsg>> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.applyRename$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathsArg = args[1] as List<String>
+            val ruleArg = args[2] as RenameRuleMsg
+            api.applyRename(sourceIdArg, pathsArg, ruleArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(null))
+              }
+            }
           }
         } else {
           channel.setMessageHandler(null)
@@ -1530,6 +2444,24 @@ class FluLuksEventsApi(private val binaryMessenger: BinaryMessenger, private val
 {
     val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
     val channelName = "dev.flutter.pigeon.fluluks.FluLuksEventsApi.onFormatProgress$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(pctArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(FluLuksApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  /** Pourcentage du calcul d'empreinte en cours ; null à la fin. */
+  fun onHashProgress(pctArg: Long?, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.fluluks.FluLuksEventsApi.onHashProgress$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
     channel.send(listOf(pctArg)) {
       if (it is List<*>) {

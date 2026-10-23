@@ -6,7 +6,7 @@ import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
 
-/// Barre de la copie en cours : progression et Annuler ; à la fin, le résultat pendant 4 s, une seule fois
+/// Barre de l'opération en cours (copie, déplacement, compression, extraction) : progression et Annuler ; à la fin, le résultat pendant 4 s, une seule fois
 /// pour toute l'application (accueil et explorateurs).
 class TransferBar extends StatefulWidget {
   const TransferBar({super.key, required this.state});
@@ -45,7 +45,7 @@ class _TransferBarState extends State<TransferBar> {
         final pct = t.totalBytes > 0 ? (t.doneBytes * 100 ~/ t.totalBytes).clamp(0, 100) : 0;
         final String text;
         if (!t.finished) {
-          text = Fr.transferLine(t.move, t.currentName, t.fileIndex, t.fileCount, pct);
+          text = Fr.transferLine(t.kind, t.currentName, t.fileIndex, t.fileCount, pct);
         } else if (t.cancelled) {
           text = Fr.transferCancelled;
         } else {

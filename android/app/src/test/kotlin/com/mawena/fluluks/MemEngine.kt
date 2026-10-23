@@ -33,6 +33,12 @@ open class MemEngine : Engine {
         .put("name", p.substring(p.lastIndexOf('/') + 1))
         .put("type", if (nodes[p] == null) "d" else "f")
         .put("size", nodes[p]?.size ?: 0).put("mtime", 0)
+        .also { o -> owner?.let { (mode, uid, gid) -> o.put("mode", mode).put("uid", uid).put("gid", gid) } }
+
+    /** (mode, uid, gid) rendus par stat et list ; null : clés absentes. */
+    var owner: Triple<Int, Long, Long>? = null
+    /** Système de fichiers rendu par statfs. */
+    var fs = "ext4"
 
     override fun version() = "mem"
     override fun strerror(code: Int) = ByteArray(0)
@@ -61,7 +67,7 @@ open class MemEngine : Engine {
     override fun mount(disk: Long, partIndex: Int, pass: ByteArray?, writable: Boolean) = 7L
     override fun unmount(vol: Long, force: Boolean) = 0
     override fun statfs(vol: Long) =
-        """{"total":$total,"free":$free,"label":"Mem","read_only":$readOnly,"ro_reason":"$roReason","needs_recovery":false}""".toByteArray()
+        """{"total":$total,"free":$free,"label":"Mem","read_only":$readOnly,"ro_reason":"$roReason","needs_recovery":false,"fs":"$fs"}""".toByteArray()
     override fun sync(vol: Long) = 0
     override fun truncate(file: Long, size: Long) = 0
 

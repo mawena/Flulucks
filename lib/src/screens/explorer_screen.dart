@@ -6,9 +6,13 @@ import '../state/app_state.dart';
 import '../state/sorting.dart';
 import '../strings_fr.dart';
 import '../widgets/clipboard_bar.dart';
+import '../widgets/properties_sheet.dart';
 import '../widgets/thumb.dart';
 import '../widgets/transfer_bar.dart';
+import 'batch_rename_screen.dart';
 import 'search_screen.dart';
+import 'space_screen.dart';
+import 'trash_screen.dart';
 
 /// Ouvre l'explorateur sur [sourceId] (à la racine, ou sur [path]).
 Future<void> openExplorer(BuildContext context, AppState state, String sourceId, {String path = '/'}) =>
@@ -23,7 +27,16 @@ String parentOf(String path) {
 
 String nameOf(String path) => path.substring(path.lastIndexOf('/') + 1);
 
-/// Explorateur d'un stockage : liste ou grille, vignettes, tri, sélection, presse-papiers, copies.
+/// Extensions des archives que le moteur sait extraire (les doubles d'abord).
+const _archiveExtensions = ['.tar.gz', '.tar.xz', '.tgz', '.txz', '.zip', '.7z', '.rar', '.tar', '.gz', '.xz'];
+
+/// Archive reconnue à l'extension : un tap propose de l'extraire.
+bool isArchiveName(String name) {
+  final n = name.toLowerCase();
+  return _archiveExtensions.any((e) => n.length > e.length && n.endsWith(e));
+}
+
+/// Explorateur d'un stockage : liste ou grille, vignettes, tri, sélection, presse-papiers, copies, archives.
 class ExplorerScreen extends StatefulWidget {
   const ExplorerScreen({super.key, required this.state, required this.sourceId, this.path = '/'});
 
@@ -171,7 +184,67 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
   void _tap(EntryMsg e) {
     if (_selected.isNotEmpty) return _toggle(e);
     if (e.type == 'dir') return _go(e.path);
+    if (isArchiveName(e.name)) {
+      _archiveSheet(e);
+      return;
+    }
     _run(() => state.api.openWith(widget.sourceId, e.path));
+  }
+
+  /// Archive touchée : Extraire ici (nouveau dossier au nom de l'archive), Extraire vers… (dossier choisi
+  /// ensuite, comme un collage), ou Ouvrir avec….
+  Future<void> _archiveSheet(EntryMsg e) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(
+            leading: const Icon(Icons.unarchive),
+            title: const Text(Fr.extractHere),
+            enabled: !_readOnly,
+            onTap: () => Navigator.pop(ctx, 'here'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.drive_file_move),
+            title: const Text(Fr.extractTo),
+            onTap: () => Navigator.pop(ctx, 'to'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.open_in_new),
+            title: const Text(Fr.openWith),
+            onTap: () => Navigator.pop(ctx, 'open'),
+          ),
+        ]),
+      ),
+    );
+    if (!mounted) return;
+    switch (choice) {
+      case 'here':
+        await state.startExtract(widget.sourceId, e.path, widget.sourceId, _path, intoNewFolder: true);
+        _showStateError();
+      case 'to':
+        state.setPendingExtract(widget.sourceId, e.path);
+      case 'open':
+        await _run(() => state.api.openWith(widget.sourceId, e.path));
+    }
+  }
+
+  /// « Extraire ici » de la barre : l'archive choisie par « Extraire vers… » va dans le dossier ouvert.
+  Future<void> _extractPending() async {
+    final x = state.pendingExtract;
+    if (x == null) return;
+    await state.startExtract(x.sourceId, x.path, widget.sourceId, _path, intoNewFolder: true);
+    if (_showStateError()) return;
+    state.clearPendingExtract(); // extraction lancée : la barre disparaît
+  }
+
+  /// Montre l'erreur de la dernière action de l'état (opération refusée…) ; vrai s'il y en avait une.
+  bool _showStateError() {
+    final err = state.lastError;
+    if (err == null) return false;
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err)));
+    state.clearError();
+    return true;
   }
 
   void _toggle(EntryMsg e) => setState(() => _selected.contains(e.path) ? _selected.remove(e.path) : _selected.add(e.path));
@@ -216,22 +289,25 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     });
   }
 
+  /// Supprimer : à la corbeille du stockage, ou définitivement au choix ; dans la corbeille, toujours définitif.
   Future<void> _delete() async {
     final paths = _selected.toList();
-    final ok = await showDialog<bool>(
+    final inTrash = isInTrash(_path);
+    final permanent = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(paths.length == 1 ? Fr.deleteOne(nameOf(paths.single)) : Fr.deleteMany(paths.length)),
-        content: const Text(Fr.deleteBody),
+        content: Text(inTrash ? Fr.deleteBody : Fr.deleteToTrashBody),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(Fr.cancel)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(Fr.delete)),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text(Fr.cancel)),
+          if (!inTrash) TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(Fr.deletePermanently)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, inTrash), child: const Text(Fr.delete)),
         ],
       ),
     );
-    if (ok != true) return;
+    if (permanent == null) return;
     await _run(() async {
-      await state.api.deleteEntries(widget.sourceId, paths);
+      await state.api.deleteEntries(widget.sourceId, paths, permanent);
       setState(_selected.clear);
       await _load(quiet: true);
     });
@@ -246,12 +322,49 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     final c = state.clipboard;
     if (c == null) return;
     await state.startTransfer(c.sourceId, c.paths, widget.sourceId, _path, move: c.move);
-    if (state.lastError != null && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(state.lastError!)));
-      state.clearError();
-      return;
-    }
+    if (_showStateError()) return;
     state.clearClipboard(); // copie ou déplacement lancé : « Coller ici » disparaît
+  }
+
+  /// Renommage par lot de la sélection, dans l'ordre affiché (la numérotation le suit).
+  Future<void> _batchRename() async {
+    final v = state.viewPrefs;
+    final paths = [
+      for (final e in sortEntries(_entries, v.sort, v.ascending))
+        if (_selected.contains(e.path)) e.path,
+    ];
+    final done = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => BatchRenameScreen(state: state, sourceId: widget.sourceId, paths: paths),
+    ));
+    if (done != true || !mounted) return;
+    setState(_selected.clear);
+    await _load(quiet: true);
+  }
+
+  /// Propriétés de l'élément sélectionné (la sélection est quittée).
+  Future<void> _properties() {
+    final path = _selected.single;
+    setState(_selected.clear);
+    return showProperties(context, state, widget.sourceId, path);
+  }
+
+  /// Compresse la sélection dans un ZIP du dossier ouvert ; nom proposé : l'élément seul (sans son extension
+  /// pour un fichier) ou « Archive ».
+  Future<void> _compress() async {
+    final paths = _selected.toList();
+    var proposed = Fr.archiveDefault;
+    if (paths.length == 1) {
+      final n = nameOf(paths.single);
+      final dot = n.lastIndexOf('.');
+      final isFile = _entries.any((e) => e.path == paths.single && e.type == 'file');
+      proposed = isFile && dot > 0 ? n.substring(0, dot) : n;
+    }
+    var name = (await _askName(Fr.compress, Fr.archiveName, initial: proposed))?.trim();
+    if (name == null || name.isEmpty) return;
+    if (!name.toLowerCase().endsWith('.zip')) name = '$name.zip';
+    await state.startCompress(widget.sourceId, paths, _path, name);
+    if (_showStateError()) return;
+    setState(_selected.clear);
   }
 
   String _subtitle(EntryMsg e) {
@@ -276,11 +389,21 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             icon: const Icon(Icons.share),
             onPressed: hasDir ? null : () => _run(() => state.api.share(widget.sourceId, _selected.toList())),
           ),
-          IconButton(
-              tooltip: Fr.rename,
-              icon: const Icon(Icons.drive_file_rename_outline),
-              onPressed: _readOnly || _selected.length != 1 ? null : _rename),
           IconButton(tooltip: Fr.delete, icon: const Icon(Icons.delete), onPressed: _readOnly ? null : _delete),
+          // le reste dans un menu : la barre tient sur la largeur d'un téléphone
+          PopupMenuButton<String>(
+            tooltip: Fr.moreActions,
+            onSelected: (a) => switch (a) {
+              'rename' => _selected.length == 1 ? _rename() : _batchRename(),
+              'compress' => _compress(),
+              _ => _properties(),
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'rename', enabled: !_readOnly, child: const Text(Fr.rename)),
+              PopupMenuItem(value: 'compress', enabled: !_readOnly, child: const Text(Fr.compress)),
+              PopupMenuItem(value: 'properties', enabled: _selected.length == 1, child: const Text(Fr.properties)),
+            ],
+          ),
         ],
       );
     }
@@ -313,6 +436,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             'asc' => _setPrefs(ascending: true),
             'desc' => _setPrefs(ascending: false),
             'grid' => _setPrefs(grid: !v.grid),
+            'trash' => openTrash(context, state, widget.sourceId),
+            'space' => openSpace(context, state, widget.sourceId),
             _ => _setPrefs(showHidden: !v.showHidden),
           },
           itemBuilder: (_) => [
@@ -325,6 +450,11 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             const PopupMenuDivider(),
             PopupMenuItem(value: 'grid', child: Text(v.grid ? Fr.list : Fr.grid)),
             CheckedPopupMenuItem(value: 'hidden', checked: v.showHidden, child: const Text(Fr.showHidden)),
+            if (_path == '/') ...[
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'trash', child: Text(Fr.trash)),
+              const PopupMenuItem(value: 'space', child: Text(Fr.spaceAnalysis)),
+            ],
           ],
         ),
       ],
@@ -414,7 +544,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
         ]),
         // sous le bouton flottant, qui ne les masque pas
         bottomNavigationBar: Column(mainAxisSize: MainAxisSize.min, children: [
-          ClipboardBar(state: state, canPaste: !_readOnly, onPaste: _paste),
+          ClipboardBar(state: state, canPaste: !_readOnly, onPaste: _paste, onExtract: _extractPending),
           TransferBar(state: state),
         ]),
         floatingActionButton: _readOnly || _selected.isNotEmpty

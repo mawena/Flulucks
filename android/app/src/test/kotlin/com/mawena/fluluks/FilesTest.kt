@@ -85,7 +85,7 @@ class FilesTest {
             assertEquals(bad, 0, e.calls)
             refused { Files.list("phone", bad, false) }
             refused { Files.createFolder(volId, bad, "x") }
-            refused { Files.delete(volId, listOf(bad)) }
+            refused { Files.delete(volId, listOf(bad), permanent = true) }
         }
         assertFalse(File(tmp.root.parentFile, "b").exists())
     }
@@ -109,11 +109,11 @@ class FilesTest {
         fill(volId)
         Files.createFolder(volId, "/A", "sous")
         val before = VolumeManager.writeGeneration(volId)
-        Files.delete(volId, listOf("/A", "/a.txt", "/b.txt"))
+        Files.delete(volId, listOf("/A", "/a.txt", "/b.txt"), permanent = true)
         assertEquals(before + 1, VolumeManager.writeGeneration(volId))
         assertEquals(listOf("c"), Files.list(volId, "/", false).map { it.name })
         fill("phone")
-        Files.delete("phone", listOf("/A", "/a.txt"))
+        Files.delete("phone", listOf("/A", "/a.txt"), permanent = true)
         assertEquals(listOf("c", "b.txt"), Files.list("phone", "/", false).map { it.name })
     }
 

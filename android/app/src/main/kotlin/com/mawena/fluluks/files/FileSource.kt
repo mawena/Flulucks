@@ -3,6 +3,7 @@ package com.mawena.fluluks.files
 import android.net.Uri
 import com.mawena.fluluks.engine.FileType
 import com.mawena.fluluks.provider.DocumentIds
+import java.io.File
 import java.io.FileNotFoundException
 import java.io.InputStream
 import java.io.OutputStream
@@ -71,6 +72,39 @@ interface FileSource {
 
     /** URI de contenu lisible par une autre application (Ouvrir avec, Partager). */
     fun contentUri(path: String): Uri
+
+    /** Propriétés de [path] (null s'il n'existe pas) ; droits et propriétaire seulement sur ext4 ([Details]). */
+    fun details(path: String): Details? =
+        stat(path)?.let { Details(it.name, it.path, it.type, it.size, it.mtime, null, null, null, fs = "") }
+
+    /** Fichier ordinaire [path] pour le lecteur d'archives natif (phase 9), qui le ferme. */
+    fun openNative(path: String): NativeIn
+
+    /** Crée le fichier [name] sous [parent] (nom unique) pour l'écrivain ZIP natif ; rend son chemin. */
+    fun createNative(parent: String, name: String): Pair<String, NativeOut>
+}
+
+/**
+ * Entrée d'une archive pour le moteur (Engine.arcOpenFd / arcOpenFile). Le descripteur ou la poignée
+ * appartient ensuite à l'archive, qui le ferme, même si l'ouverture échoue.
+ */
+sealed class NativeIn {
+    /** Fichier local, ouvert en descripteur au moment de l'ouverture de l'archive. */
+    class Fd(val file: File) : NativeIn()
+
+    /**
+     * Fichier d'un volume du moteur (poignée de openFile) et sa taille ; [onActivity] à chaque lecture (activité du
+     * volume), lève une erreur si le volume a été fermé.
+     */
+    class EngineFile(val handle: Long, val size: Long, val onActivity: () -> Unit) : NativeIn()
+}
+
+/** Destination d'un ZIP écrit par le moteur (Engine.arcwOpenFd / arcwOpenFile), fermée par l'archive. */
+sealed class NativeOut {
+    class Fd(val file: File) : NativeOut()
+
+    /** [onClosed] après la fermeture (synchronisation programmée, vues prévenues). */
+    class EngineFile(val handle: Long, val onClosed: () -> Unit) : NativeOut()
 }
 
 internal fun FileType.isDir() = this == FileType.DIR

@@ -160,9 +160,105 @@ class FakeHostApi implements HostApi {
     return '${path.substring(0, path.lastIndexOf('/'))}/$newName';
   }
 
+  /// « delete … » : définitif ; « trash … » : mis à la corbeille.
   @override
-  Future<void> deleteEntries(String sourceId, List<String> paths) async =>
-      calls.add('delete $sourceId ${paths.join(',')}');
+  Future<void> deleteEntries(String sourceId, List<String> paths, bool permanent) async =>
+      calls.add('${permanent ? 'delete' : 'trash'} $sourceId ${paths.join(',')}');
+
+  /// Analyses de l'espace par dossier ; [spaceFuture] remplace la réponse de analyzeSpace (analyse en cours).
+  final space = <String, SpaceReportMsg>{};
+  Future<SpaceReportMsg>? spaceFuture;
+
+  @override
+  Future<SpaceReportMsg> analyzeSpace(String sourceId, String path) async {
+    calls.add('analyzeSpace $sourceId $path');
+    return spaceFuture ?? space[path]!;
+  }
+
+  @override
+  Future<SpaceReportMsg> spaceChildren(String sourceId, String path) async {
+    calls.add('spaceChildren $sourceId $path');
+    return space[path]!;
+  }
+
+  @override
+  Future<void> cancelAnalysis() async => calls.add('cancelAnalysis');
+
+  /// Propriétés par chemin ; taille des dossiers ; réponse de sha256 (null : annulé).
+  final detailsByPath = <String, DetailsMsg>{};
+  final folderSizes = <String, FolderSizeMsg>{};
+  Future<String?>? sha256Future;
+  int hashCancels = 0;
+
+  @override
+  Future<DetailsMsg> details(String sourceId, String path) async {
+    calls.add('details $sourceId $path');
+    return detailsByPath[path]!;
+  }
+
+  @override
+  Future<FolderSizeMsg> folderSize(String sourceId, String path) async {
+    calls.add('folderSize $sourceId $path');
+    return folderSizes[path]!;
+  }
+
+  @override
+  Future<String?> sha256(String sourceId, String path) async {
+    calls.add('sha256 $sourceId $path');
+    return sha256Future ?? 'f' * 64;
+  }
+
+  @override
+  Future<void> cancelHash() async => hashCancels++;
+
+  /// Résultats des filtres rapides (vide si absent).
+  final filters = <String, List<FilterItemMsg>>{};
+
+  @override
+  Future<List<FilterItemMsg>> quickFilter(String filter) async {
+    calls.add('quickFilter $filter');
+    return List.of(filters[filter] ?? const <FilterItemMsg>[]);
+  }
+
+  /// Aperçu du renommage par lot.
+  List<RenamePreviewMsg> Function(List<String> paths, RenameRuleMsg rule)? renamer;
+
+  @override
+  Future<List<RenamePreviewMsg>> previewRename(String sourceId, List<String> paths, RenameRuleMsg rule) async {
+    calls.add('previewRename $sourceId ${paths.join(',')} ${rule.mode}');
+    return renamer!(paths, rule);
+  }
+
+  @override
+  Future<void> applyRename(String sourceId, List<String> paths, RenameRuleMsg rule) async =>
+      calls.add('applyRename $sourceId ${paths.join(',')} ${rule.mode} ${rule.base} ${rule.start}');
+
+  /// Corbeille de chaque stockage.
+  final trash = <String, List<TrashItemMsg>>{};
+
+  @override
+  Future<List<TrashItemMsg>> listTrash(String sourceId) async {
+    calls.add('listTrash $sourceId');
+    return List.of(trash[sourceId] ?? const <TrashItemMsg>[]);
+  }
+
+  @override
+  Future<void> restoreTrash(String sourceId, List<String> ids) async {
+    calls.add('restoreTrash $sourceId ${ids.join(',')}');
+    trash[sourceId]?.removeWhere((t) => ids.contains(t.id));
+  }
+
+  @override
+  Future<void> purgeTrash(String sourceId, List<String> ids) async {
+    calls.add('purgeTrash $sourceId ${ids.join(',')}');
+    trash[sourceId]?.removeWhere((t) => ids.contains(t.id));
+  }
+
+  @override
+  Future<void> emptyTrash(String sourceId) async {
+    calls.add('emptyTrash $sourceId');
+    trash[sourceId]?.clear();
+  }
 
   @override
   Future<void> openWith(String sourceId, String path) async => calls.add('openWith $sourceId $path');
@@ -179,6 +275,17 @@ class FakeHostApi implements HostApi {
 
   @override
   Future<void> cancelTransfer() async => transferCancels++;
+
+  final compresses = <(String, List<String>, String, String)>[];
+  final extracts = <(String, String, String, String, bool)>[];
+
+  @override
+  Future<void> startCompress(String srcId, List<String> paths, String dstDir, String name) async =>
+      compresses.add((srcId, paths, dstDir, name));
+
+  @override
+  Future<void> startExtract(String srcId, String archive, String dstId, String dstDir, bool intoNewFolder) async =>
+      extracts.add((srcId, archive, dstId, dstDir, intoNewFolder));
 
   /// Réponse de [search] selon la requête ; un completer dans [searchGates] la retarde.
   SearchResultMsg Function(String query) searchResult = (_) => SearchResultMsg(entries: [], truncated: false);

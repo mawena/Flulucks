@@ -186,10 +186,10 @@ void main() {
     await tester.tap(find.byTooltip('Supprimer'));
     await tester.pumpAndSettle();
     expect(find.text('Supprimer « b.txt » ?'), findsOneWidget);
-    expect(find.text('La suppression est définitive.'), findsOneWidget);
+    expect(find.text('Les éléments restent 30 jours dans la corbeille de ce stockage.'), findsOneWidget);
     await tester.tap(find.text('Annuler'));
     await tester.pumpAndSettle();
-    expect(api.calls.where((c) => c.startsWith('delete')), isEmpty);
+    expect(api.calls.where((c) => c.startsWith('delete') || c.startsWith('trash')), isEmpty);
     await tester.tap(find.text('a.jpg'));
     await tester.pump();
     await tester.tap(find.byTooltip('Supprimer'));
@@ -197,14 +197,16 @@ void main() {
     expect(find.text('Supprimer 2 éléments ?'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Supprimer'));
     await tester.pumpAndSettle();
-    expect(api.calls.where((c) => c.startsWith('delete')).single, anyOf('delete phone /b.txt,/a.jpg', 'delete phone /a.jpg,/b.txt'));
+    expect(api.calls.where((c) => c.startsWith('trash')).single, anyOf('trash phone /b.txt,/a.jpg', 'trash phone /a.jpg,/b.txt'));
   });
 
   testWidgets('renameDialog', (tester) async {
     final api = api0();
     await pump(tester, api);
     await longPress(tester, 'b.txt');
-    await tester.tap(find.byTooltip('Renommer'));
+    await tester.tap(find.byTooltip("Plus d'actions"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Renommer'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(TextField, 'b.txt'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'c.txt');
@@ -214,7 +216,10 @@ void main() {
     await longPress(tester, 'a.jpg');
     await tester.tap(find.text('b.txt'));
     await tester.pump();
-    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.drive_file_rename_outline)).onPressed, isNull);
+    await tester.tap(find.byTooltip("Plus d'actions"));
+    await tester.pumpAndSettle();
+    // plusieurs éléments : renommage par lot (test/batch_rename_test.dart)
+    expect(tester.widget<PopupMenuItem<String>>(find.widgetWithText(PopupMenuItem<String>, 'Renommer')).enabled, isTrue);
   });
 
   testWidgets('shareDisabledForFolder', (tester) async {
@@ -234,7 +239,7 @@ void main() {
     final state = await pump(tester, api);
     await state.startTransfer('v1', ['/film.mkv'], 'phone', '/', move: false);
     TransferMsg t({int done = 50, bool finished = false, String? error}) => TransferMsg(
-        move: false, currentName: 'film.mkv', fileIndex: 1, fileCount: 1, doneBytes: done, totalBytes: 200,
+        kind: 'copy', move: false, currentName: 'film.mkv', fileIndex: 1, fileCount: 1, doneBytes: done, totalBytes: 200,
         finished: finished, cancelled: false, error: error, elapsedMs: 0);
     state.onTransferChanged(t());
     await tester.pump();
@@ -297,7 +302,7 @@ void main() {
   });
 
   TransferMsg done({int bytes = 200, int elapsedMs = 0, String? error}) => TransferMsg(
-      move: false, currentName: 'film.mkv', fileIndex: 1, fileCount: 1, doneBytes: bytes, totalBytes: bytes,
+      kind: 'copy', move: false, currentName: 'film.mkv', fileIndex: 1, fileCount: 1, doneBytes: bytes, totalBytes: bytes,
       finished: true, cancelled: false, error: error, elapsedMs: elapsedMs);
 
   testWidgets('transferDoneShowsRate', (tester) async {

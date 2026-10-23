@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#include <fcntl.h>
 #include <pthread.h>
 #include <sched.h>
 #include <stdint.h>
@@ -7,6 +8,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <zlib.h>
 
 #include "cJSON.h"
 #include "fluluks/error.h"
@@ -884,6 +886,215 @@ static void test_format_pendant_montage(void) {
   unlink(img);
 }
 
+/* ---------- archives (phase 9, T4) ---------- */
+
+/* Disque image formaté en exFAT, volume monté en écriture ; 0 si tout est prêt. */
+static int disque_exfat(char *img, size_t cap, const char *nom, int64_t *d, int64_t *v) {
+  char contenu[32];
+  image_vierge(img, cap, nom);
+  *d = fj_open_image(img, false);
+  if (*d <= 0) return -1;
+  if (fj_format(*d, "{\"fs\":\"exfat\"}", NULL, 0, NULL, NULL) != FL_OK) return -2;
+  int idx = partition_unique(*d, contenu, sizeof contenu);
+  *v = fj_mount(*d, (uint32_t)idx, NULL, 0, true);
+  return *v > 0 ? 0 : -3;
+}
+
+/* Écrit un ZIP (un dossier, un fichier de 100 000 octets, octet i = i mod 251) sur l'archive ouverte `w`. */
+static int zip_exemple(int64_t w) {
+  int rc = fj_arcw_add(w, "{\"name\":\"été\",\"type\":\"d\",\"size\":0,\"mtime\":1714564800,\"store\":false}");
+  if (rc != FL_OK) return rc;
+  rc = fj_arcw_add(w, "{\"name\":\"été/a.bin\",\"type\":\"f\",\"size\":100000,\"mtime\":1714564800,\"store\":false}");
+  if (rc != FL_OK) return rc;
+  static uint8_t buf[100000];
+  for (int i = 0; i < 100000; i++) buf[i] = (uint8_t)(i % 251);
+  return fj_arcw_write(w, buf, sizeof buf);
+}
+
+/* Relit le ZIP ouvert `r` : noms (base64 des octets bruts) et contenu. */
+static void relire_exemple(int64_t r) {
+  fl_json j;
+  static uint8_t buf[200000];
+  const char *attendus[] = {"w6l0w6kv", "w6l0w6kvYS5iaW4="}; /* « été/ », « été/a.bin » */
+  for (int k = 0; k < 2; k++) {
+    fl_json_init(&j);
+    TT_ASSERT_EQ(fj_arc_next(r, &j), 1);
+    cJSON *e = cJSON_Parse(j.buf);
+    fl_json_free(&j);
+    TT_ASSERT(e != NULL);
+    TT_ASSERT_STR_EQ(cJSON_GetObjectItem(e, "name")->valuestring, attendus[k]);
+    TT_ASSERT_STR_EQ(cJSON_GetObjectItem(e, "type")->valuestring, k ? "f" : "d");
+    TT_ASSERT_EQ((int64_t)cJSON_GetObjectItem(e, "size")->valuedouble, k ? 100000 : 0);
+    TT_ASSERT(!cJSON_IsTrue(cJSON_GetObjectItem(e, "encrypted")));
+    TT_ASSERT(cJSON_IsFalse(cJSON_GetObjectItem(e, "raw")));
+    cJSON_Delete(e);
+    int64_t total = 0, n;
+    while ((n = fj_arc_read(r, buf + total, sizeof buf - (size_t)total)) > 0) total += n;
+    TT_ASSERT_EQ(n, 0);
+    TT_ASSERT_EQ(total, k ? 100000 : 0);
+    int bon = 1;
+    for (int64_t i = 0; i < total; i++) bon &= buf[i] == (uint8_t)(i % 251);
+    TT_ASSERT(bon);
+  }
+  fl_json_init(&j);
+  TT_ASSERT_EQ(fj_arc_next(r, &j), 0);
+  fl_json_free(&j);
+}
+
+static void test_arc_par_jni(void) {
+  char img[4200];
+  int64_t d = 0, v = 0;
+  TT_ASSERT_EQ(disque_exfat(img, sizeof img, "arc-jni.img", &d, &v), 0);
+  /* sur le disque : écrit par le moteur, relu par le moteur ; la poignée d'archive possède le fichier */
+  int64_t f = fj_open_file(v, "/a.zip", FL_O_RDWR | FL_O_CREAT);
+  TT_ASSERT(f > 0);
+  int64_t w = fj_arcw_open_file(f);
+  TT_ASSERT(w > 0);
+  TT_ASSERT_EQ(zip_exemple(w), FL_OK);
+  TT_ASSERT_EQ(fj_arcw_close(w, true), FL_OK);
+  TT_ASSERT_EQ(fj_close_file(f), FL_EINVAL); /* déjà fermé avec l'archive */
+  fl_json j;
+  fl_json_init(&j);
+  cJSON *st = json_de(fj_stat(v, "/a.zip", &j), &j);
+  fl_json_free(&j);
+  TT_ASSERT(st != NULL);
+  int64_t taille = (int64_t)cJSON_GetObjectItem(st, "size")->valuedouble;
+  cJSON_Delete(st);
+  f = fj_open_file(v, "/a.zip", FL_O_RDONLY);
+  int64_t r = fj_arc_open_file(f, taille);
+  TT_ASSERT(r > 0);
+  relire_exemple(r);
+  TT_ASSERT_EQ(fj_arc_close(r), FL_OK);
+  /* par descripteur (téléphone) : le descripteur appartient à la poignée */
+  char td[4096], zip[4200];
+  TT_ASSERT_EQ(fu_tmpdir(td, sizeof td), 0);
+  snprintf(zip, sizeof zip, "%s/arc-fd.zip", td);
+  int fd = open(zip, O_RDWR | O_CREAT | O_TRUNC, 0644);
+  TT_ASSERT(fd >= 0);
+  w = fj_arcw_open_fd(fd);
+  TT_ASSERT(w > 0);
+  TT_ASSERT_EQ(zip_exemple(w), FL_OK);
+  TT_ASSERT_EQ(fj_arcw_close(w, true), FL_OK);
+  TT_ASSERT(fcntl(fd, F_GETFD) < 0); /* fermé */
+  r = fj_arc_open_fd(open(zip, O_RDONLY));
+  TT_ASSERT(r > 0);
+  relire_exemple(r);
+  TT_ASSERT_EQ(fj_arc_close(r), FL_OK);
+  TT_ASSERT_EQ(fj_arc_open_fd(open(img, O_RDONLY)), FL_ENOTSUP); /* une image de disque n'est pas une archive */
+  unlink(zip);
+  TT_ASSERT_EQ(fj_unmount(v, false), FL_OK);
+  TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
+  TT_ASSERT_EQ(fj_debug_used(), 0);
+  unlink(img);
+}
+
+/* Flux compressé seul (.gz sans nom d'origine, comme gzip -n) : son unique entrée est marquée « raw », pour que
+ * Kotlin la nomme d'après l'archive plutôt que « data ». */
+static void test_arc_flux_brut(void) {
+  char td[4096], gz[4200];
+  TT_ASSERT_EQ(fu_tmpdir(td, sizeof td), 0);
+  snprintf(gz, sizeof gz, "%s/seul.txt.gz", td);
+  gzFile g = gzopen(gz, "wb");
+  TT_ASSERT(g != NULL);
+  TT_ASSERT_EQ(gzwrite(g, "bonjour", 7), 7);
+  TT_ASSERT_EQ(gzclose(g), Z_OK);
+  int64_t r = fj_arc_open_fd(open(gz, O_RDONLY));
+  TT_ASSERT(r > 0);
+  fl_json j;
+  fl_json_init(&j);
+  TT_ASSERT_EQ(fj_arc_next(r, &j), 1);
+  cJSON *e = cJSON_Parse(j.buf);
+  fl_json_free(&j);
+  TT_ASSERT(e != NULL);
+  TT_ASSERT(cJSON_IsTrue(cJSON_GetObjectItem(e, "raw")));
+  cJSON_Delete(e);
+  TT_ASSERT_EQ(fj_arc_close(r), FL_OK);
+  unlink(gz);
+  TT_ASSERT_EQ(fj_debug_used(), 0);
+}
+
+/* Disque fermé (éjecté, arraché) avec une archive ouverte en lecture et une en écriture : fermées avec lui,
+ * leurs poignées périmées, rien ne fuit. */
+static void test_arc_disque_ferme(void) {
+  char img[4200];
+  int64_t d = 0, v = 0;
+  TT_ASSERT_EQ(disque_exfat(img, sizeof img, "arc-ferme.img", &d, &v), 0);
+  int64_t f = fj_open_file(v, "/a.zip", FL_O_RDWR | FL_O_CREAT);
+  int64_t w = fj_arcw_open_file(f);
+  TT_ASSERT_EQ(zip_exemple(w), FL_OK);
+  TT_ASSERT_EQ(fj_arcw_close(w, true), FL_OK);
+  fl_json j;
+  fl_json_init(&j);
+  cJSON *st = json_de(fj_stat(v, "/a.zip", &j), &j);
+  fl_json_free(&j);
+  TT_ASSERT(st != NULL);
+  int64_t taille = (int64_t)cJSON_GetObjectItem(st, "size")->valuedouble;
+  cJSON_Delete(st);
+  f = fj_open_file(v, "/a.zip", FL_O_RDONLY);
+  int64_t r = fj_arc_open_file(f, taille);
+  TT_ASSERT(r > 0);
+  int64_t f2 = fj_open_file(v, "/b.zip", FL_O_RDWR | FL_O_CREAT);
+  int64_t w2 = fj_arcw_open_file(f2);
+  TT_ASSERT(w2 > 0);
+  TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
+  uint8_t buf[16];
+  TT_ASSERT_EQ(fj_arc_read(r, buf, sizeof buf), FL_EINVAL);
+  TT_ASSERT_EQ(fj_arcw_write(w2, buf, sizeof buf), FL_EINVAL);
+  TT_ASSERT_EQ(fj_arc_close(r), FL_EINVAL);
+  TT_ASSERT_EQ(fj_debug_used(), 0);
+  unlink(img);
+}
+
+/* Propriétés (phase 9) : fj_stat et fj_list rendent le mode, l'uid et le gid. Sur ext4, un fichier est créé en
+ * 0644 et un dossier en 0755, au propriétaire du parent (racine formatée pour 1234:5678). */
+static int64_t nombre(const cJSON *o, const char *cle) {
+  const cJSON *n = cJSON_GetObjectItem(o, cle);
+  return cJSON_IsNumber(n) ? (int64_t)n->valuedouble : -1;
+}
+
+static void test_stat_droits(void) {
+  char img[4200], contenu[32];
+  image_vierge(img, sizeof img, "stat-droits.img");
+  int64_t d = fj_open_image(img, false);
+  TT_ASSERT(d > 0);
+  TT_ASSERT_EQ(fj_format(d, "{\"fs\":\"ext4\",\"uid\":1234,\"gid\":5678}", NULL, 0, NULL, NULL), FL_OK);
+  int idx = partition_unique(d, contenu, sizeof contenu);
+  int64_t v = fj_mount(d, (uint32_t)idx, NULL, 0, true);
+  TT_ASSERT(v > 0);
+  int64_t f = fj_open_file(v, "/a.txt", FL_O_RDWR | FL_O_CREAT);
+  TT_ASSERT(f > 0);
+  TT_ASSERT_EQ(fj_close_file(f), FL_OK);
+  TT_ASSERT_EQ(fj_mkdir(v, "/D"), FL_OK);
+  const char *chemins[] = {"/a.txt", "/D"};
+  const int64_t modes[] = {0100644, 040755};
+  fl_json j;
+  for (int k = 0; k < 2; k++) {
+    fl_json_init(&j);
+    cJSON *st = json_de(fj_stat(v, chemins[k], &j), &j);
+    fl_json_free(&j);
+    TT_ASSERT(st != NULL);
+    TT_ASSERT_EQ(nombre(st, "mode"), modes[k]);
+    TT_ASSERT_EQ(nombre(st, "uid"), 1234);
+    TT_ASSERT_EQ(nombre(st, "gid"), 5678);
+    cJSON_Delete(st);
+  }
+  fl_json_init(&j);
+  cJSON *l = json_de(fj_list(v, "/", &j), &j);
+  fl_json_free(&j);
+  TT_ASSERT(cJSON_IsArray(l));
+  int vus = 0;
+  for (const cJSON *e = l ? l->child : NULL; e; e = e->next) {
+    const char *n = cJSON_GetStringValue(cJSON_GetObjectItem(e, "name"));
+    if (n && !strcmp(n, "a.txt")) vus += nombre(e, "mode") == 0100644 && nombre(e, "uid") == 1234;
+  }
+  TT_ASSERT_EQ(vus, 1);
+  cJSON_Delete(l);
+  TT_ASSERT_EQ(fj_unmount(v, false), FL_OK);
+  TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
+  TT_ASSERT_EQ(fj_debug_used(), 0);
+  unlink(img);
+}
+
 int main(void) {
   srand((unsigned)time(NULL));
   TT_RUN(test_scan_gpt_luks2);
@@ -906,6 +1117,10 @@ int main(void) {
   TT_RUN(test_handles_luks2_ntfs);
   TT_RUN(test_format_par_jni);
   TT_RUN(test_format_pendant_montage);
+  TT_RUN(test_arc_par_jni);
+  TT_RUN(test_arc_disque_ferme);
+  TT_RUN(test_arc_flux_brut);
+  TT_RUN(test_stat_droits);
   if (!tt_failures && g_saute) return 77; /* SKIP_RETURN_CODE de CTest */
   TT_MAIN_END();
 }

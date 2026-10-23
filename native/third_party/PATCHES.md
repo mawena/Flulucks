@@ -547,3 +547,34 @@ formatage dans le même processus : use-after-free vu par ASan). Appelé par `fl
 - **Cache d'écriture** dans `ntfs_dev.c` : écritures alignées de 64 Kio ou plus regroupées par 4 Mio, autres
   écritures et petites lectures gardées dans une table de secteurs (4 Mio au plus), vidée au sync. Une
   copie de 32 Mio passe de 1 852 écritures et 1 042 lectures à 19 écritures.
+
+## libarchive (phase 9)
+
+- Amont : libarchive 3.8.10 (14 octobre 2026), archive
+  `https://github.com/libarchive/libarchive/releases/download/v3.8.10/libarchive-3.8.10.tar.xz`, SHA-256
+  `56cad765459d5ee25a3b761f90c47d99379d28297fbfb72d908880d6b875fb96` (égal au condensé publié par GitHub),
+  signature `.asc` vérifiée le 2026-10-22 (clé `659C84C0E23EA1FA97E0B58CC040B508D63D2B36`, Martin Matuska).
+  Version de sécurité choisie malgré son âge (8 jours) : le lecteur sert à des archives hostiles. Licence
+  BSD à deux clauses (`native/third_party/libarchive/COPYING`).
+- Copiés tels quels dans `native/third_party/libarchive/` : tous les `libarchive/*.c` et `*.h` (ni tests, ni
+  outils, ni pages de manuel) et `COPYING`. Aucun correctif.
+- Configuration : `native/cmake/libarchive/{linux,android}/config.h`, générés par le `CMakeLists.txt` d'amont
+  (glibc d'Ubuntu 24.04 ; NDK 28.2, arm64-v8a, API 26) sans crypto, iconv, ACL, xattr, bzip2, lz4, zstd ni
+  XML, puis `HAVE_LIBLZMA` et `HAVE_LZMA_H` activés à la main ; `android_lf.h` vient de
+  `contrib/android/include` de la même archive.
+- Cible `fl_libarchive` : tous les sources sauf ceux de Windows et des ACL, compilés avec `-w`, en gnu11 ;
+  seuls les formats activés par notre code sont liés. Les noms sont lus dans une locale UTF-8 (`C.UTF-8`) :
+  sous « C », libarchive refuse de convertir les noms UTF-8 d'un ZIP.
+
+## liblzma de xz (phase 9)
+
+- Amont : xz 5.8.4 (9 septembre 2026), archive
+  `https://github.com/tukaani-project/xz/releases/download/v5.8.4/xz-5.8.4.tar.xz`, SHA-256
+  `4ce24038fd4221e0d13bc1a2de7a4db56e90b92b3bf75321f6c14be73f65de4b` (égal au condensé publié), signature
+  `.sig` vérifiée le 2026-10-22 (clé `3690C240CE51B4670D30AD1C38EE757D69184620`, Lasse Collin). Jamais 5.6.0
+  ni 5.6.1. Licence 0BSD (`native/third_party/xz/COPYING`, `COPYING.0BSD`).
+- Copiés tels quels dans `native/third_party/xz/src/` : `liblzma/**/*.c` et `*.h`, `common/*.h`. Aucun
+  correctif.
+- Cible `fl_lzma` sans `config.h` : les définitions de son `CMakeLists.txt` (tous les filtres en encodage et
+  décodage, contrôles CRC32, CRC64 et SHA-256) sont passées par CMake ; sans fils d'exécution (ni `*_mt.c`
+  ni `outqueue.c`), sans `hardware_physmem.c` ni `hardware_cputhreads.c`.

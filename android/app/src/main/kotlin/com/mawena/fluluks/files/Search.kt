@@ -51,6 +51,7 @@ object Search {
             for (e in children.sortedBy { it.name.lowercase() }) {
                 if (flag[0]) break
                 if (!showHidden && e.name.startsWith(".")) continue
+                if (e.path == Trash.DIR) continue // la corbeille n'est cherchée que de l'intérieur
                 if (normalize(e.name).contains(q)) {
                     if (out.size >= MAX_RESULTS) return@guard SearchResult(out, true)
                     out.add(e)

@@ -10,12 +10,13 @@ IconData sourceIcon(String kind) => switch (kind) {
       _ => Icons.usb,
     };
 
-/// Un stockage de l'accueil : libellé, place libre et barre d'occupation.
+/// Un stockage de l'accueil : libellé, place libre et barre d'occupation ; accès à sa corbeille si [onTrash].
 class SourceTile extends StatelessWidget {
-  const SourceTile({super.key, required this.source, required this.onTap});
+  const SourceTile({super.key, required this.source, required this.onTap, this.onTrash});
 
   final SourceMsg source;
   final VoidCallback? onTap;
+  final VoidCallback? onTrash;
 
   @override
   Widget build(BuildContext context) {
@@ -34,7 +35,9 @@ class SourceTile extends StatelessWidget {
             LinearProgressIndicator(value: used.toDouble()),
           ],
         ),
-        trailing: const Icon(Icons.chevron_right),
+        trailing: onTrash == null
+            ? const Icon(Icons.chevron_right)
+            : IconButton(tooltip: Fr.trash, icon: const Icon(Icons.delete_outline), onPressed: onTrash),
         onTap: onTap,
       ),
     );

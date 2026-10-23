@@ -9,15 +9,24 @@ import android.os.storage.StorageVolume
 import android.provider.DocumentsContract
 import com.mawena.fluluks.engine.EngineError
 import com.mawena.fluluks.engine.FileType
+import com.mawena.fluluks.files.Archives
+import com.mawena.fluluks.files.BatchRename
+import com.mawena.fluluks.files.Details
 import com.mawena.fluluks.files.DiskSource
 import com.mawena.fluluks.files.Entry
+import com.mawena.fluluks.files.FileDetails
 import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.FilesException
+import com.mawena.fluluks.files.QuickFilters
+import com.mawena.fluluks.files.RenameRule
 import com.mawena.fluluks.files.Search
 import com.mawena.fluluks.files.SharedPrefStore
 import com.mawena.fluluks.files.Sources
+import com.mawena.fluluks.files.SpaceAnalysis
+import com.mawena.fluluks.files.SpaceReport
 import com.mawena.fluluks.files.Thumbnails
 import com.mawena.fluluks.files.TransferState
+import com.mawena.fluluks.files.Trash
 import com.mawena.fluluks.files.Transfers
 import com.mawena.fluluks.files.ViewPrefs
 import com.mawena.fluluks.files.ViewSettings
@@ -27,12 +36,14 @@ import com.mawena.fluluks.volumes.FormatOptions
 import com.mawena.fluluks.volumes.VolumeManager
 import com.mawena.fluluks.volumes.VolumeState
 import io.flutter.plugin.common.BinaryMessenger
+import java.io.FileNotFoundException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -47,6 +58,9 @@ class HostApiImpl(
 ) : FluLuksHostApi {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val events = FluLuksEventsApi(messenger)
+
+    /** Pourcentage du calcul d'empreinte en cours (null sinon), poussé vers Flutter. */
+    private val hashProgress = MutableStateFlow<Int?>(null)
 
     /** À appeler une fois : enregistre l'API hôte et pousse chaque changement d'état vers Flutter. */
     fun attach(messenger: BinaryMessenger) {
@@ -64,6 +78,9 @@ class HostApiImpl(
         }
         scope.launch {
             Transfers.state.collect { t -> events.onTransferChanged(t?.let(::transferMsg)) { /* réponse ignorée */ } }
+        }
+        scope.launch {
+            hashProgress.collect { pct -> events.onHashProgress(pct?.toLong()) { /* réponse ignorée */ } }
         }
         if (Build.VERSION.SDK_INT >= 30) {
             context.getSystemService(StorageManager::class.java)
@@ -231,8 +248,27 @@ class HostApiImpl(
     override fun rename(sourceId: String, path: String, newName: String, callback: (Result<String>) -> Unit) =
         io(callback) { Files.rename(sourceId, path, newName) }
 
-    override fun deleteEntries(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit) =
-        io(callback) { Files.delete(sourceId, paths) }
+    override fun deleteEntries(sourceId: String, paths: List<String>, permanent: Boolean, callback: (Result<Unit>) -> Unit) =
+        io(callback) { Files.delete(sourceId, paths, permanent) }
+
+    /** Corbeille : les éléments de plus de 30 jours sont purgés à l'ouverture. */
+    override fun listTrash(sourceId: String, callback: (Result<List<TrashItemMsg>>) -> Unit) =
+        io(callback) {
+            Files.guard("queryChildDocuments") {
+                val src = Files.source(sourceId)
+                Trash.purgeExpired(src)
+                Trash.list(src).map { TrashItemMsg(it.id, it.name, it.originalPath, it.deletedAtMs, it.size, it.isDir) }
+            }
+        }
+
+    override fun restoreTrash(sourceId: String, ids: List<String>, callback: (Result<Unit>) -> Unit) =
+        io(callback) { Files.guard("moveDocument") { Trash.restore(Files.source(sourceId), ids) } }
+
+    override fun purgeTrash(sourceId: String, ids: List<String>, callback: (Result<Unit>) -> Unit) =
+        io(callback) { Files.guard("deleteDocument") { Trash.purge(Files.source(sourceId), ids) } }
+
+    override fun emptyTrash(sourceId: String, callback: (Result<Unit>) -> Unit) =
+        io(callback) { Files.guard("deleteDocument") { Trash.empty(Files.source(sourceId)) } }
 
     override fun openWith(sourceId: String, path: String, callback: (Result<Unit>) -> Unit) =
         startPrepared(callback) {
@@ -267,6 +303,14 @@ class HostApiImpl(
         Transfers.start(srcId, paths, dstId, dstDir, move)
     }
 
+    override fun startCompress(srcId: String, paths: List<String>, dstDir: String, name: String) = guarded {
+        Archives.startCompress(srcId, paths, dstDir, name)
+    }
+
+    override fun startExtract(srcId: String, archive: String, dstId: String, dstDir: String, intoNewFolder: Boolean) = guarded {
+        Archives.startExtract(srcId, archive, dstId, dstDir, intoNewFolder)
+    }
+
     override fun cancelTransfer() = Transfers.cancel()
 
     override fun search(sourceId: String, path: String, query: String, showHidden: Boolean, callback: (Result<SearchResultMsg>) -> Unit) =
@@ -274,6 +318,57 @@ class HostApiImpl(
             val r = Search.run(sourceId, path, query, showHidden)
             SearchResultMsg(r.entries.map(::entryMsg), r.truncated)
         }
+
+    override fun analyzeSpace(sourceId: String, path: String, callback: (Result<SpaceReportMsg>) -> Unit) =
+        io(callback) { spaceMsg(SpaceAnalysis.run(sourceId, path)) }
+
+    override fun spaceChildren(sourceId: String, path: String, callback: (Result<SpaceReportMsg>) -> Unit) =
+        io(callback) { spaceMsg(SpaceAnalysis.children(sourceId, path)) }
+
+    override fun cancelAnalysis() = SpaceAnalysis.cancel()
+
+    override fun details(sourceId: String, path: String, callback: (Result<DetailsMsg>) -> Unit) =
+        io(callback) {
+            Files.guard("queryChildDocuments") {
+                detailsMsg(Files.source(sourceId).details(path) ?: throw FileNotFoundException("Document introuvable"))
+            }
+        }
+
+    override fun folderSize(sourceId: String, path: String, callback: (Result<FolderSizeMsg>) -> Unit) =
+        io(callback) {
+            Files.guard("queryChildDocuments") {
+                val s = FileDetails.folderSize(Files.source(sourceId), path)
+                FolderSizeMsg(size = s.size, files = s.files.toLong(), dirs = s.dirs.toLong(), truncated = s.truncated)
+            }
+        }
+
+    override fun sha256(sourceId: String, path: String, callback: (Result<String?>) -> Unit) =
+        io(callback) {
+            try {
+                Files.guard("openDocument") { FileDetails.sha256(Files.source(sourceId), path) { hashProgress.value = it } }
+            } finally {
+                hashProgress.value = null
+            }
+        }
+
+    override fun cancelHash() = FileDetails.cancel()
+
+    override fun quickFilter(filter: String, callback: (Result<List<FilterItemMsg>>) -> Unit) =
+        io(callback) {
+            Files.guard("queryChildDocuments") {
+                QuickFilters.query(context, filter).map { FilterItemMsg(it.sourceId, it.path, it.name, it.size, it.mtime) }
+            }
+        }
+
+    override fun previewRename(sourceId: String, paths: List<String>, rule: RenameRuleMsg, callback: (Result<List<RenamePreviewMsg>>) -> Unit) =
+        io(callback) {
+            Files.guard("renameDocument") {
+                BatchRename.preview(Files.source(sourceId), paths, renameRule(rule)).map { RenamePreviewMsg(it.path, it.newName, it.conflict) }
+            }
+        }
+
+    override fun applyRename(sourceId: String, paths: List<String>, rule: RenameRuleMsg, callback: (Result<Unit>) -> Unit) =
+        io(callback) { Files.guard("renameDocument") { BatchRename.apply(Files.source(sourceId), paths, renameRule(rule)) } }
 
     override fun cancelSearch() = Search.cancel()
 
@@ -371,20 +466,35 @@ class HostApiImpl(
             } ?: emptyList(),
         )
 
-        internal fun entryMsg(e: Entry) = EntryMsg(
-            name = e.name, path = e.path, size = e.size, mtime = e.mtime,
-            type = when (e.type) {
-                FileType.DIR -> "dir"
-                FileType.FILE -> "file"
-                FileType.SYMLINK -> "link"
-                FileType.OTHER -> "other"
-            },
+        internal fun entryMsg(e: Entry) = EntryMsg(name = e.name, path = e.path, size = e.size, mtime = e.mtime, type = typeName(e.type))
+
+        private fun typeName(t: FileType) = when (t) {
+            FileType.DIR -> "dir"
+            FileType.FILE -> "file"
+            FileType.SYMLINK -> "link"
+            FileType.OTHER -> "other"
+        }
+
+        private fun renameRule(r: RenameRuleMsg) = RenameRule(
+            mode = r.mode, base = r.base, start = r.start.toInt(), find = r.find, replace = r.replace, caseSensitive = r.caseSensitive,
+        )
+
+        private fun detailsMsg(d: Details) = DetailsMsg(
+            name = d.name, path = d.path, type = typeName(d.type), size = d.size, mtime = d.mtime, mode = d.mode?.toLong(),
+            uid = d.uid, gid = d.gid, permissions = d.permissions, fs = d.fs,
+        )
+
+        private fun spaceMsg(r: SpaceReport) = SpaceReportMsg(
+            path = r.path, totalBytes = r.totalBytes, fileCount = r.fileCount.toLong(),
+            children = r.children.map { SpaceItemMsg(it.name, it.path, it.isDir, it.size, it.fileCount.toLong()) },
+            biggest = r.biggest.map(::entryMsg), truncated = r.truncated, otherCount = r.otherCount.toLong(),
+            otherBytes = r.otherBytes,
         )
 
         internal fun transferMsg(t: TransferState) = TransferMsg(
             move = t.move, currentName = t.currentName, fileIndex = t.fileIndex.toLong(), fileCount = t.fileCount.toLong(),
             doneBytes = t.doneBytes, totalBytes = t.totalBytes, finished = t.finished, cancelled = t.cancelled, error = t.error,
-            elapsedMs = t.elapsedMs,
+            elapsedMs = t.elapsedMs, kind = t.kind,
         )
 
         private fun volumeMsg(v: VolumeState) = VolumeMsg(
