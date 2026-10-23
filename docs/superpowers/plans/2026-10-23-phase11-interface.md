@@ -581,7 +581,7 @@ Comportement :
 
 Chaînes : `searchHere` « Ici », `searchAll` « Partout », `searchingIn(label)` « Recherche dans $label… ».
 
-- [ ] **Step 1 : tests :**
+- [x] **Step 1 : tests :**
   - `searchesEveryOpenStorage` (appels pour `phone`, `sd:1` et `v1` ; aucun pour `remote:x`) ;
   - `groupsBySource` ;
   - `globalFollowsGridPreference` ;
@@ -591,10 +591,10 @@ Chaînes : `searchHere` « Ici », `searchAll` « Partout », `searchingIn(label
   - `homeSearchBarOpensGlobal` ;
   - `searchChipEverywhere` (depuis l'explorateur : « Partout » ouvre la recherche globale avec la même saisie) ;
   - `emptyQueryShowsHint` (`EmptyState`) et `noResultEmptyState`.
-- [ ] **Step 2 :** Run `flutter test test/global_search_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter.
-- [ ] **Step 4 :** tests verts ; suites vertes.
-- [ ] **Step 5 :** commit `feat(recherche): rechercher dans tous les stockages depuis l'accueil`.
+- [x] **Step 2 :** Run `flutter test test/global_search_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter.
+- [x] **Step 4 :** tests verts ; suites vertes.
+- [x] **Step 5 :** commit `feat(recherche): rechercher dans tous les stockages depuis l'accueil`.
 
 ### Task 9 : réglages regroupés, « À propos », licences, aide et bienvenue
 

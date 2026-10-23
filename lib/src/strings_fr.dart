@@ -49,7 +49,6 @@ class Fr {
   static const browse = 'Parcourir';
 
   // accueil (phase 11)
-  static const searchEverywhere = 'Rechercher dans Portail';
   static String sourceMenu(String label) => 'Options de $label';
   static const chipEncrypted = 'Chiffré';
   static const chipOpen = 'Ouvert';
@@ -328,6 +327,10 @@ class Fr {
   static const search = 'Rechercher';
   static const searchHint = 'Nom du fichier';
   static const noResult = 'Aucun résultat';
+  static const searchHere = 'Ici';
+  static const searchAll = 'Partout';
+  static const searchEverywhere = 'Rechercher dans tous les stockages';
+  static const globalSearchHint = 'Tapez un nom de fichier\u00A0: le téléphone, les cartes SD et les disques ouverts sont fouillés';
   static const tooManyResults = 'Plus de 500 résultats\u00A0: précisez la recherche';
   static const transferCancelled = 'Opération annulée';
   static const ok = 'OK';
@@ -357,6 +360,7 @@ class Fr {
   static String deleteMany(int n) => 'Supprimer ${count(n, 'élément', 'éléments')}\u202F?';
   static String clipboard(int n, bool move) => '${count(n, 'élément', 'éléments')} ${move ? 'à déplacer' : 'à copier'}';
   static String selected(int n) => count(n, 'sélectionné', 'sélectionnés');
+  static String searchingIn(String label) => 'Recherche dans $label…';
   static String movedToTrash(int n) => '${count(n, 'élément mis', 'éléments mis')} à la corbeille';
   /// [kind] : `copy`, `move`, `compress` ou `extract`.
   static String transferLine(String kind, String name, int i, int n, int pct) {

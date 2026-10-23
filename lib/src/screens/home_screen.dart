@@ -13,6 +13,7 @@ import '../widgets/shortcut_grid.dart';
 import '../widgets/source_tile.dart';
 import 'explorer_screen.dart';
 import 'filter_screen.dart';
+import 'global_search_screen.dart';
 import 'server_form_screen.dart';
 import 'settings_screen.dart';
 import 'space_screen.dart';
@@ -88,10 +89,14 @@ class HomeScreen extends StatelessWidget {
   /// Les cartes, séparées comme les autres éléments de la liste.
   Widget _gap(Widget child) => Padding(padding: const EdgeInsets.only(bottom: Space.s), child: child);
 
-  /// Erreur d'action et carte d'accès aux fichiers, au-dessus des sections.
+  /// Recherche dans tous les stockages, erreur d'action et carte d'accès aux fichiers, au-dessus des sections.
   List<Widget> _top(BuildContext context) {
     final err = state.lastError;
     return [
+      _gap(_SearchEntry(
+        onTap: () =>
+            Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => GlobalSearchScreen(state: state))),
+      )),
       if (err != null)
         _gap(StatusBanner(
           icon: Icons.error_rounded,
@@ -196,5 +201,47 @@ class HomeScreen extends StatelessWidget {
           ),
         )),
     ];
+  }
+}
+
+/// Entrée de la recherche dans tous les stockages : l'apparence d'une barre de recherche, mais un simple bouton.
+/// La saisie se fait dans l'écran de recherche, sans champ ni clavier sur l'accueil.
+class _SearchEntry extends StatelessWidget {
+  const _SearchEntry({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final s = theme.colorScheme;
+    return Semantics(
+      button: true,
+      excludeSemantics: true,
+      label: Fr.searchEverywhere,
+      onTap: onTap,
+      child: Material(
+        color: s.surfaceContainerHigh,
+        shape: const StadiumBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: Space.xxl + Space.xl),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.l, vertical: Space.m),
+              child: Row(children: [
+                Icon(Icons.search_rounded, color: s.onSurfaceVariant),
+                const SizedBox(width: Space.l),
+                Expanded(
+                  child: Text(Fr.searchEverywhere,
+                      style: theme.textTheme.bodyLarge?.copyWith(color: s.onSurfaceVariant)),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }

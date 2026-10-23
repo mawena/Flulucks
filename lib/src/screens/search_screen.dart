@@ -13,6 +13,7 @@ import '../widgets/entry_collection.dart';
 import '../widgets/found_entries.dart';
 import '../widgets/thumb.dart';
 import 'explorer_screen.dart';
+import 'global_search_screen.dart';
 
 /// Recherche par nom sous [path] : lancée 400 ms après la dernière frappe, la précédente annulée. Résultats en
 /// liste ou en grille selon le réglage d'affichage, ouverts dans les lecteurs de Portail.
@@ -37,6 +38,7 @@ class _SearchScreenState extends State<SearchScreen> {
   SearchResultMsg? _result;
   String? _error;
   final _thumbs = ThumbCache();
+  final _text = TextEditingController();
 
   AppState get state => widget.state;
 
@@ -54,6 +56,7 @@ class _SearchScreenState extends State<SearchScreen> {
   void dispose() {
     state.removeListener(_onState);
     _thumbs.dispose();
+    _text.dispose();
     _timer?.cancel();
     if (_running) widget.state.api.cancelSearch();
     super.dispose();
@@ -119,6 +122,7 @@ class _SearchScreenState extends State<SearchScreen> {
     return Scaffold(
       appBar: AppBar(
         title: TextField(
+          controller: _text,
           autofocus: true,
           decoration: const InputDecoration(hintText: Fr.searchHint, border: InputBorder.none),
           onChanged: _changed,
@@ -128,6 +132,23 @@ class _SearchScreenState extends State<SearchScreen> {
           },
         ),
         actions: [ViewModeButton(state: state)],
+        // « Ici » : ce dossier ; « Partout » : tous les stockages, avec la même saisie
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(Layout.minTouch),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: Space.l),
+            child: Row(spacing: Space.s, children: [
+              ChoiceChip(label: const Text(Fr.searchHere), selected: true, onSelected: (_) {}),
+              ChoiceChip(
+                label: const Text(Fr.searchAll),
+                selected: false,
+                onSelected: (_) => Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
+                  builder: (_) => GlobalSearchScreen(state: state, initialQuery: _text.text.trim()),
+                )),
+              ),
+            ]),
+          ),
+        ),
       ),
       body: Column(children: [
         if (_running) const LinearProgressIndicator(),
