@@ -96,6 +96,27 @@ class BatchRenameTest {
         assertEquals(listOf("2022-02-03 04.05.06.jpg", "2022-02-03 04.05.07.txt"), p.map { it.newName })
     }
 
+    @Test fun sameSecondPhotosNumbered() {
+        // rafale : trois photos de la même seconde, plus un nom déjà pris hors du lot
+        val burst = jpeg("2024:07:14 10:20:30", bigEndian = false)
+        local("IMG_1.jpg", burst); local("IMG_2.jpg", burst); local("IMG_3.jpg", burst)
+        local("2024-07-14 10.20.30 (2).jpg", "autre".toByteArray())
+        val s = src()
+        val paths = listOf("/IMG_1.jpg", "/IMG_2.jpg", "/IMG_3.jpg")
+        val p = BatchRename.preview(s, paths, RenameRule(mode = "photoDate"))
+        assertEquals(
+            listOf("2024-07-14 10.20.30.jpg", "2024-07-14 10.20.30 (3).jpg", "2024-07-14 10.20.30 (4).jpg"),
+            p.map { it.newName },
+        )
+        assertTrue(p.all { it.conflict == null })
+        BatchRename.apply(s, paths, RenameRule(mode = "photoDate"))
+        assertEquals(
+            listOf("2024-07-14 10.20.30 (2).jpg", "2024-07-14 10.20.30 (3).jpg", "2024-07-14 10.20.30 (4).jpg", "2024-07-14 10.20.30.jpg"),
+            names(),
+        )
+        assertEquals("autre", File(root, "2024-07-14 10.20.30 (2).jpg").readText())
+    }
+
     @Test fun conflictWithExistingRefusedBeforeAnyRename() {
         local("a.txt"); local("b.txt"); local("Lot (02).txt", "occupé".toByteArray())
         val s = src()

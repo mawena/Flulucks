@@ -302,7 +302,9 @@ dans le même commit que le travail.
 - [x] *(utilisateur)* T12 — Essais sur le Pixel ([fiche](../research/2026-10-22-essais-phase9/essais.md))
       *(2026-10-23 : toutes les lignes de la fiche réussies)*
 - [x] T13 — Documentation
-- [ ] Relecture finale de toute la branche
+- [x] Relecture finale de toute la branche *(aucun point critique ; 5 importants corrigés : place réelle relue à
+      l'extraction, premier passage borné, .gz/.xz seuls, purge de la corbeille, photos de la même seconde ;
+      11 mineurs reportés)*
 - [ ] Fusion `feature/compression` → `develop`
 - [ ] Version `v1.2.0`
 

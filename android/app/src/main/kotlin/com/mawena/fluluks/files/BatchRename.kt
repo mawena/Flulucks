@@ -26,7 +26,8 @@ data class RenamePreview(val path: String, val newName: String, val conflict: St
 /**
  * Renommage par lot (phase 9) : un aperçu d'abord, puis tout ou rien. Un conflit (nom pris par un élément hors du
  * lot, doublon dans le lot, nom invalide pour le stockage) refuse le lot avant tout renommage. Les noms passent
- * par des noms temporaires : un échange (a → b, b → a) fonctionne.
+ * par des noms temporaires : un échange (a → b, b → a) fonctionne. Par date de prise de vue, les photos de la même
+ * seconde sont numérotées (« … (2) ») au lieu d'être refusées.
  */
 object BatchRename {
     const val CONFLICT_EXISTS = "Un élément porte déjà ce nom"
@@ -53,7 +54,7 @@ object BatchRename {
         val ps = paths.map { PathRules.require(it) }
         if (ps.any { it == "/" }) throw FileNotFoundException("La racine ne peut pas être renommée")
         val width = maxOf(2, (rule.start + ps.size - 1).toString().length)
-        return ps.mapIndexed { i, p ->
+        val planned = ps.mapIndexed { i, p ->
             val (base, ext) = split(WriteOps.nameOf(p))
             val newBase = when (rule.mode) {
                 "number" -> listOf(rule.base.trim(), "(${(rule.start + i).toString().padStart(width, '0')})")
@@ -63,6 +64,32 @@ object BatchRename {
                 else -> throw FilesException(EngineError.FL_EINVAL, "Règle de renommage inconnue")
             }
             p to newBase + ext
+        }
+        return if (rule.mode == "photoDate") numberSameDates(src, planned) else planned
+    }
+
+    /**
+     * Photos datées de la même seconde (rafale, fichiers sans EXIF copiés ensemble) : « … (2) », « … (3) »… dans
+     * l'ordre du lot, en sautant les noms pris hors du lot ; la première garde le nom de la date.
+     */
+    private fun numberSameDates(src: FileSource, plan: List<Pair<String, String>>): List<Pair<String, String>> {
+        fun key(n: String) = if (src.caseInsensitive) n.lowercase() else n
+        val inBatch = plan.map { it.first }.toSet()
+        val others = HashMap<String, Set<String>>()
+        val used = HashMap<String, MutableSet<String>>()
+        return plan.map { (p, n) ->
+            val d = WriteOps.parentOf(p)
+            val taken = others.getOrPut(d) { src.list(d).filter { it.path !in inBatch }.mapTo(HashSet()) { key(it.name) } }
+            val given = used.getOrPut(d) { HashSet() }
+            var name = n
+            if (key(n) in given) {
+                val (base, ext) = split(n)
+                var i = 2
+                while (key("$base ($i)$ext").let { it in given || it in taken }) i++
+                name = "$base ($i)$ext"
+            }
+            given += key(name)
+            p to name
         }
     }
 
