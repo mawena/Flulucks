@@ -189,6 +189,17 @@ class LocalSource(
         return DocumentIds.child(PathRules.require(parent), n) to out
     }
 
+    override fun openOverwrite(path: String): OutputStream {
+        requireWritable()
+        val f = file(path)
+        if (!f.isFile) throw FileNotFoundException("Ce n'est pas un fichier ordinaire")
+        return try {
+            FileOutputStream(f)
+        } catch (e: FileNotFoundException) {
+            throw FileNotFoundException("Écriture impossible dans ce dossier")
+        }
+    }
+
     override fun openNative(path: String): NativeIn {
         val f = file(path)
         if (!f.isFile) throw FileNotFoundException("Ce n'est pas un fichier ordinaire")

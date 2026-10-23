@@ -115,7 +115,7 @@ void main() {
   });
 
   testWidgets('tapArchiveShowsExtractSheet', (tester) async {
-    final api = api0();
+    final api = api0()..dirs['phone']!['/']!.add(f('/rapport.pdf'));
     await pump(tester, api);
     await tester.tap(find.text('photos.tar.gz'));
     await tester.pumpAndSettle();
@@ -136,10 +136,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.calls, contains('openWith phone /photos.tar.gz'));
 
-    // un fichier ordinaire s'ouvre directement
-    await tester.tap(find.text('notes.txt'));
+    // un fichier sans lecteur de Portail s'ouvre directement dans une autre application
+    await tester.tap(find.text('rapport.pdf'));
     await tester.pumpAndSettle();
-    expect(api.calls, contains('openWith phone /notes.txt'));
+    expect(api.calls, contains('openWith phone /rapport.pdf'));
     expect(find.text('Extraire ici'), findsNothing);
   });
 

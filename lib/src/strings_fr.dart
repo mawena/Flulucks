@@ -48,7 +48,18 @@ class Fr {
   static const newName = 'Nouveau nom';
   static const delete = 'Supprimer';
   static const deleteBody = 'La suppression est définitive.';
+  static const deleteRemoteBody = "Pas de corbeille sur un dossier distant : la suppression est définitive.";
+  static const unknownSpace = 'Espace inconnu';
+  static const nowPlaying = 'Lecture en cours';
+  static const play = 'Lecture';
+  static const pause = 'Pause';
+  static const nextTrack = 'Suivant';
+  static const previousTrack = 'Précédent';
+  static const back10 = 'Reculer de 10 s';
+  static const forward10 = 'Avancer de 10 s';
+  static const stopPlayback = 'Arrêter la lecture';
   static const copy = 'Copier';
+  static const copyText = 'Copier le texte';
   static const cut = 'Couper';
   static const pasteHere = 'Coller ici';
   static const compress = 'Compresser';
@@ -106,9 +117,57 @@ class Fr {
   static const extractTo = 'Extraire vers…';
   static const share = 'Partager';
   static const openWith = 'Ouvrir avec…';
+
+  // Lecteurs de Portail (phase 10)
+  static const builtInViewers = 'Ouvrir dans Portail';
+  static const builtInViewersHelp = "Images, musique, vidéos et textes s'ouvrent dans les lecteurs de Portail";
+  static const editAsText = 'Modifier comme texte';
+  static const save = 'Enregistrer';
+  static const saved = 'Enregistré';
+  static const dontSave = 'Ne pas enregistrer';
+  static const unsavedTitle = 'Modifications non enregistrées';
+  static const unsavedBody = 'Enregistrer les modifications avant de quitter ?';
+  static const textChangedTitle = 'Fichier modifié entre-temps';
+  static const textChangedBody = 'Le fichier a été modifié depuis son ouverture. Le remplacer par votre version ?';
+  static const replace = 'Remplacer';
+
+  // Dossiers distants (phase 10)
+  static const remoteFolders = 'Dossiers distants';
+  static const addServer = 'Ajouter un serveur';
+  static const editServer = 'Modifier';
+  static const disconnect = 'Déconnecter';
+  static const serverForm = 'Serveur distant';
+  static const serverName = 'Nom';
+  static const serverHost = 'Adresse';
+  static const serverPort = 'Port';
+  static const serverUser = 'Utilisateur';
+  static const serverUserHelpFtp = 'Vide : connexion anonyme';
+  static const password = 'Mot de passe';
+  static const passwordKeep = 'Laisser vide pour garder le mot de passe mémorisé';
+  static const rememberPassword = 'Mémoriser le mot de passe';
+  static const rememberHelp = 'Chiffré par le téléphone ; sinon demandé à chaque connexion';
+  static const startFolder = 'Dossier de départ';
+  static const ftpClear = "FTP n'est pas chiffré : le mot de passe et les fichiers circulent en clair sur le réseau.";
+  static const hostKey = 'Empreinte du serveur acceptée';
+  static const forgetHostKey = "Oublier l'empreinte";
+  static const privateKey = 'Clé privée';
+  static const noPrivateKey = 'Aucune : connexion par mot de passe';
+  static const importKey = 'Importer une clé';
+  static const removeKey = 'Retirer la clé';
+  static const keyPassphrase = 'Phrase de la clé';
+  static const keyPassphraseHelp = 'Clé chiffrée : laissez vide pour la saisir à chaque connexion';
+  static const keyAfterSave = 'Enregistrez le serveur pour pouvoir importer une clé privée (OpenSSH : Ed25519, ECDSA ou RSA).';
+  static const deleteServer = 'Supprimer le serveur';
+  static const connect = 'Se connecter';
+  static const wrongPassword = 'Mot de passe refusé';
+  static const trustTitle = 'Serveur inconnu';
+  static const trust = 'Faire confiance';
+  static const hostKeyChangedTitle = 'Clé du serveur changée';
   static const emptyFolder = 'Dossier vide';
   static const protectedFolder = 'Dossier protégé par Android';
   static const volumeClosed = 'Le disque a été fermé';
+  static const storageGoneKeepText =
+      'Stockage fermé : le texte ne peut plus être enregistré. Copiez-le avant de quitter (appui long, Tout sélectionner).';
   static const sortBy = 'Trier par';
   static const sortName = 'Nom';
   static const sortSize = 'Taille';
@@ -133,6 +192,16 @@ class Fr {
 
   static String freeOf(int free, int total) => '${humanSize(free)} libres sur ${humanSize(total)}';
   static String deleteOne(String name) => 'Supprimer « $name » ?';
+  static String trackOf(int i, int n) => 'Morceau $i sur $n';
+
+  /// Durée « m:ss » ou « h:mm:ss » ; « --:-- » si inconnue.
+  static String clock(int ms) {
+    if (ms < 0) return '--:--';
+    final s = ms ~/ 1000;
+    final ss = (s % 60).toString().padLeft(2, '0');
+    if (s < 3600) return '${s ~/ 60}:$ss';
+    return '${s ~/ 3600}:${(s ~/ 60 % 60).toString().padLeft(2, '0')}:$ss';
+  }
   static String deleteMany(int n) => 'Supprimer $n éléments ?';
   static String clipboard(int n, bool move) => '$n élément(s) ${move ? 'à déplacer' : 'à copier'}';
   static String selected(int n) => '$n sélectionné(s)';
@@ -149,6 +218,14 @@ class Fr {
     return '$what : $name ($i/$n) — $pct %';
   }
 
+  static String readOnlyText(String reason) => 'Lecture seule : $reason';
+  static String serverLine(String protocol, String user, String host, int port, bool connected) =>
+      '${protocol.toUpperCase()} · ${user.isEmpty ? '' : '$user@'}$host:$port${connected ? ' · connecté' : ''}';
+  static String passwordFor(String name) => 'Mot de passe de $name';
+  static String trustBody(String fingerprint) =>
+      "Première connexion à ce serveur. Vérifiez que son empreinte est bien celle-ci avant de lui faire confiance :\n\n$fingerprint";
+  static String deleteServerBody(String name) => 'Le serveur « $name » et ses secrets mémorisés seront supprimés.';
+  static String imagePosition(int i, int n) => '$i / $n';
   static String toExtract(String name) => '« $name » à extraire';
   static String trashSummary(int n, int bytes) => '$n élément(s), ${humanSize(bytes)}';
   static String emptyTrashBody(int n) => 'Les $n élément(s) seront supprimés définitivement.';

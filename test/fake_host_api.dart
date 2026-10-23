@@ -211,6 +211,124 @@ class FakeHostApi implements HostApi {
   @override
   Future<void> cancelHash() async => hashCancels++;
 
+  /// Serveurs distants ; enregistrements reçus (fiche, mot de passe décodé) ; réponse de connectServer (défaut :
+  /// la source distante) et mots de passe reçus ; rappel de trustHostKey.
+  List<RemoteServerMsg> servers = [];
+  final savedServers = <(RemoteServerMsg, String?)>[];
+  SourceMsg Function(String id, Uint8List? password)? connect;
+  final connectPasswords = <String?>[];
+  void Function(String id, String fingerprint)? onTrust;
+
+  @override
+  Future<List<RemoteServerMsg>> listServers() async => List.of(servers);
+
+  @override
+  Future<RemoteServerMsg> saveServer(RemoteServerMsg server, Uint8List? password, Uint8List? keyPassphrase) async {
+    savedServers.add((server, password == null ? null : utf8.decode(List<int>.of(password))));
+    final saved = RemoteServerMsg(
+      id: server.id.isEmpty ? 'nouveau' : server.id,
+      protocol: server.protocol,
+      name: server.name.isEmpty ? server.host : server.name,
+      host: server.host,
+      port: server.port,
+      user: server.user,
+      startPath: server.startPath,
+      remember: server.remember,
+      hostKey: server.hostKey,
+      keyInfo: server.keyInfo,
+      hasPassword: server.remember && password != null,
+      connected: false,
+    );
+    servers = [...servers.where((s) => s.id != saved.id), saved];
+    return saved;
+  }
+
+  @override
+  Future<void> deleteServer(String serverId) async {
+    calls.add('deleteServer $serverId');
+    servers = servers.where((s) => s.id != serverId).toList();
+  }
+
+  @override
+  Future<SourceMsg> connectServer(String serverId, Uint8List? password) async {
+    connectPasswords.add(password == null ? null : utf8.decode(List<int>.of(password)));
+    final s = connect?.call(serverId, password) ??
+        SourceMsg(
+          id: 'remote:$serverId',
+          stableKey: 'remote:$serverId',
+          kind: 'remote',
+          label: serverId,
+          totalBytes: -1,
+          freeBytes: -1,
+          readOnly: false,
+          roReason: '',
+          encrypted: false,
+        );
+    if (!sources.any((x) => x.id == s.id)) sources = [...sources, s];
+    return s;
+  }
+
+  @override
+  Future<void> disconnectServer(String serverId) async {
+    calls.add('disconnectServer $serverId');
+    sources = sources.where((s) => s.id != 'remote:$serverId').toList();
+  }
+
+  @override
+  Future<void> trustHostKey(String serverId, String fingerprint) async {
+    calls.add('trustHostKey $serverId $fingerprint');
+    onTrust?.call(serverId, fingerprint);
+  }
+
+  @override
+  Future<void> forgetHostKey(String serverId) async => calls.add('forgetHostKey $serverId');
+
+  /// Description rendue par importPrivateKey (null : sélecteur fermé sans choix).
+  String? importedKey;
+
+  @override
+  Future<String?> importPrivateKey(String serverId) async {
+    calls.add('importPrivateKey $serverId');
+    return importedKey;
+  }
+
+  @override
+  Future<void> forgetPrivateKey(String serverId) async => calls.add('forgetPrivateKey $serverId');
+
+  /// Lecteurs : octets des images et textes par chemin ; une erreur par chemin (message) ; réponse de writeText
+  /// (défaut : enregistré, mtime + 1) ; enregistrements reçus (chemin, texte, bom, crlf, mtime, taille, force).
+  final images = <String, Uint8List>{};
+  final readErrors = <String, String>{};
+  final texts = <String, TextFileMsg>{};
+  TextSaveMsg Function(String path, bool force)? onWriteText;
+  String? writeError;
+  final writes = <(String, String, bool, bool, int, int, bool)>[];
+
+  @override
+  Future<Uint8List> readImage(String sourceId, String path) async {
+    calls.add('readImage $sourceId $path');
+    final err = readErrors[path];
+    if (err != null) throw PlatformException(code: '-1', message: err);
+    return images[path]!;
+  }
+
+  @override
+  Future<TextFileMsg> readText(String sourceId, String path) async {
+    calls.add('readText $sourceId $path');
+    final err = readErrors[path];
+    if (err != null) throw PlatformException(code: '-1', message: err);
+    return texts[path]!;
+  }
+
+  @override
+  Future<TextSaveMsg> writeText(String sourceId, String path, String text, bool bom, bool crlf, int expectedMtime,
+      int expectedSize, bool force) async {
+    writes.add((path, text, bom, crlf, expectedMtime, expectedSize, force));
+    if (writeError != null) throw PlatformException(code: '-13', message: writeError);
+    return onWriteText?.call(path, force) ??
+        TextSaveMsg(saved: true, changed: false, mtime: expectedMtime + 1, size: utf8.encode(text).length);
+  }
+
   /// Résultats des filtres rapides (vide si absent).
   final filters = <String, List<FilterItemMsg>>{};
 
@@ -264,6 +382,16 @@ class FakeHostApi implements HostApi {
   Future<void> openWith(String sourceId, String path) async => calls.add('openWith $sourceId $path');
 
   @override
+  Future<void> playVideo(String sourceId, String path) async => calls.add('playVideo $sourceId $path');
+
+  @override
+  Future<void> playAudio(String sourceId, List<String> paths, int startIndex) async =>
+      calls.add('playAudio $sourceId ${paths.join(',')} $startIndex');
+
+  @override
+  Future<void> playerCommand(String command, int? positionMs) async => calls.add('playerCommand $command $positionMs');
+
+  @override
   Future<void> share(String sourceId, List<String> paths) async => calls.add('share $sourceId ${paths.join(',')}');
 
   final transfers = <(String, List<String>, String, String, bool)>[];
@@ -313,7 +441,7 @@ class FakeHostApi implements HostApi {
     return thumbs[path];
   }
 
-  ViewPrefsMsg viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
+  ViewPrefsMsg viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false, builtInViewers: true);
   List<FavoriteMsg> favorites = [];
 
   @override

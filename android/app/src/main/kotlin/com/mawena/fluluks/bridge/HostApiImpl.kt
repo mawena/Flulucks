@@ -14,7 +14,9 @@ import com.mawena.fluluks.files.BatchRename
 import com.mawena.fluluks.files.Details
 import com.mawena.fluluks.files.DiskSource
 import com.mawena.fluluks.files.Entry
+import com.mawena.fluluks.files.FileContent
 import com.mawena.fluluks.files.FileDetails
+import com.mawena.fluluks.files.FileSource
 import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.FilesException
 import com.mawena.fluluks.files.QuickFilters
@@ -30,6 +32,16 @@ import com.mawena.fluluks.files.Trash
 import com.mawena.fluluks.files.Transfers
 import com.mawena.fluluks.files.ViewPrefs
 import com.mawena.fluluks.files.ViewSettings
+import com.mawena.fluluks.media.AndroidMusic
+import com.mawena.fluluks.media.Music
+import com.mawena.fluluks.media.VideoActivity
+import com.mawena.fluluks.remote.AuthFailed
+import com.mawena.fluluks.remote.HostKeyChanged
+import com.mawena.fluluks.remote.HostKeyUnknown
+import com.mawena.fluluks.remote.PrivateKeys
+import com.mawena.fluluks.remote.RemoteIOException
+import com.mawena.fluluks.remote.Remotes
+import com.mawena.fluluks.remote.ServerConfig
 import com.mawena.fluluks.volumes.AutoLock
 import com.mawena.fluluks.volumes.DiskState
 import com.mawena.fluluks.volumes.FormatOptions
@@ -65,9 +77,19 @@ class HostApiImpl(
     /** À appeler une fois : enregistre l'API hôte et pousse chaque changement d'état vers Flutter. */
     fun attach(messenger: BinaryMessenger) {
         FluLuksHostApi.setUp(messenger, this)
+        if (Music.backend == null) Music.backend = AndroidMusic(context)
         scope.launch {
             combine(VolumeManager.disks, VolumeManager.volumes) { d, v -> toMsgs(d, v) }
-                .collect { (d, v) -> events.onStateChanged(d, v) { /* réponse ignorée */ } }
+                .collect { (d, v) ->
+                    Music.checkSources() // musique d'un volume éjecté ou arraché : arrêtée
+                    events.onStateChanged(d, v) { /* réponse ignorée */ }
+                }
+        }
+        scope.launch {
+            Music.state.collect { (p, message) ->
+                val msg = p?.let { PlayerMsg(it.sourceId, it.title, it.index.toLong(), it.count.toLong(), it.playing, it.positionMs, it.durationMs) }
+                events.onPlayerChanged(msg, message) { /* réponse ignorée */ }
+            }
         }
         scope.launch {
             combine(VolumeManager.ejecting, VolumeManager.ejectError) { e, err -> e to err }
@@ -104,6 +126,7 @@ class HostApiImpl(
     private val storageCallback: Any? = if (Build.VERSION.SDK_INT >= 30) {
         object : StorageManager.StorageVolumeCallback() {
             override fun onStateChanged(volume: StorageVolume) {
+                Music.checkSources() // carte SD retirée
                 val (d, v) = toMsgs(VolumeManager.disks.value, VolumeManager.volumes.value)
                 events.onStateChanged(d, v) { /* réponse ignorée */ }
             }
@@ -212,24 +235,114 @@ class HostApiImpl(
      */
     override fun listSources(): List<SourceMsg> = guardedValue {
         val vols = VolumeManager.volumes.value.associateBy { it.id }
-        Sources.list().map { src ->
-            val v = vols[src.id]
-            if (src is DiskSource && v != null) {
-                SourceMsg(
-                    id = v.id, stableKey = if (v.partUuid.isBlank()) "disk:${v.diskId}#${v.partIndex}" else "disk:${v.partUuid}",
-                    kind = "disk", label = v.title, totalBytes = v.totalBytes, freeBytes = v.freeBytes,
-                    readOnly = v.readOnly, roReason = v.roReason, encrypted = v.encrypted,
+        Sources.list().map { src -> sourceMsg(src, vols[src.id]) }
+    }
+
+    private fun sourceMsg(src: FileSource, v: VolumeState?): SourceMsg =
+        if (src is DiskSource && v != null) {
+            SourceMsg(
+                id = v.id, stableKey = if (v.partUuid.isBlank()) "disk:${v.diskId}#${v.partIndex}" else "disk:${v.partUuid}",
+                kind = "disk", label = v.title, totalBytes = v.totalBytes, freeBytes = v.freeBytes,
+                readOnly = v.readOnly, roReason = v.roReason, encrypted = v.encrypted,
+            )
+        } else {
+            val (free, total) = src.space()
+            val ro = src.readOnlyReason
+            SourceMsg(
+                id = src.id, stableKey = src.stableKey, kind = Sources.kind(src), label = src.label,
+                totalBytes = total, freeBytes = free, readOnly = ro != null, roReason = ro ?: "", encrypted = false,
+            )
+        }
+
+    private fun serverMsg(c: ServerConfig) = RemoteServerMsg(
+        id = c.id, protocol = c.protocol, name = c.name, host = c.host, port = c.port.toLong(), user = c.user,
+        startPath = c.startPath, remember = c.remember, hostKey = c.hostKey, keyInfo = c.keyInfo,
+        hasPassword = c.hasPassword,
+        connected = Remotes.isConnected(c.id),
+    )
+
+    override fun listServers(): List<RemoteServerMsg> = guardedValue { Remotes.servers().list().map(::serverMsg) }
+
+    override fun saveServer(server: RemoteServerMsg, password: ByteArray?, keyPassphrase: ByteArray?): RemoteServerMsg =
+        guardedValue {
+            try {
+                // fiche modifiée : la connexion ouverte avec l'ancienne est fermée
+                if (server.id.isNotEmpty()) Remotes.disconnect(server.id)
+                val c = ServerConfig(
+                    server.id, server.protocol, server.name, server.host, server.port.toInt(), server.user, server.startPath,
+                    server.remember, Remotes.servers().get(server.id)?.hostKey, Remotes.servers().get(server.id)?.keyInfo,
                 )
-            } else {
-                val (free, total) = src.space()
-                val ro = src.readOnlyReason
-                SourceMsg(
-                    id = src.id, stableKey = src.stableKey, kind = Sources.kind(src), label = src.label,
-                    totalBytes = total, freeBytes = free, readOnly = ro != null, roReason = ro ?: "", encrypted = false,
-                )
+                serverMsg(Remotes.servers().save(c, password, keyPassphrase))
+            } catch (e: IllegalArgumentException) {
+                throw FilesException(EngineError.FL_EINVAL, e.message ?: "Fiche invalide")
+            } finally {
+                password?.fill(0)
+                keyPassphrase?.fill(0)
             }
         }
+
+    override fun deleteServer(serverId: String) = guardedValue {
+        Remotes.disconnect(serverId)
+        Remotes.servers().delete(serverId)
     }
+
+    override fun connectServer(serverId: String, password: ByteArray?, callback: (Result<SourceMsg>) -> Unit) =
+        io(callback) {
+            try {
+                sourceMsg(Remotes.connect(serverId, password), null)
+            } catch (e: HostKeyUnknown) {
+                throw FlutterError("hostkey-unknown", e.message, e.fingerprint)
+            } catch (e: HostKeyChanged) {
+                throw FlutterError("hostkey-changed", e.message, null)
+            } catch (e: AuthFailed) {
+                throw FlutterError("auth", e.message, e.missing)
+            } catch (e: FlutterError) {
+                throw e
+            } catch (e: Exception) {
+                throw Files.toFilesException(e, "openDocument")
+            } finally {
+                password?.fill(0)
+            }
+        }
+
+    override fun disconnectServer(serverId: String) = guardedValue {
+        Remotes.disconnect(serverId)
+        Music.checkSources()
+    }
+
+    override fun trustHostKey(serverId: String, fingerprint: String) = guardedValue { Remotes.trustHostKey(serverId, fingerprint) }
+
+    override fun forgetHostKey(serverId: String) = guardedValue { Remotes.forgetHostKey(serverId) }
+
+    override fun importPrivateKey(serverId: String, callback: (Result<String?>) -> Unit) =
+        FilePicker.pick { uri ->
+            if (uri == null) return@pick callback(Result.success(null))
+            io(callback) {
+                Files.guard("openDocument") {
+                    val key = context.contentResolver.openInputStream(uri)?.use { readKeyFile(it) }
+                        ?: throw RemoteIOException(PrivateKeys.MSG_UNREADABLE)
+                    Remotes.importPrivateKey(serverId, key)
+                }
+            }
+        }
+
+    /** Fichier de clé : 64 Kio au plus (une clé RSA de 16 384 bits en fait moins de 13). */
+    private fun readKeyFile(input: java.io.InputStream): ByteArray {
+        val buf = ByteArray(MAX_KEY_FILE + 1)
+        var n = 0
+        while (n < buf.size) {
+            val k = input.read(buf, n, buf.size - n)
+            if (k < 0) break
+            n += k
+        }
+        if (n > MAX_KEY_FILE) {
+            buf.fill(0)
+            throw RemoteIOException(PrivateKeys.MSG_UNREADABLE)
+        }
+        return buf.copyOf(n).also { buf.fill(0) }
+    }
+
+    override fun forgetPrivateKey(serverId: String) = guardedValue { Remotes.forgetPrivateKey(serverId) }
 
     override fun getAutoLockMinutes(): Long = AutoLock.readPref(context).toLong()
 
@@ -276,6 +389,17 @@ class HostApiImpl(
             if (!Files.hasViewer(context, chooser)) throw FlutterError(EngineError.FL_ENOTSUP.toString(), Files.MSG_NO_VIEWER)
             chooser
         }
+
+    override fun playVideo(sourceId: String, path: String, callback: (Result<Unit>) -> Unit) =
+        startPrepared(callback) {
+            Files.guard("openDocument") { Files.source(sourceId).stat(path) ?: throw java.io.FileNotFoundException("Document introuvable") }
+            VideoActivity.intent(context, sourceId, path)
+        }
+
+    override fun playAudio(sourceId: String, paths: List<String>, startIndex: Long, callback: (Result<Unit>) -> Unit) =
+        io(callback) { Files.guard("openDocument") { Music.play(sourceId, paths, startIndex.toInt()) } }
+
+    override fun playerCommand(command: String, positionMs: Long?) = guarded { Music.command(command, positionMs) }
 
     override fun share(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit) =
         startPrepared(callback) { Files.shareIntent(sourceId, paths) }
@@ -342,6 +466,27 @@ class HostApiImpl(
             }
         }
 
+    override fun readImage(sourceId: String, path: String, callback: (Result<ByteArray>) -> Unit) =
+        io(callback) { Files.guard("openDocument") { FileContent.readImage(Files.source(sourceId), path) } }
+
+    override fun readText(sourceId: String, path: String, callback: (Result<TextFileMsg>) -> Unit) =
+        io(callback) {
+            Files.guard("openDocument") {
+                val d = FileContent.readText(Files.source(sourceId), path)
+                TextFileMsg(d.text, d.bom, d.crlf, d.mtime, d.size, d.readOnlyReason)
+            }
+        }
+
+    override fun writeText(
+        sourceId: String, path: String, text: String, bom: Boolean, crlf: Boolean, expectedMtime: Long, expectedSize: Long,
+        force: Boolean, callback: (Result<TextSaveMsg>) -> Unit,
+    ) = io(callback) {
+        Files.guard("createDocument") {
+            val r = FileContent.writeText(Files.source(sourceId), path, text, bom, crlf, expectedMtime, expectedSize, force)
+            TextSaveMsg(r.saved, r.changed, r.mtime, r.size)
+        }
+    }
+
     override fun sha256(sourceId: String, path: String, callback: (Result<String?>) -> Unit) =
         io(callback) {
             try {
@@ -380,10 +525,10 @@ class HostApiImpl(
 
     private val viewPrefs by lazy { ViewPrefs(SharedPrefStore(context)) }
 
-    override fun getViewPrefs(): ViewPrefsMsg = viewPrefs.get().let { ViewPrefsMsg(it.sort, it.ascending, it.grid, it.showHidden) }
+    override fun getViewPrefs(): ViewPrefsMsg = viewPrefs.get().let { ViewPrefsMsg(it.sort, it.ascending, it.grid, it.showHidden, it.builtInViewers) }
 
     override fun setViewPrefs(prefs: ViewPrefsMsg) = guarded {
-        viewPrefs.set(ViewSettings(prefs.sort, prefs.ascending, prefs.grid, prefs.showHidden))
+        viewPrefs.set(ViewSettings(prefs.sort, prefs.ascending, prefs.grid, prefs.showHidden, prefs.builtInViewers))
     }
 
     override fun listFavorites(): List<FavoriteMsg> = guardedValue {
@@ -440,6 +585,7 @@ class HostApiImpl(
         }
 
         const val MSG_NO_PARTITION = "Aucune partition reconnue"
+        private const val MAX_KEY_FILE = 64 * 1024
         private const val PREFS = "fluluks"
         private const val PREF_READ_ONLY = "lecture_seule"
 

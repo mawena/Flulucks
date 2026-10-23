@@ -3,6 +3,7 @@
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Gestionnaire de fichiers (phase 6) : accès à tout le stockage du téléphone et aux cartes SD. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
@@ -46,6 +47,22 @@
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/usb_device_filter" />
         </activity>
+        <!-- Lecteur vidéo de Portail (phase 10). -->
+        <activity
+            android:name=".media.VideoActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+        <!-- Lecture de la musique en arrière-plan (phase 10). -->
+        <service
+            android:name=".media.MusicService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
         <service
             android:name=".service.VolumeService"
             android:exported="false"
@@ -60,6 +77,12 @@
                 <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
             </intent-filter>
         </provider>
+        <!-- Fichiers des dossiers distants (phase 10), servis par descripteur mandataire. -->
+        <provider
+            android:name=".provider.StreamProvider"
+            android:authorities="com.mawena.fluluks.flux"
+            android:exported="false"
+            android:grantUriPermissions="true" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.mawena.fluluks.fichiers"

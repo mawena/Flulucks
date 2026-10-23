@@ -495,6 +495,83 @@ class EntryMsg {
   }
 }
 
+/// Musique en cours (phase 10) : morceau `index` sur `count` de la file ; positions en millisecondes (durée −1 :
+/// inconnue).
+class PlayerMsg {
+  PlayerMsg({
+    required this.sourceId,
+    required this.title,
+    required this.index,
+    required this.count,
+    required this.playing,
+    required this.positionMs,
+    required this.durationMs,
+  });
+
+  String sourceId;
+
+  String title;
+
+  int index;
+
+  int count;
+
+  bool playing;
+
+  int positionMs;
+
+  int durationMs;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      sourceId,
+      title,
+      index,
+      count,
+      playing,
+      positionMs,
+      durationMs,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static PlayerMsg decode(Object result) {
+    result as List<Object?>;
+    return PlayerMsg(
+      sourceId: result[0]! as String,
+      title: result[1]! as String,
+      index: result[2]! as int,
+      count: result[3]! as int,
+      playing: result[4]! as bool,
+      positionMs: result[5]! as int,
+      durationMs: result[6]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! PlayerMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(sourceId, other.sourceId) && _deepEquals(title, other.title) && _deepEquals(index, other.index) && _deepEquals(count, other.count) && _deepEquals(playing, other.playing) && _deepEquals(positionMs, other.positionMs) && _deepEquals(durationMs, other.durationMs);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'PlayerMsg(sourceId: $sourceId, title: $title, index: $index, count: $count, playing: $playing, positionMs: $positionMs, durationMs: $durationMs)';
+  }
+}
+
 /// Avancement d'une copie ou d'un déplacement ; `error` peut accompagner `finished`.
 class TransferMsg {
   TransferMsg({
@@ -754,6 +831,140 @@ class DetailsMsg {
   @override
   String toString() {
     return 'DetailsMsg(name: $name, path: $path, type: $type, size: $size, mtime: $mtime, mode: $mode, uid: $uid, gid: $gid, permissions: $permissions, fs: $fs)';
+  }
+}
+
+/// Texte ouvert dans l'éditeur : `text` sans BOM, fins de ligne en « \n » ; `bom` et `crlf` à rendre à
+/// l'enregistrement ; `mtime` (secondes) et `size` pour voir s'il a changé ; `readOnlyReason` si le stockage est en
+/// lecture seule.
+class TextFileMsg {
+  TextFileMsg({
+    required this.text,
+    required this.bom,
+    required this.crlf,
+    required this.mtime,
+    required this.size,
+    this.readOnlyReason,
+  });
+
+  String text;
+
+  bool bom;
+
+  bool crlf;
+
+  int mtime;
+
+  int size;
+
+  String? readOnlyReason;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      text,
+      bom,
+      crlf,
+      mtime,
+      size,
+      readOnlyReason,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static TextFileMsg decode(Object result) {
+    result as List<Object?>;
+    return TextFileMsg(
+      text: result[0]! as String,
+      bom: result[1]! as bool,
+      crlf: result[2]! as bool,
+      mtime: result[3]! as int,
+      size: result[4]! as int,
+      readOnlyReason: result[5] as String?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! TextFileMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(text, other.text) && _deepEquals(bom, other.bom) && _deepEquals(crlf, other.crlf) && _deepEquals(mtime, other.mtime) && _deepEquals(size, other.size) && _deepEquals(readOnlyReason, other.readOnlyReason);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'TextFileMsg(text: $text, bom: $bom, crlf: $crlf, mtime: $mtime, size: $size, readOnlyReason: $readOnlyReason)';
+  }
+}
+
+/// Enregistrement d'un texte : `changed` si le fichier a changé depuis son ouverture (rien n'est alors écrit).
+class TextSaveMsg {
+  TextSaveMsg({
+    required this.saved,
+    required this.changed,
+    required this.mtime,
+    required this.size,
+  });
+
+  bool saved;
+
+  bool changed;
+
+  int mtime;
+
+  int size;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      saved,
+      changed,
+      mtime,
+      size,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static TextSaveMsg decode(Object result) {
+    result as List<Object?>;
+    return TextSaveMsg(
+      saved: result[0]! as bool,
+      changed: result[1]! as bool,
+      mtime: result[2]! as int,
+      size: result[3]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! TextSaveMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(saved, other.saved) && _deepEquals(changed, other.changed) && _deepEquals(mtime, other.mtime) && _deepEquals(size, other.size);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'TextSaveMsg(saved: $saved, changed: $changed, mtime: $mtime, size: $size)';
   }
 }
 
@@ -1211,13 +1422,118 @@ class SearchResultMsg {
   }
 }
 
-/// Préférences d'affichage ; `sort` : `name`, `size` ou `date`.
+/// Serveur distant enregistré (phase 10) : `protocol` `ftp` ou `sftp` ; `remember` : mot de passe mémorisé (scellé
+/// par le Keystore) ; `hostKey` : clé SFTP acceptée ; `keyInfo` : clé privée importée ; `hasPassword` : un mot de
+/// passe est mémorisé ; `connected` : connexion ouverte (source `remote:<id>`).
+class RemoteServerMsg {
+  RemoteServerMsg({
+    required this.id,
+    required this.protocol,
+    required this.name,
+    required this.host,
+    required this.port,
+    required this.user,
+    required this.startPath,
+    required this.remember,
+    this.hostKey,
+    this.keyInfo,
+    required this.hasPassword,
+    required this.connected,
+  });
+
+  String id;
+
+  String protocol;
+
+  String name;
+
+  String host;
+
+  int port;
+
+  String user;
+
+  String startPath;
+
+  bool remember;
+
+  String? hostKey;
+
+  String? keyInfo;
+
+  bool hasPassword;
+
+  bool connected;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      id,
+      protocol,
+      name,
+      host,
+      port,
+      user,
+      startPath,
+      remember,
+      hostKey,
+      keyInfo,
+      hasPassword,
+      connected,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static RemoteServerMsg decode(Object result) {
+    result as List<Object?>;
+    return RemoteServerMsg(
+      id: result[0]! as String,
+      protocol: result[1]! as String,
+      name: result[2]! as String,
+      host: result[3]! as String,
+      port: result[4]! as int,
+      user: result[5]! as String,
+      startPath: result[6]! as String,
+      remember: result[7]! as bool,
+      hostKey: result[8] as String?,
+      keyInfo: result[9] as String?,
+      hasPassword: result[10]! as bool,
+      connected: result[11]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! RemoteServerMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(id, other.id) && _deepEquals(protocol, other.protocol) && _deepEquals(name, other.name) && _deepEquals(host, other.host) && _deepEquals(port, other.port) && _deepEquals(user, other.user) && _deepEquals(startPath, other.startPath) && _deepEquals(remember, other.remember) && _deepEquals(hostKey, other.hostKey) && _deepEquals(keyInfo, other.keyInfo) && _deepEquals(hasPassword, other.hasPassword) && _deepEquals(connected, other.connected);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'RemoteServerMsg(id: $id, protocol: $protocol, name: $name, host: $host, port: $port, user: $user, startPath: $startPath, remember: $remember, hostKey: $hostKey, keyInfo: $keyInfo, hasPassword: $hasPassword, connected: $connected)';
+  }
+}
+
+/// Préférences d'affichage ; `sort` : `name`, `size` ou `date` ; `builtInViewers` : ouvrir images, musique, vidéos et
+/// textes dans les lecteurs de Portail (sinon dans une autre application).
 class ViewPrefsMsg {
   ViewPrefsMsg({
     required this.sort,
     required this.ascending,
     required this.grid,
     required this.showHidden,
+    required this.builtInViewers,
   });
 
   String sort;
@@ -1228,12 +1544,15 @@ class ViewPrefsMsg {
 
   bool showHidden;
 
+  bool builtInViewers;
+
   List<Object?> _toList() {
     return <Object?>[
       sort,
       ascending,
       grid,
       showHidden,
+      builtInViewers,
     ];
   }
 
@@ -1247,6 +1566,7 @@ class ViewPrefsMsg {
       ascending: result[1]! as bool,
       grid: result[2]! as bool,
       showHidden: result[3]! as bool,
+      builtInViewers: result[4]! as bool,
     );
   }
 
@@ -1259,7 +1579,7 @@ class ViewPrefsMsg {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(sort, other.sort) && _deepEquals(ascending, other.ascending) && _deepEquals(grid, other.grid) && _deepEquals(showHidden, other.showHidden);
+    return _deepEquals(sort, other.sort) && _deepEquals(ascending, other.ascending) && _deepEquals(grid, other.grid) && _deepEquals(showHidden, other.showHidden) && _deepEquals(builtInViewers, other.builtInViewers);
   }
 
   @override
@@ -1268,7 +1588,7 @@ class ViewPrefsMsg {
 
   @override
   String toString() {
-    return 'ViewPrefsMsg(sort: $sort, ascending: $ascending, grid: $grid, showHidden: $showHidden)';
+    return 'ViewPrefsMsg(sort: $sort, ascending: $ascending, grid: $grid, showHidden: $showHidden, builtInViewers: $builtInViewers)';
   }
 }
 
@@ -1356,41 +1676,53 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is EntryMsg) {
       buffer.putUint8(133);
       writeValue(buffer, value.encode());
-    }    else if (value is TransferMsg) {
+    }    else if (value is PlayerMsg) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is TrashItemMsg) {
+    }    else if (value is TransferMsg) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is DetailsMsg) {
+    }    else if (value is TrashItemMsg) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is RenameRuleMsg) {
+    }    else if (value is DetailsMsg) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    }    else if (value is RenamePreviewMsg) {
+    }    else if (value is TextFileMsg) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    }    else if (value is FilterItemMsg) {
+    }    else if (value is TextSaveMsg) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    }    else if (value is FolderSizeMsg) {
+    }    else if (value is RenameRuleMsg) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
-    }    else if (value is SpaceItemMsg) {
+    }    else if (value is RenamePreviewMsg) {
       buffer.putUint8(141);
       writeValue(buffer, value.encode());
-    }    else if (value is SpaceReportMsg) {
+    }    else if (value is FilterItemMsg) {
       buffer.putUint8(142);
       writeValue(buffer, value.encode());
-    }    else if (value is SearchResultMsg) {
+    }    else if (value is FolderSizeMsg) {
       buffer.putUint8(143);
       writeValue(buffer, value.encode());
-    }    else if (value is ViewPrefsMsg) {
+    }    else if (value is SpaceItemMsg) {
       buffer.putUint8(144);
       writeValue(buffer, value.encode());
-    }    else if (value is FavoriteMsg) {
+    }    else if (value is SpaceReportMsg) {
       buffer.putUint8(145);
+      writeValue(buffer, value.encode());
+    }    else if (value is SearchResultMsg) {
+      buffer.putUint8(146);
+      writeValue(buffer, value.encode());
+    }    else if (value is RemoteServerMsg) {
+      buffer.putUint8(147);
+      writeValue(buffer, value.encode());
+    }    else if (value is ViewPrefsMsg) {
+      buffer.putUint8(148);
+      writeValue(buffer, value.encode());
+    }    else if (value is FavoriteMsg) {
+      buffer.putUint8(149);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -1411,28 +1743,36 @@ class _PigeonCodec extends StandardMessageCodec {
       case 133:
         return EntryMsg.decode(readValue(buffer)!);
       case 134:
-        return TransferMsg.decode(readValue(buffer)!);
+        return PlayerMsg.decode(readValue(buffer)!);
       case 135:
-        return TrashItemMsg.decode(readValue(buffer)!);
+        return TransferMsg.decode(readValue(buffer)!);
       case 136:
-        return DetailsMsg.decode(readValue(buffer)!);
+        return TrashItemMsg.decode(readValue(buffer)!);
       case 137:
-        return RenameRuleMsg.decode(readValue(buffer)!);
+        return DetailsMsg.decode(readValue(buffer)!);
       case 138:
-        return RenamePreviewMsg.decode(readValue(buffer)!);
+        return TextFileMsg.decode(readValue(buffer)!);
       case 139:
-        return FilterItemMsg.decode(readValue(buffer)!);
+        return TextSaveMsg.decode(readValue(buffer)!);
       case 140:
-        return FolderSizeMsg.decode(readValue(buffer)!);
+        return RenameRuleMsg.decode(readValue(buffer)!);
       case 141:
-        return SpaceItemMsg.decode(readValue(buffer)!);
+        return RenamePreviewMsg.decode(readValue(buffer)!);
       case 142:
-        return SpaceReportMsg.decode(readValue(buffer)!);
+        return FilterItemMsg.decode(readValue(buffer)!);
       case 143:
-        return SearchResultMsg.decode(readValue(buffer)!);
+        return FolderSizeMsg.decode(readValue(buffer)!);
       case 144:
-        return ViewPrefsMsg.decode(readValue(buffer)!);
+        return SpaceItemMsg.decode(readValue(buffer)!);
       case 145:
+        return SpaceReportMsg.decode(readValue(buffer)!);
+      case 146:
+        return SearchResultMsg.decode(readValue(buffer)!);
+      case 147:
+        return RemoteServerMsg.decode(readValue(buffer)!);
+      case 148:
+        return ViewPrefsMsg.decode(readValue(buffer)!);
+      case 149:
         return FavoriteMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1881,6 +2221,64 @@ class FluLuksHostApi {
     ;
   }
 
+  /// Lecteur vidéo de Portail (plein écran, sous-titres `.srt` à côté de la vidéo).
+  Future<void> playVideo(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.playVideo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Musique : file faite des sons de `paths` (le dossier dans l'ordre affiché), départ sur `paths[startIndex]`.
+  /// Asynchrone : les URI d'un dossier distant se préparent par le réseau, hors du fil principal.
+  Future<void> playAudio(String sourceId, List<String> paths, int startIndex) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.playAudio$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, paths, startIndex]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// `play`, `pause`, `next`, `previous`, `back`, `forward`, `seek` (`positionMs`) ou `stop`.
+  Future<void> playerCommand(String command, int? positionMs) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.playerCommand$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[command, positionMs]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
   Future<void> share(String sourceId, List<String> paths) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.share$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -2144,6 +2542,237 @@ class FluLuksHostApi {
     ;
   }
 
+  /// Lecteurs (phase 10) : octets d'une image (64 Mio au plus, HEIC converti en JPEG) ; texte UTF-8 de l'éditeur
+  /// (2 Mio au plus), enregistré par un fichier temporaire, refusé (`changed`) s'il a changé depuis son ouverture,
+  /// sauf `force`.
+  /// Dossiers distants (phase 10). `saveServer` : identifiant vide pour un nouveau serveur ; mots de passe null :
+  /// ceux mémorisés sont gardés. `connectServer` échoue avec le code `auth` (mot de passe requis ou refusé ; détails :
+  /// vrai s'il manquait), `hostkey-unknown` (détails : l'empreinte à montrer) ou `hostkey-changed`.
+  Future<List<RemoteServerMsg>> listServers() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.listServers$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<RemoteServerMsg>();
+  }
+
+  Future<RemoteServerMsg> saveServer(RemoteServerMsg server, Uint8List? password, Uint8List? keyPassphrase) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.saveServer$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[server, password, keyPassphrase]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as RemoteServerMsg;
+  }
+
+  Future<void> deleteServer(String serverId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.deleteServer$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[serverId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<SourceMsg> connectServer(String serverId, Uint8List? password) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.connectServer$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[serverId, password]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as SourceMsg;
+  }
+
+  Future<void> disconnectServer(String serverId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.disconnectServer$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[serverId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> trustHostKey(String serverId, String fingerprint) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.trustHostKey$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[serverId, fingerprint]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> forgetHostKey(String serverId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.forgetHostKey$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[serverId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Clé privée OpenSSH choisie dans le sélecteur d'Android, scellée pour `serverId` ; rend sa description
+  /// (« ssh-ed25519 SHA256:… »), ou null si rien n'a été choisi.
+  Future<String?> importPrivateKey(String serverId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.importPrivateKey$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[serverId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+    return pigeonVar_replyValue as String?;
+  }
+
+  Future<void> forgetPrivateKey(String serverId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.forgetPrivateKey$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[serverId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<Uint8List> readImage(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.readImage$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as Uint8List;
+  }
+
+  Future<TextFileMsg> readText(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.readText$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as TextFileMsg;
+  }
+
+  Future<TextSaveMsg> writeText(String sourceId, String path, String text, bool bom, bool crlf, int expectedMtime, int expectedSize, bool force) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.writeText$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path, text, bom, crlf, expectedMtime, expectedSize, force]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as TextSaveMsg;
+  }
+
   /// Filtre rapide (`photos`, `videos`, `music`, `documents`, `archives`, `recent`) : 500 fichiers au plus, du plus récent.
   Future<List<FilterItemMsg>> quickFilter(String filter) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.quickFilter$pigeonVar_messageChannelSuffix';
@@ -2350,6 +2979,9 @@ abstract class FluLuksEventsApi {
   /// Pourcentage du calcul d'empreinte en cours ; null à la fin.
   void onHashProgress(int? pct);
 
+  /// Musique en cours, ou null à l'arrêt ; `message` : raison d'un arrêt subi (« Lecture arrêtée : stockage fermé »).
+  void onPlayerChanged(PlayerMsg? player, String? message);
+
   static void setUp(FluLuksEventsApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
@@ -2450,6 +3082,28 @@ abstract class FluLuksEventsApi {
           final int? arg_pct = args[0] as int?;
           try {
             api.onHashProgress(arg_pct);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.fluluks.FluLuksEventsApi.onPlayerChanged$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final PlayerMsg? arg_player = args[0] as PlayerMsg?;
+          final String? arg_message = args[1] as String?;
+          try {
+            api.onPlayerChanged(arg_player, arg_message);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

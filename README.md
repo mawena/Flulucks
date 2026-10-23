@@ -3,24 +3,61 @@
 Portail (anciennement FluLuks) est un **gestionnaire de fichiers** Android qui ouvre aussi les **disques
 externes chiffrés avec LUKS** branchés en USB-C, **sans root**, ainsi que les clés et disques en clair
 formatés en ext4, FAT, exFAT ou NTFS. Il parcourt le téléphone, la carte SD et les disques USB, copie ou
-déplace d'un stockage à l'autre, compresse et extrait les archives, et garde une corbeille. Le contenu des
+déplace d'un stockage à l'autre, compresse et extrait les archives, et garde une corbeille. Il montre les photos,
+lit la musique et les vidéos et modifie les textes dans ses propres lecteurs, et parcourt des dossiers distants FTP
+et SFTP comme les autres stockages. Le contenu des
 disques apparaît aussi dans l'application **Fichiers** d'Android : on ouvre une vidéo dans VLC, un PDF ou une
 photo dans les applications habituelles.
 
 Elle est née d'un besoin simple : utiliser sur un téléphone non rooté (un Pixel 4 XL) le disque
 LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permettait.
 
-> **État actuel : version 1.2.0 ; gestionnaire de fichiers (archives ZIP, 7z, RAR et TAR, corbeille, analyse de
-> l'espace, renommage par lot), lecture et écriture sur ext4, FAT, exFAT et NTFS, formatage des disques USB, en
+> **État actuel : version 1.3.0 ; gestionnaire de fichiers (lecteurs intégrés de photos, musique, vidéos et textes,
+> dossiers distants FTP et SFTP, archives ZIP, 7z, RAR et TAR, corbeille, analyse de l'espace, renommage par lot),
+> lecture et écriture sur ext4, FAT, exFAT et NTFS, formatage des disques USB, en
 > clair ou chiffrés.** L'écriture a été vérifiée sur PC (batteries de non-corruption jugées par des outils indépendants
 > et le noyau Linux, coupures simulées), sur le téléphone avec des images, puis essayée sur une vraie clé
 > et un vrai disque pour chaque système de fichiers (ext4 compris : `e2fsck` propre ensuite sous Ubuntu).
 > Une sauvegarde reste recommandée avant d'écrire sur un disque qui compte. Voir les
 > [limites](#limites-actuelles).
 
-## Ce que fait la version 1.2.0
+## Ce que fait la version 1.3.0
 
-### Archives, corbeille et outils (nouveau en 1.2.0)
+### Lecteurs intégrés et dossiers distants (nouveau en 1.3.0)
+
+- **Ouvrir dans Portail** (réglage actif par défaut) : toucher un fichier l'ouvre dans le lecteur de Portail qui lui
+  convient ; les autres types, ou tous si le réglage est coupé, s'ouvrent dans une autre application comme avant.
+  Rien de ce que lisent les lecteurs n'est écrit sur le stockage du téléphone : un fichier d'un disque chiffré reste
+  dans le disque.
+- **Photos** (JPEG, PNG, GIF, WebP, BMP, HEIC et HEIF) : plein écran ; on glisse d'une photo du dossier à l'autre,
+  on zoome en pinçant ou en touchant deux fois. 64 Mio au plus par image.
+- **Musique** (MP3, M4A, AAC, OGG, Opus, FLAC, WAV) : la file d'attente est faite des morceaux du dossier, dans
+  l'ordre affiché. La lecture continue écran éteint, avec la notification d'Android, et se met en pause quand on
+  débranche les écouteurs. Une barre réduite reste en bas de tous les écrans ; l'écran **Lecture en cours** donne la
+  position, le curseur, précédent, suivant, et le recul et l'avance de 10 s. Si le stockage disparaît (éjection,
+  disque arraché, serveur déconnecté), la lecture s'arrête : « Lecture arrêtée : stockage fermé ».
+- **Vidéo** (MP4, M4V, MKV, WebM, MOV, 3GP, AVI) : plein écran, en paysage selon le capteur, recul et avance de
+  10 s ; l'écran reste allumé pendant la lecture. Les sous-titres `film.srt` et `film.<langue>.srt` posés à côté
+  de la vidéo sont proposés (UTF-8 ou Windows-1252 ; le premier est actif).
+- **Textes** (TXT, Markdown, JSON, XML, CSV, journaux, fichiers de configuration, code…) : éditeur pour les fichiers
+  UTF-8 de 2 Mio au plus. Le BOM et les fins de ligne Windows sont gardés. L'enregistrement écrit un fichier
+  temporaire qui remplace ensuite l'original, jamais d'original à moitié écrit ; si le fichier a changé depuis son
+  ouverture, Portail demande avant d'écraser. **Modifier comme texte** ouvre un fichier d'une autre extension.
+- **Dossiers distants** (accueil, section **Dossiers distants**) : un serveur **FTP** ou **SFTP** enregistré (nom,
+  adresse, port, utilisateur, dossier de départ) se parcourt comme les autres stockages : ouvrir avec les lecteurs
+  (une vidéo distante s'avance sans être téléchargée), partager, copier et déplacer dans les deux sens, renommer,
+  créer, supprimer, compresser et extraire.
+  - Le mot de passe n'est mémorisé que si « Mémoriser » est coché, chiffré par une clé du Keystore d'Android ;
+    sinon il est demandé à chaque connexion et oublié à la déconnexion.
+  - **SFTP** : l'empreinte de la clé du serveur est montrée à la première connexion, à comparer à
+    `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub`, puis vérifiée à chaque connexion ; une clé changée est
+    refusée (**Oublier l'empreinte** dans la fiche si le serveur a été réinstallé). Connexion par mot de passe ou
+    par une **clé privée OpenSSH** importée dans la fiche (Ed25519, ECDSA ou RSA), scellée comme le mot de passe ;
+    une clé chiffrée demande sa phrase à la connexion, sauf si elle est mémorisée.
+  - **FTP** : mode passif ; UTF-8 si le serveur l'annonce, sinon Latin-1 ; connexion anonyme si l'utilisateur est
+    vide.
+
+### Archives, corbeille et outils (1.2.0)
 
 - **Extraire** une archive ZIP, 7z, RAR (RAR4 et RAR5), TAR, TAR.GZ ou TAR.XZ, ou un fichier `.gz` ou `.xz`
   seul : touchez-la, puis **Extraire ici** (dans un nouveau dossier au nom de l'archive ; un `.gz` ou un `.xz`
@@ -176,7 +213,15 @@ Mesures sur le même téléphone, sur une image (test `PerfInstrumentedTest`, sa
 - **Dossiers protégés du téléphone** : Android interdit à toute application, même avec l'accès à tous les
   fichiers, de lire `Android/data` et `Android/obb`. Portail affiche « Dossier protégé par Android ».
 - **Liens symboliques et fichiers spéciaux** : listés, mais ni suivis ni copiés ; une copie qui en
-  rencontre le signale à la fin (« Les liens symboliques et fichiers spéciaux ne sont pas copiés »).
+  rencontre le signale à la fin (« Les liens symboliques et fichiers spéciaux ne sont pas copiés »). C'est vrai
+  aussi sur un serveur SFTP.
+- **Dossiers distants** :
+  - **pas de corbeille** : la suppression y est définitive, et la boîte de suppression le dit ;
+  - **FTP n'est pas chiffré** : le mot de passe et les fichiers circulent en clair, préférez SFTP hors de chez vous ;
+  - la place libre d'un serveur est inconnue : elle n'est pas vérifiée avant une copie ou une extraction ;
+  - vignettes des images de 8 Mio au plus, pas de vignette de vidéo ;
+  - au plus 3 transferts en même temps par serveur ; au-delà, une opération attend (30 s au plus) ;
+  - pas d'FTPS (FTP sur TLS) ni d'authentification SSH par agent.
 
 - **Écriture ext4** : vérifiée sur PC et sur le téléphone avec des images, puis essayée sur le vrai disque
   (LUKS2 et ext4 : copie de 1 Gio dans les deux sens, renommage, suppression, `e2fsck -fn` propre sous
@@ -408,8 +453,9 @@ Le dépôt suit git flow :
 | 8 | Formatage des disques USB : FAT32, exFAT, ext4, NTFS, en clair ou chiffré LUKS2 | **v1.1.0** |
 | 9 | Compression et décompression (ZIP, 7z, RAR, TAR), corbeille, analyse de l'espace, propriétés et SHA-256, renommage par lot, filtres | **v1.2.0** |
 | 10 | Visionneuse d'images, lecteurs de musique et de vidéo, éditeur de texte, dossiers distants FTP puis SFTP | v1.3.0 |
-| 11 | Vérification et réparation des disques : e2fsck, ntfsfix, fsck.fat, fsck.exfat, en-têtes LUKS | v1.4.0 |
-| 12 | Gestion des partitions comme GParted : taille au formatage, créer, supprimer, redimensionner | v1.5.0 |
+| 11 | Interface complète et professionnelle | v1.4.0 |
+| 12 | Vérification et réparation des disques : e2fsck, ntfsfix, fsck.fat, fsck.exfat, en-têtes LUKS | v1.5.0 |
+| 13 | Gestion des partitions comme GParted : taille au formatage, créer, supprimer, redimensionner | v1.6.0 |
 
 Suivi détaillé, étape par étape : [docs/superpowers/plans/2026-10-17-fluluks-feuille-de-route.md](docs/superpowers/plans/2026-10-17-fluluks-feuille-de-route.md).
 Conception : [docs/superpowers/specs/2026-10-17-fluluks-design.md](docs/superpowers/specs/2026-10-17-fluluks-design.md).
@@ -419,6 +465,9 @@ Conception : [docs/superpowers/specs/2026-10-17-fluluks-design.md](docs/superpow
 Aucune licence n'est encore choisie pour le code de Portail. Mais l'application est liée à libntfs-3g
 (GPL version 2 ou ultérieure, depuis la phase 5) et à une partie de lwext4 sous GPL : distribuée, elle doit
 l'être sous GPL, avec ses sources. FatFs est sous une licence de type BSD à une clause, compatible avec la
-GPL, comme libarchive (BSD à deux clauses) et liblzma (0BSD). Les licences des bibliothèques sont dans
+GPL, comme libarchive (BSD à deux clauses) et liblzma (0BSD). Depuis la phase 10, l'application embarque aussi
+AndroidX Media3 1.11.1 et Apache Commons Net 3.13.0 (Apache-2.0), JSch 2.28.8 de mwiede (BSD) et Bouncy Castle
+1.86 (licence MIT), toutes compatibles avec la GPL ; Apache FtpServer 1.2.1 et Apache MINA SSHD 2.20.0 (Apache-2.0)
+ne servent qu'aux tests. Les licences des bibliothèques natives sont dans
 `native/third_party/` (`ntfs-3g/COPYING`, `fatfs/LICENSE.txt`, `libarchive/COPYING`, `xz/COPYING`…) ; leurs correctifs sont décrits dans
 [native/third_party/PATCHES.md](native/third_party/PATCHES.md).

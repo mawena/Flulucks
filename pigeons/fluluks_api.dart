@@ -113,6 +113,27 @@ class EntryMsg {
   int mtime;
 }
 
+/// Musique en cours (phase 10) : morceau `index` sur `count` de la file ; positions en millisecondes (durée −1 :
+/// inconnue).
+class PlayerMsg {
+  PlayerMsg({
+    required this.sourceId,
+    required this.title,
+    required this.index,
+    required this.count,
+    required this.playing,
+    required this.positionMs,
+    required this.durationMs,
+  });
+  String sourceId;
+  String title;
+  int index;
+  int count;
+  bool playing;
+  int positionMs;
+  int durationMs;
+}
+
 /// Avancement d'une copie ou d'un déplacement ; `error` peut accompagner `finished`.
 class TransferMsg {
   TransferMsg({
@@ -189,6 +210,35 @@ class DetailsMsg {
   int? gid;
   String? permissions;
   String fs;
+}
+
+/// Texte ouvert dans l'éditeur : `text` sans BOM, fins de ligne en « \n » ; `bom` et `crlf` à rendre à
+/// l'enregistrement ; `mtime` (secondes) et `size` pour voir s'il a changé ; `readOnlyReason` si le stockage est en
+/// lecture seule.
+class TextFileMsg {
+  TextFileMsg({
+    required this.text,
+    required this.bom,
+    required this.crlf,
+    required this.mtime,
+    required this.size,
+    this.readOnlyReason,
+  });
+  String text;
+  bool bom;
+  bool crlf;
+  int mtime;
+  int size;
+  String? readOnlyReason;
+}
+
+/// Enregistrement d'un texte : `changed` si le fichier a changé depuis son ouverture (rien n'est alors écrit).
+class TextSaveMsg {
+  TextSaveMsg({required this.saved, required this.changed, required this.mtime, required this.size});
+  bool saved;
+  bool changed;
+  int mtime;
+  int size;
 }
 
 /// Règle de renommage par lot : `mode` `number` (`base`, `start`), `replace` (`find`, `replace`, `caseSensitive`)
@@ -277,13 +327,53 @@ class SearchResultMsg {
   bool truncated;
 }
 
-/// Préférences d'affichage ; `sort` : `name`, `size` ou `date`.
+/// Serveur distant enregistré (phase 10) : `protocol` `ftp` ou `sftp` ; `remember` : mot de passe mémorisé (scellé
+/// par le Keystore) ; `hostKey` : clé SFTP acceptée ; `keyInfo` : clé privée importée ; `hasPassword` : un mot de
+/// passe est mémorisé ; `connected` : connexion ouverte (source `remote:<id>`).
+class RemoteServerMsg {
+  RemoteServerMsg({
+    required this.id,
+    required this.protocol,
+    required this.name,
+    required this.host,
+    required this.port,
+    required this.user,
+    required this.startPath,
+    required this.remember,
+    this.hostKey,
+    this.keyInfo,
+    required this.hasPassword,
+    required this.connected,
+  });
+  String id;
+  String protocol;
+  String name;
+  String host;
+  int port;
+  String user;
+  String startPath;
+  bool remember;
+  String? hostKey;
+  String? keyInfo;
+  bool hasPassword;
+  bool connected;
+}
+
+/// Préférences d'affichage ; `sort` : `name`, `size` ou `date` ; `builtInViewers` : ouvrir images, musique, vidéos et
+/// textes dans les lecteurs de Portail (sinon dans une autre application).
 class ViewPrefsMsg {
-  ViewPrefsMsg({required this.sort, required this.ascending, required this.grid, required this.showHidden});
+  ViewPrefsMsg({
+    required this.sort,
+    required this.ascending,
+    required this.grid,
+    required this.showHidden,
+    required this.builtInViewers,
+  });
   String sort;
   bool ascending;
   bool grid;
   bool showHidden;
+  bool builtInViewers;
 }
 
 /// Favori ; `sourceId` null si le stockage n'est pas ouvert.
@@ -336,6 +426,18 @@ abstract class FluLuksHostApi {
   void emptyTrash(String sourceId);
   @async
   void openWith(String sourceId, String path);
+
+  /// Lecteur vidéo de Portail (plein écran, sous-titres `.srt` à côté de la vidéo).
+  @async
+  void playVideo(String sourceId, String path);
+
+  /// Musique : file faite des sons de `paths` (le dossier dans l'ordre affiché), départ sur `paths[startIndex]`.
+  /// Asynchrone : les URI d'un dossier distant se préparent par le réseau, hors du fil principal.
+  @async
+  void playAudio(String sourceId, List<String> paths, int startIndex);
+
+  /// `play`, `pause`, `next`, `previous`, `back`, `forward`, `seek` (`positionMs`) ou `stop`.
+  void playerCommand(String command, int? positionMs);
   @async
   void share(String sourceId, List<String> paths);
   void startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
@@ -366,6 +468,43 @@ abstract class FluLuksHostApi {
   @async
   String? sha256(String sourceId, String path);
   void cancelHash();
+
+  /// Lecteurs (phase 10) : octets d'une image (64 Mio au plus, HEIC converti en JPEG) ; texte UTF-8 de l'éditeur
+  /// (2 Mio au plus), enregistré par un fichier temporaire, refusé (`changed`) s'il a changé depuis son ouverture,
+  /// sauf `force`.
+  /// Dossiers distants (phase 10). `saveServer` : identifiant vide pour un nouveau serveur ; mots de passe null :
+  /// ceux mémorisés sont gardés. `connectServer` échoue avec le code `auth` (mot de passe requis ou refusé ; détails :
+  /// vrai s'il manquait), `hostkey-unknown` (détails : l'empreinte à montrer) ou `hostkey-changed`.
+  List<RemoteServerMsg> listServers();
+  RemoteServerMsg saveServer(RemoteServerMsg server, Uint8List? password, Uint8List? keyPassphrase);
+  void deleteServer(String serverId);
+  @async
+  SourceMsg connectServer(String serverId, Uint8List? password);
+  void disconnectServer(String serverId);
+  void trustHostKey(String serverId, String fingerprint);
+  void forgetHostKey(String serverId);
+
+  /// Clé privée OpenSSH choisie dans le sélecteur d'Android, scellée pour `serverId` ; rend sa description
+  /// (« ssh-ed25519 SHA256:… »), ou null si rien n'a été choisi.
+  @async
+  String? importPrivateKey(String serverId);
+  void forgetPrivateKey(String serverId);
+
+  @async
+  Uint8List readImage(String sourceId, String path);
+  @async
+  TextFileMsg readText(String sourceId, String path);
+  @async
+  TextSaveMsg writeText(
+    String sourceId,
+    String path,
+    String text,
+    bool bom,
+    bool crlf,
+    int expectedMtime,
+    int expectedSize,
+    bool force,
+  );
 
   /// Filtre rapide (`photos`, `videos`, `music`, `documents`, `archives`, `recent`) : 500 fichiers au plus, du plus récent.
   @async
@@ -405,4 +544,7 @@ abstract class FluLuksEventsApi {
 
   /// Pourcentage du calcul d'empreinte en cours ; null à la fin.
   void onHashProgress(int? pct);
+
+  /// Musique en cours, ou null à l'arrêt ; `message` : raison d'un arrêt subi (« Lecture arrêtée : stockage fermé »).
+  void onPlayerChanged(PlayerMsg? player, String? message);
 }

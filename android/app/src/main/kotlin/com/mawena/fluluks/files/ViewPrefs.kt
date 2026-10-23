@@ -22,8 +22,11 @@ class SharedPrefStore(context: Context) : PrefStore {
     override fun putBoolean(key: String, value: Boolean) = p.edit().putBoolean(key, value).apply()
 }
 
-/** Préférences d'affichage. `sort` : `name`, `size` ou `date`. */
-data class ViewSettings(val sort: String = "name", val ascending: Boolean = true, val grid: Boolean = false, val showHidden: Boolean = false)
+/** Préférences d'affichage. `sort` : `name`, `size` ou `date` ; [builtInViewers] : lecteurs de Portail (phase 10). */
+data class ViewSettings(
+    val sort: String = "name", val ascending: Boolean = true, val grid: Boolean = false, val showHidden: Boolean = false,
+    val builtInViewers: Boolean = true,
+)
 
 /** Favori : `key` stable de la source, chemin, libellé ; `sourceId` null si le stockage n'est pas ouvert. */
 data class Favorite(val key: String, val path: String, val label: String, val sourceId: String?)
@@ -32,7 +35,10 @@ data class Favorite(val key: String, val path: String, val label: String, val so
 class ViewPrefs(private val store: PrefStore, private val sources: () -> List<FileSource> = Sources::list) {
     fun get(): ViewSettings {
         val sort = store.getString(SORT)?.takeIf { it in SORTS } ?: "name"
-        return ViewSettings(sort, store.getBoolean(ASC, true), store.getBoolean(GRID, false), store.getBoolean(HIDDEN, false))
+        return ViewSettings(
+            sort, store.getBoolean(ASC, true), store.getBoolean(GRID, false), store.getBoolean(HIDDEN, false),
+            store.getBoolean(VIEWERS, true),
+        )
     }
 
     fun set(v: ViewSettings) {
@@ -40,6 +46,7 @@ class ViewPrefs(private val store: PrefStore, private val sources: () -> List<Fi
         store.putBoolean(ASC, v.ascending)
         store.putBoolean(GRID, v.grid)
         store.putBoolean(HIDDEN, v.showHidden)
+        store.putBoolean(VIEWERS, v.builtInViewers)
     }
 
     private fun load(): MutableList<Triple<String, String, String>> {
@@ -93,6 +100,7 @@ class ViewPrefs(private val store: PrefStore, private val sources: () -> List<Fi
         private const val ASC = "tri_croissant"
         private const val GRID = "grille"
         private const val HIDDEN = "caches"
+        private const val VIEWERS = "lecteurs_portail"
         private const val FAVORITES = "favoris"
     }
 }

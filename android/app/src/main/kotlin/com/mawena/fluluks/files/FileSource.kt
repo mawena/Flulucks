@@ -44,6 +44,9 @@ interface FileSource {
     /** Noms limités comme sur FAT et NTFS (`: * ? " < > | \`…) : les copies y assainissent les noms. */
     val restrictedNames: Boolean
 
+    /** Corbeille possible ([Trash]) ; faux pour un dossier distant, où la suppression est définitive. */
+    val hasTrash: Boolean get() = true
+
     fun list(path: String): List<Entry>
     fun stat(path: String): Entry?
 
@@ -67,8 +70,30 @@ interface FileSource {
 
     fun openRead(path: String): InputStream
 
+    /** Flux de [path] à partir de l'octet [offset] ; une source distante le fait sans relire le début. */
+    fun openReadAt(path: String, offset: Long): InputStream {
+        val s = openRead(path)
+        try {
+            var left = offset
+            while (left > 0) {
+                val k = s.skip(left)
+                if (k > 0) left -= k else if (s.read() < 0) break else left--
+            }
+            return s
+        } catch (e: Exception) {
+            s.close()
+            throw e
+        }
+    }
+
     /** Crée le fichier [name] sous [parent] (nom unique) ; rend son chemin et un flux d'écriture à fermer. */
     fun createFile(parent: String, name: String): Pair<String, OutputStream>
+
+    /**
+     * Réécrit en place le fichier ordinaire existant [path] (vidé puis réécrit) : même fichier, donc mêmes droits,
+     * propriétaire et liens durs. Flux d'écriture à fermer.
+     */
+    fun openOverwrite(path: String): OutputStream
 
     /** URI de contenu lisible par une autre application (Ouvrir avec, Partager). */
     fun contentUri(path: String): Uri
@@ -97,6 +122,12 @@ sealed class NativeIn {
      * volume), lève une erreur si le volume a été fermé.
      */
     class EngineFile(val handle: Long, val size: Long, val onActivity: () -> Unit) : NativeIn()
+
+    /**
+     * Fichier sans descripteur propre (dossier distant) : [open] rend un descripteur mandataire détaché
+     * ([com.mawena.fluluks.provider.StreamProvider.openProxy]), lu à n'importe quel décalage.
+     */
+    class Proxy(val size: Long, val open: () -> Int) : NativeIn()
 }
 
 /** Destination d'un ZIP écrit par le moteur (Engine.arcwOpenFd / arcwOpenFile), fermée par l'archive. */
@@ -105,6 +136,12 @@ sealed class NativeOut {
 
     /** [onClosed] après la fermeture (synchronisation programmée, vues prévenues). */
     class EngineFile(val handle: Long, val onClosed: () -> Unit) : NativeOut()
+
+    /**
+     * Destination sans descripteur (dossier distant) : le moteur écrit dans un tube, recopié vers [sink], fermé
+     * ensuite ; [onClosed] reçoit vrai si l'archive est complète.
+     */
+    class Pipe(val sink: OutputStream, val onClosed: (commit: Boolean) -> Unit) : NativeOut()
 }
 
 internal fun FileType.isDir() = this == FileType.DIR

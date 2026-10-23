@@ -226,7 +226,8 @@ object Transfers {
             val files = plans.sumOf { p -> p.count { it.type == FileType.FILE } }
             val total = plans.sumOf { p -> p.filter { it.type == FileType.FILE }.sumOf { it.size } }
             val (free, _) = dst.space()
-            if (total > free) throw FilesException(EngineError.FL_ENOSPC, msgNoSpace(total, free))
+            // place inconnue (dossier distant, −1) : non vérifiée
+            if (free >= 0 && total > free) throw FilesException(EngineError.FL_ENOSPC, msgNoSpace(total, free))
             st = st.copy(fileCount = files, totalBytes = total)
             publish(force = true)
 

@@ -83,7 +83,7 @@ void main() {
 
   testWidgets('gridShowsThumbnails', (tester) async {
     final api = api0()
-      ..viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: true, showHidden: false)
+      ..viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: true, showHidden: false, builtInViewers: true)
       ..thumbs['/a.jpg'] = png;
     await pump(tester, api);
     expect(find.byType(GridView), findsOneWidget);
@@ -120,11 +120,22 @@ void main() {
   });
 
   testWidgets('tapFileOpensWith', (tester) async {
-    final api = api0();
+    // « Ouvrir dans Portail » désactivé : le texte s'ouvre dans une autre application
+    final api = api0()
+      ..viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false, builtInViewers: false);
     await pump(tester, api);
     await tester.tap(find.text('b.txt'));
     await tester.pump();
     expect(api.calls, contains('openWith phone /b.txt'));
+  });
+
+  testWidgets('tapVideoPlaysInPortail', (tester) async {
+    final api = api0();
+    await pump(tester, api, source: 'v1');
+    await tester.tap(find.text('film.mkv'));
+    await tester.pump();
+    expect(api.calls, contains('playVideo v1 /film.mkv'));
+    expect(api.calls, isNot(contains('openWith v1 /film.mkv')));
   });
 
   testWidgets('selectionCopyPasteStartsTransfer', (tester) async {
@@ -353,7 +364,7 @@ void main() {
     expect(find.text('1 sélectionné(s)'), findsOneWidget);
     api.dirs['phone']!['/'] = [d('/DCIM'), f('/a.jpg', size: 3000000)]; // b.txt supprimé par une autre application
     final v = state.viewPrefs;
-    await state.setViewPrefs(ViewPrefsMsg(sort: v.sort, ascending: v.ascending, grid: v.grid, showHidden: true));
+    await state.setViewPrefs(ViewPrefsMsg(sort: v.sort, ascending: v.ascending, grid: v.grid, showHidden: true, builtInViewers: v.builtInViewers));
     await tester.pumpAndSettle();
     expect(find.text('1 sélectionné(s)'), findsNothing);
   });

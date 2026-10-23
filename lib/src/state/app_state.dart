@@ -22,11 +22,14 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   bool _ejecting = false;
   String? _ejectError;
   List<SourceMsg> _sources = const [];
+  List<RemoteServerMsg> _servers = const [];
   bool _allFilesAccess = false;
   TransferMsg? _transfer;
   int? _formatProgress;
   int? _hashProgress;
-  ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
+  PlayerMsg? _player;
+  String? _playerMessage;
+  ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false, builtInViewers: true);
   List<FavoriteMsg> _favorites = const [];
   ClipboardItems? _clipboard;
   PendingExtract? _pendingExtract;
@@ -38,6 +41,9 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
 
   /// Stockages du gestionnaire de fichiers : téléphone, cartes SD, volumes ouverts.
   List<SourceMsg> get sources => _sources;
+
+  /// Serveurs distants enregistrés (phase 10).
+  List<RemoteServerMsg> get servers => _servers;
 
   /// Tri, grille et fichiers cachés (persistés côté Kotlin).
   ViewPrefsMsg get viewPrefs => _viewPrefs;
@@ -148,10 +154,54 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
       _allFilesAccess = await api.hasAllFilesAccess();
       _viewPrefs = await api.getViewPrefs();
       _favorites = await api.listFavorites();
+      _servers = await api.listServers();
       notifyListeners();
     } on PlatformException catch (e) {
       _fail(e);
     }
+  }
+
+  /// Connecte un serveur distant (erreurs `auth`, `hostkey-unknown`, `hostkey-changed` rendues telles quelles) ;
+  /// rend sa source.
+  Future<SourceMsg> connectServer(String id, Uint8List? password) async {
+    final s = await api.connectServer(id, password);
+    await refreshSources();
+    return s;
+  }
+
+  Future<void> disconnectServer(String id) async {
+    await api.disconnectServer(id);
+    await refreshSources();
+  }
+
+  Future<RemoteServerMsg> saveServer(RemoteServerMsg s, Uint8List? password, {Uint8List? keyPassphrase}) async {
+    final saved = await api.saveServer(s, password, keyPassphrase);
+    await refreshSources();
+    return saved;
+  }
+
+  Future<void> deleteServer(String id) async {
+    await api.deleteServer(id);
+    await refreshSources();
+  }
+
+  Future<void> trustHostKey(String id, String fingerprint) => api.trustHostKey(id, fingerprint);
+
+  Future<void> forgetHostKey(String id) async {
+    await api.forgetHostKey(id);
+    await refreshSources();
+  }
+
+  /// Clé privée choisie dans le sélecteur d'Android ; sa description, ou null si rien n'a été choisi.
+  Future<String?> importPrivateKey(String id) async {
+    final info = await api.importPrivateKey(id);
+    if (info != null) await refreshSources();
+    return info;
+  }
+
+  Future<void> forgetPrivateKey(String id) async {
+    await api.forgetPrivateKey(id);
+    await refreshSources();
   }
 
   @override
@@ -181,6 +231,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
       }
       _allFilesAccess = await api.hasAllFilesAccess();
       _favorites = await api.listFavorites();
+      _servers = await api.listServers();
       notifyListeners();
     } on PlatformException catch (e) {
       _fail(e);
@@ -207,6 +258,43 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     _hashProgress = pct;
     notifyListeners();
   }
+
+  int _editorHolds = 0;
+
+  /// Un éditeur ouvert avec des modifications retient le retour à l'accueil des explorateurs d'un stockage disparu :
+  /// le texte reste à l'écran jusqu'à ce qu'on le quitte.
+  bool get editorHolding => _editorHolds > 0;
+
+  void holdForEditor() => _editorHolds++;
+
+  void releaseEditor() {
+    _editorHolds--;
+    notifyListeners();
+  }
+
+  /// Musique en cours (phase 10), ou null.
+  PlayerMsg? get player => _player;
+
+  /// Raison du dernier arrêt subi de la musique, rendue une seule fois.
+  String? takePlayerMessage() {
+    final m = _playerMessage;
+    _playerMessage = null;
+    return m;
+  }
+
+  @override
+  void onPlayerChanged(PlayerMsg? player, String? message) {
+    _player = player;
+    if (message != null) _playerMessage = message;
+    notifyListeners();
+  }
+
+  /// Lit les sons de [paths] (le dossier dans l'ordre affiché), à partir de `paths[startIndex]`.
+  Future<void> playAudio(String sourceId, List<String> paths, int startIndex) =>
+      _guard(() => api.playAudio(sourceId, paths, startIndex));
+
+  /// `play`, `pause`, `next`, `previous`, `back`, `forward`, `seek` ([positionMs]) ou `stop`.
+  Future<void> playerCommand(String command, {int? positionMs}) => _guard(() => api.playerCommand(command, positionMs));
 
   @override
   void onTransferChanged(TransferMsg? transfer) {
