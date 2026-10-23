@@ -135,7 +135,9 @@ class _SearchScreenState extends State<SearchScreen> {
         // « Ici » : ce dossier ; « Partout » : tous les stockages, avec la même saisie
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(Layout.minTouch),
-          child: Padding(
+          // défilable : à 200 % de texte, les deux puces dépassent la largeur d'un téléphone
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: Space.l),
             child: Row(spacing: Space.s, children: [
               ChoiceChip(label: const Text(Fr.searchHere), selected: true, onSelected: (_) {}),
