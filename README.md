@@ -417,6 +417,9 @@ tools/android/run_native_tests.sh <numéro-adb>
 tools/android/check_image.sh <numéro-adb> engine-ecriture.img   # e2fsck des images écrites sur le téléphone
 # les essais instrumentés des archives lisent trois archives de build/native/fixtures-archives/, à pousser avant :
 # adb push build/native/fixtures-archives/{test_read_format_7zip_lzma2.7z,test_read_format_rar5_multiple_files.rar,hostile.zip} /data/local/tmp/fluluks/fixtures/
+# ceux du lecteur vidéo lisent video-phase12.mkv (deux pistes audio, un sous-titre), fabriquée par ffmpeg puis poussée :
+# tools/fixtures/make_video_phase12.sh build/native/fixtures-video
+# adb push build/native/fixtures-video/video-phase12.mkv /data/local/tmp/fluluks/fixtures/
 flutter test && flutter analyze
 ```
 

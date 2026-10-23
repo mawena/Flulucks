@@ -331,10 +331,10 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
 **Files :** Create `tools/fixtures/make_video_phase12.sh`,
 `android/app/src/androidTest/kotlin/com/mawena/fluluks/VideoPlayerInstrumentedTest.kt`.
 
-- [ ] **Step 1 :** script `make_video_phase12.sh <dossier>` (ffmpeg) : `video-phase12.mkv`, 6 s, mire 320 × 240,
+- [x] **Step 1 :** script `make_video_phase12.sh <dossier>` (ffmpeg) : `video-phase12.mkv`, 6 s, mire 320 × 240,
   deux pistes audio AAC (`fra` stéréo titrée « Original », `eng` mono titrée « Commentaires ») et une piste de
   sous-titres SubRip intégrée (`eng`). Contrôle par `ffprobe` (3 pistes audio+texte).
-- [ ] **Step 2 :** essais écrits et compilés (`./gradlew -q --offline :app:compileDebugAndroidTestKotlin`) :
+- [x] **Step 2 :** essais écrits et compilés (`./gradlew -q --offline :app:compileDebugAndroidTestKotlin`) :
   - `tracksListedInFrench` : lecteur de `newPlayer` sur `video-phase12.mkv` + `film.fr.srt` à côté ;
     `TrackMenu.audio(PlayerTracks.infos(…))` donne « Français · Original · Stéréo » et « Anglais · Commentaires · Mono » ;
     `TrackMenu.text` commence par « Désactivés », contient « Français · film.fr.srt » et une piste « Anglais » ;
