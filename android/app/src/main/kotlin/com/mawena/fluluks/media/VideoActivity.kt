@@ -54,15 +54,7 @@ class VideoActivity : Activity() {
     }
 
     private fun start(view: PlayerView, uri: Uri, subs: List<SubtitleTrack>) {
-        val item = MediaItem.Builder().setUri(uri).setSubtitleConfigurations(subs.mapIndexed { i, s ->
-            MediaItem.SubtitleConfiguration.Builder(Uri.parse(s.dataUri))
-                .setMimeType(MimeTypes.APPLICATION_SUBRIP)
-                .setLanguage(s.language)
-                .setLabel(s.language ?: getString(android.R.string.untitled))
-                .setSelectionFlags(if (i == 0) C.SELECTION_FLAG_DEFAULT else 0)
-                .build()
-        }).build()
-        val p = ExoPlayer.Builder(this).setSeekBackIncrementMs(SEEK_MS).setSeekForwardIncrementMs(SEEK_MS).build()
+        val p = newPlayer(this, uri, subs)
         p.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 if (isPlaying) window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
@@ -73,11 +65,8 @@ class VideoActivity : Activity() {
                 fail(if (Files.sourceOrNull(sourceId) == null) Files.MSG_SOURCE_CLOSED else MSG_PLAY_ERROR)
             }
         })
-        p.trackSelectionParameters = p.trackSelectionParameters.buildUpon().setPreferredTextLanguage(subs.firstOrNull()?.language)
-            .setSelectUndeterminedTextLanguage(true).build()
         view.player = p
         player = p
-        p.setMediaItem(item)
         p.prepare()
         p.play()
     }
@@ -110,6 +99,26 @@ class VideoActivity : Activity() {
         const val EXTRA_PATH = "path"
         const val SEEK_MS = 10_000L
         const val MSG_PLAY_ERROR = "Lecture impossible"
+
+        /**
+         * Lecteur de la vidéo [uri] avec ses sous-titres (le premier actif), pas encore préparé ; repris tel quel par
+         * l'essai instrumenté.
+         */
+        fun newPlayer(context: Context, uri: Uri, subs: List<SubtitleTrack>): ExoPlayer {
+            val item = MediaItem.Builder().setUri(uri).setSubtitleConfigurations(subs.mapIndexed { i, s ->
+                MediaItem.SubtitleConfiguration.Builder(Uri.parse(s.dataUri))
+                    .setMimeType(MimeTypes.APPLICATION_SUBRIP)
+                    .setLanguage(s.language)
+                    .setLabel(s.language ?: s.path.substringAfterLast('/'))
+                    .setSelectionFlags(if (i == 0) C.SELECTION_FLAG_DEFAULT else 0)
+                    .build()
+            }).build()
+            val p = ExoPlayer.Builder(context).setSeekBackIncrementMs(SEEK_MS).setSeekForwardIncrementMs(SEEK_MS).build()
+            p.trackSelectionParameters = p.trackSelectionParameters.buildUpon()
+                .setPreferredTextLanguage(subs.firstOrNull()?.language).setSelectUndeterminedTextLanguage(true).build()
+            p.setMediaItem(item)
+            return p
+        }
 
         fun intent(context: Context, sourceId: String, path: String): Intent =
             Intent(context, VideoActivity::class.java).putExtra(EXTRA_SOURCE, sourceId).putExtra(EXTRA_PATH, path)

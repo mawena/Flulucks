@@ -24,6 +24,9 @@ class AndroidMusic(private val context: Context) : MusicBackend {
     private var controller: MediaController? = null
     private var sourceId: String? = null
 
+    /** Noms de la file : le titre ne revient pas toujours par le MediaController (vide sur le Pixel). */
+    private var titles: List<String> = emptyList()
+
     private val tick = object : Runnable {
         override fun run() {
             publish()
@@ -46,12 +49,14 @@ class AndroidMusic(private val context: Context) : MusicBackend {
     override fun start(sourceId: String, paths: List<String>, startIndex: Int) {
         // URI préparées ici (fil du pont) : le fournisseur de flux d'un dossier distant les crée sans réseau
         val src = Files.source(sourceId)
+        val names = paths.map(WriteOps::nameOf)
         val items = paths.map { p ->
             MediaItem.Builder().setMediaId(src.contentUri(p).toString())
                 .setMediaMetadata(MediaMetadata.Builder().setTitle(WriteOps.nameOf(p)).build()).build()
         }
         main.post {
             this.sourceId = sourceId
+            titles = names
             withController { c ->
                 c.setMediaItems(items, startIndex, 0L)
                 c.prepare()
@@ -87,6 +92,7 @@ class AndroidMusic(private val context: Context) : MusicBackend {
             }
             controller = null
             sourceId = null
+            titles = emptyList()
         }
     }
 
@@ -109,7 +115,8 @@ class AndroidMusic(private val context: Context) : MusicBackend {
         val d = c.duration
         Music.publish(
             MusicState(
-                id, c.mediaMetadata.title?.toString() ?: "", c.currentMediaItemIndex, c.mediaItemCount,
+                id, titles.getOrNull(c.currentMediaItemIndex) ?: c.mediaMetadata.title?.toString() ?: "",
+                c.currentMediaItemIndex, c.mediaItemCount,
                 c.isPlaying || (c.playWhenReady && c.playbackState == Player.STATE_BUFFERING),
                 c.currentPosition, if (d == C.TIME_UNSET) -1 else d,
             ),

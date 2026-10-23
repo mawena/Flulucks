@@ -321,7 +321,7 @@ dans le même commit que le travail.
 - [x] T8 — Dossiers distants par SFTP (empreinte du serveur, clé privée)
 - [x] T9 — Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)
 - [x] T10 — Lecteur de musique (lecture en arrière-plan, file d'attente du dossier)
-- [ ] T11 — Essais instrumentés sur le Pixel
+- [x] T11 — Essais instrumentés sur le Pixel
 - [ ] *(utilisateur)* T12 — Essais sur le Pixel
 - [ ] T13 — Documentation
 - [ ] Relecture finale de toute la branche

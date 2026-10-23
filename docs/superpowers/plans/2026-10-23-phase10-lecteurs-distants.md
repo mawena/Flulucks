@@ -359,13 +359,13 @@ positionMs?)`, événement `onPlayerChanged(PlayerMsg?)`), `app_state.dart`, `ho
 **Files :** Create `androidTest/.../ReadersInstrumentedTest.kt`, `StreamProviderInstrumentedTest.kt`,
 `SshCryptoInstrumentedTest.kt`, `SecretBoxInstrumentedTest.kt`.
 
-- [ ] `ReadersInstrumentedTest` : WAV généré par le test lu par le lecteur de musique (état « lecture », position
+- [x] `ReadersInstrumentedTest` : WAV généré par le test lu par le lecteur de musique (état « lecture », position
   qui avance), vidéo MP4 de référence (fixture poussée sous `/data/local/tmp/fluluks/fixtures/`) lue par
   `VideoActivity` avec un sous-titre en Windows-1252 ; `StreamProviderInstrumentedTest` : lectures à des décalages
   aléatoires par un vrai descripteur mandataire ; `SshCryptoInstrumentedTest` : Ed25519 et Curve25519 de JSch avec
   Bouncy Castle sur ART ; `SecretBoxInstrumentedTest`. Téléphone au repos vérifié avant, APK de l'utilisateur
   sauvegardée puis remise.
-- [ ] Commit `test(lecteurs): essais instrumentés sur le Pixel`.
+- [x] Commit `test(lecteurs): essais instrumentés sur le Pixel`.
 
 ### Task 12 *(utilisateur)* : essais
 
