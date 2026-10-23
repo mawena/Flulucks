@@ -5,7 +5,7 @@ import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/screens/explorer_screen.dart';
 import 'package:fluluks/src/screens/text_editor_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
-import 'package:fluluks/src/viewers.dart';
+import 'package:fluluks/src/file_types.dart';
 import 'package:fluluks/src/strings_fr.dart';
 
 import 'fake_host_api.dart';

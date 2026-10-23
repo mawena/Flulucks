@@ -482,7 +482,7 @@ class Breadcrumbs extends StatelessWidget implements PreferredSizeWidget {
 - Chaînes : `selectAll` « Tout sélectionner », `showGrid` « Afficher en grille », `showList` « Afficher en liste »,
   `movedToTrash(n)` « 3 éléments mis à la corbeille ».
 
-- [ ] **Step 1 : tests :**
+- [x] **Step 1 : tests :**
   - `file_types_test` : `kindOfExtensions` (casse ignorée ; `.tar.gz` → archive ; `.apk` → package ; lien →
     link) ; `viewerForUnchanged` (cas de `text_editor_test` repris).
   - `explorer_screen_test` :
@@ -500,14 +500,14 @@ class Breadcrumbs extends StatelessWidget implements PreferredSizeWidget {
     - `gridTileSemantics` ;
     - `viewToggleFlipsPreference` ;
     - `closedSourcePopsToHome` (existant, gardé).
-- [ ] **Step 2 :** Run `flutter test test/file_types_test.dart test/explorer_screen_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter.
+- [x] **Step 2 :** Run `flutter test test/file_types_test.dart test/explorer_screen_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter.
   - L'explorateur passe à un `CustomScrollView` dont le contenu est `EntrySliver`, sous `RefreshIndicator`.
   - Barre de titre : recherche, `ViewModeButton`, menu (tri, fichiers cachés, favori, corbeille, analyse) et
     `Breadcrumbs` en `bottom`.
   - Un rechargement discret affiche une barre linéaire en haut. Les états passent par `StateSwitcher`.
-- [ ] **Step 4 :** tests verts ; suites vertes.
-- [ ] **Step 5 :** commit `feat(explorateur): grille adaptative, fil d'Ariane, menu par élément et annulation`.
+- [x] **Step 4 :** tests verts ; suites vertes.
+- [x] **Step 5 :** commit `feat(explorateur): grille adaptative, fil d'Ariane, menu par élément et annulation`.
 
 ### Task 7 : liste ou grille dans les raccourcis et la recherche *(demande de l'utilisateur du 2026-10-23)*
 

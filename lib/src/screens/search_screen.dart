@@ -10,7 +10,7 @@ import '../ui/feedback.dart';
 import '../ui/states.dart';
 import '../ui/tokens.dart';
 import '../ui/widgets.dart';
-import '../widgets/thumb.dart';
+import '../file_types.dart';
 import 'explorer_screen.dart';
 
 /// Recherche par nom sous [path] : lancée 400 ms après la dernière frappe, la précédente annulée.
@@ -123,7 +123,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           itemBuilder: (_, i) {
                             final e = r.entries[i];
                             return ListTile(
-                              leading: Icon(entryIcon(e)),
+                              leading: Icon(kindIcon(kindOf(e))),
                               title: Text(e.name),
                               subtitle: Text(parentOf(e.path)),
                               onTap: () => _open(e),

@@ -188,6 +188,19 @@ class Fr {
   static const trust = 'Faire confiance';
   static const hostKeyChangedTitle = 'Clé du serveur changée';
   static const emptyFolder = 'Dossier vide';
+  static const selectAll = 'Tout sélectionner';
+  static const showGrid = 'Afficher en grille';
+  static const showList = 'Afficher en liste';
+  static const kindFolder = 'dossier';
+  static const kindImage = 'image';
+  static const kindVideo = 'vidéo';
+  static const kindAudio = 'musique';
+  static const kindText = 'texte';
+  static const kindDocument = 'document';
+  static const kindArchive = 'archive';
+  static const kindPackage = 'application';
+  static const kindLink = 'lien';
+  static const kindOther = 'fichier';
   static const protectedFolder = 'Dossier protégé par Android';
   static const volumeClosed = 'Le disque a été fermé';
   static const storageGoneKeepText =
@@ -243,6 +256,7 @@ class Fr {
   static String deleteMany(int n) => 'Supprimer ${count(n, 'élément', 'éléments')}\u202F?';
   static String clipboard(int n, bool move) => '${count(n, 'élément', 'éléments')} ${move ? 'à déplacer' : 'à copier'}';
   static String selected(int n) => count(n, 'sélectionné', 'sélectionnés');
+  static String movedToTrash(int n) => '${count(n, 'élément mis', 'éléments mis')} à la corbeille';
   /// [kind] : `copy`, `move`, `compress` ou `extract`.
   static String transferLine(String kind, String name, int i, int n, int pct) {
     // extraction, premier passage : en-têtes lus, aucun fichier encore compté

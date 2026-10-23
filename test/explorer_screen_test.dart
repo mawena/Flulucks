@@ -1,13 +1,15 @@
-import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show SynchronousFuture;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluluks/src/app.dart';
 import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/screens/explorer_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
 import 'package:fluluks/src/strings_fr.dart';
+import 'package:fluluks/src/ui/states.dart';
+import 'package:fluluks/src/ui/widgets.dart';
 
 import 'fake_host_api.dart';
 
@@ -72,7 +74,7 @@ void main() {
     expect(find.textContaining('3,0 Mo · '), findsOneWidget); // taille · date
     await tester.tap(find.text('DCIM'));
     await tester.pumpAndSettle();
-    expect(find.text('DCIM'), findsOneWidget); // titre = nom du dossier
+    expect(find.text('DCIM'), findsOneWidget); // fil d'Ariane : dossier ouvert
     expect(titles(tester), ['photo.jpg']);
     await tester.pageBack(); // remonte d'un dossier
     await tester.pumpAndSettle();
@@ -87,10 +89,10 @@ void main() {
       ..viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: true, showHidden: false, builtInViewers: true)
       ..thumbs['/a.jpg'] = png;
     await pump(tester, api);
-    expect(find.byType(GridView), findsOneWidget);
+    expect(find.byType(SliverGrid), findsOneWidget);
     expect(api.thumbRequests, ['/a.jpg']); // ni dossier ni texte
     expect(find.byType(Image), findsOneWidget);
-    expect(find.byIcon(Icons.folder), findsOneWidget);
+    expect(find.byIcon(Icons.folder_rounded), findsOneWidget);
   });
 
   testWidgets('sortMenuPersists', (tester) async {
@@ -113,11 +115,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.viewPrefs.showHidden, isTrue);
     expect(titles(tester), contains('.cache'));
-    await tester.tap(find.byTooltip('Trier par'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.text('Grille'));
-    await tester.pumpAndSettle();
-    expect(api.viewPrefs.grid, isTrue);
   });
 
   testWidgets('tapFileOpensWith', (tester) async {
@@ -187,8 +184,8 @@ void main() {
     await tester.pump();
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Coller ici')).onPressed, isNull);
     await longPress(tester, 'film.mkv');
-    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.content_cut)).onPressed, isNull);
-    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.delete)).onPressed, isNull);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.content_cut_rounded)).onPressed, isNull);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.delete_rounded)).onPressed, isNull);
   });
 
   testWidgets('deleteAfterConfirm', (tester) async {
@@ -278,12 +275,16 @@ void main() {
     final api = api0();
     await pump(tester, api);
     await longPress(tester, 'b.txt');
-    await tester.tap(find.byTooltip('Partager'));
-    await tester.pump();
+    await tester.tap(find.byTooltip(Fr.moreActions));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Partager'));
+    await tester.pumpAndSettle();
     expect(api.calls, contains('share phone /b.txt'));
-    await tester.tap(find.text('DCIM'));
+    await tester.tap(find.text('DCIM')); // toujours en sélection : le dossier s'y ajoute
     await tester.pump();
-    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.share)).onPressed, isNull);
+    await tester.tap(find.byTooltip(Fr.moreActions));
+    await tester.pumpAndSettle();
+    expect(tester.widget<PopupMenuItem<String>>(find.widgetWithText(PopupMenuItem<String>, 'Partager')).enabled, isFalse);
   });
 
   testWidgets('transferBarProgressAndCancel', (tester) async {
@@ -414,7 +415,7 @@ void main() {
   testWidgets('favoriteDisabledWithoutPartUuid', (tester) async {
     final api = api0()..sources = [src('phone'), src('v1', kind: 'disk', label: 'Données', key: 'disk:image:1#1')];
     await pump(tester, api, source: 'v1');
-    final star = tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.star_border));
+    final star = tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.star_border_rounded));
     expect(star.onPressed, isNull);
   });
 
@@ -446,5 +447,161 @@ void main() {
     await state.refreshSources();
     await tester.pumpAndSettle();
     expect(cache.containsKey('vignette'), isFalse);
+  });
+
+  // phase 11, T6 : collection d'éléments et explorateur revu
+
+  testWidgets('gridAdaptsColumns', (tester) async {
+    addTearDown(tester.view.reset);
+    tester.view.devicePixelRatio = 1.0;
+    final api = api0()
+      ..viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: true, showHidden: false, builtInViewers: true)
+      ..dirs['phone']!['/'] = [for (var i = 10; i < 22; i++) f('/f$i.txt')];
+    int firstRow() {
+      final tops = [for (var i = 10; i < 22; i++) tester.getTopLeft(find.byKey(ValueKey('phone|/f$i.txt'))).dy];
+      return tops.where((y) => y == tops.first).length;
+    }
+
+    tester.view.physicalSize = const Size(412, 869);
+    await pump(tester, api);
+    expect(firstRow(), 3);
+    tester.view.physicalSize = const Size(1280, 800);
+    await tester.pumpAndSettle();
+    expect(firstRow(), greaterThanOrEqualTo(9));
+  });
+
+  testWidgets('breadcrumbJumpsToAncestor', (tester) async {
+    final api = api0()
+      ..dirs['phone']!['/a'] = [d('/a/b')]
+      ..dirs['phone']!['/a/b'] = [d('/a/b/c')]
+      ..dirs['phone']!['/a/b/c'] = [f('/a/b/c/x.txt')];
+    await pump(tester, api, path: '/a/b/c');
+    expect(find.text('x.txt'), findsOneWidget);
+    await tester.tap(find.text('a'));
+    await tester.pumpAndSettle();
+    expect(api.calls.last, 'listDir phone /a false');
+    expect(titles(tester), ['b']);
+    await tester.tap(find.byTooltip('Téléphone')); // racine du stockage
+    await tester.pumpAndSettle();
+    expect(titles(tester), ['DCIM', 'a.jpg', 'b.txt']);
+  });
+
+  testWidgets('selectAllSelectsEverything', (tester) async {
+    final haptics = <String?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'HapticFeedback.vibrate') haptics.add(call.arguments as String?);
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    final api = api0()..dirs['phone']!['/'] = [d('/DCIM'), f('/a.jpg'), f('/b.txt'), f('/c.pdf')];
+    await pump(tester, api);
+    await longPress(tester, 'b.txt');
+    expect(haptics, ['HapticFeedbackType.selectionClick']);
+    await tester.tap(find.byTooltip(Fr.selectAll));
+    await tester.pump();
+    expect(find.text('4 sélectionnés'), findsOneWidget);
+    expect(haptics, ['HapticFeedbackType.selectionClick', 'HapticFeedbackType.selectionClick']);
+  });
+
+  testWidgets('itemMenuOffersActions', (tester) async {
+    final api = api0();
+    final state = await pump(tester, api);
+    await tester.tap(find.byTooltip(Fr.actionsOf('b.txt')));
+    await tester.pumpAndSettle();
+    for (final a in [Fr.openWith, Fr.share, Fr.copy, Fr.cut, Fr.rename, Fr.compress, Fr.properties, Fr.delete]) {
+      expect(find.widgetWithText(ListTile, a), findsOneWidget, reason: a);
+    }
+    await tester.tap(find.widgetWithText(ListTile, Fr.copy));
+    await tester.pumpAndSettle();
+    expect(state.clipboard?.paths, ['/b.txt']);
+    expect(state.clipboard?.move, isFalse);
+    expect(find.text('1 sélectionné'), findsNothing); // la sélection n'est pas touchée
+
+    // lecture seule : écriture désactivée
+    final ro = api0()..sources = [src('phone', readOnly: true, roReason: 'Carte protégée')];
+    await pump(tester, ro);
+    await tester.tap(find.byTooltip(Fr.actionsOf('b.txt')));
+    await tester.pumpAndSettle();
+    for (final a in [Fr.cut, Fr.rename, Fr.compress, Fr.delete]) {
+      expect(tester.widget<ListTile>(find.widgetWithText(ListTile, a)).enabled, isFalse, reason: a);
+    }
+    expect(tester.widget<ListTile>(find.widgetWithText(ListTile, Fr.copy)).enabled, isTrue);
+  });
+
+  testWidgets('deleteToTrashOffersUndo', (tester) async {
+    final later = DateTime.now().millisecondsSinceEpoch + 60000;
+    TrashItemMsg t(String id, String path, int at) =>
+        TrashItemMsg(id: id, name: path.split('/').last, originalPath: path, deletedAt: at, size: 1000, isDir: false);
+    final api = api0()
+      ..trash['phone'] = [t('t1', '/b.txt', later), t('ancien', '/b.txt', 1000), t('autre', '/z.txt', later)];
+    await pump(tester, api);
+    await longPress(tester, 'b.txt');
+    await tester.tap(find.byTooltip('Supprimer'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Supprimer'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('trash phone /b.txt'));
+    expect(find.text(Fr.movedToTrash(1)), findsOneWidget);
+    await tester.tap(find.widgetWithText(SnackBarAction, Fr.undo));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('restoreTrash phone t1'));
+    expect(api.calls.last, 'listDir phone / false'); // liste rafraîchie
+  });
+
+  testWidgets('emptyFolderShowsEmptyState', (tester) async {
+    final api = api0()..dirs['phone']!['/vide'] = [];
+    await pump(tester, api, path: '/vide');
+    expect(find.byType(EmptyState), findsOneWidget);
+    expect(find.text(Fr.emptyFolder), findsOneWidget);
+  });
+
+  testWidgets('errorShowsRetry', (tester) async {
+    final api = api0()..protectedDirs.add('/DCIM');
+    await pump(tester, api, path: '/DCIM');
+    expect(find.byType(ErrorState), findsOneWidget);
+    api.protectedDirs.clear();
+    await tester.tap(find.text(Fr.retry));
+    await tester.pumpAndSettle();
+    expect(api.calls.where((c) => c == 'listDir phone /DCIM false').length, 2);
+    expect(titles(tester), ['photo.jpg']);
+  });
+
+  testWidgets('readOnlyHidesWriteActions', (tester) async {
+    final api = api0()..sources = [src('phone', readOnly: true, roReason: 'Carte protégée')];
+    await pump(tester, api);
+    expect(find.widgetWithText(StatusBanner, Fr.readOnly('Carte protégée')), findsOneWidget);
+    expect(find.byType(FloatingActionButton), findsNothing);
+    await longPress(tester, 'b.txt');
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.content_cut_rounded)).onPressed, isNull);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.delete_rounded)).onPressed, isNull);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.copy_rounded)).onPressed, isNotNull);
+  });
+
+  testWidgets('gridTileSemantics', (tester) async {
+    final handle = tester.ensureSemantics();
+    final api = api0()
+      ..viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: true, showHidden: false, builtInViewers: true);
+    await pump(tester, api);
+    final label = 'a.jpg, image, ${Fr.humanSize(3000000)}';
+    expect(find.bySemanticsLabel(label), findsOneWidget);
+    expect(find.bySemanticsLabel('DCIM, dossier'), findsOneWidget);
+    await tester.longPress(find.bySemanticsLabel(label));
+    await tester.pumpAndSettle();
+    expect(tester.getSemantics(find.bySemanticsLabel(label)), isSemantics(label: label, isSelected: true, isButton: true));
+    handle.dispose();
+  });
+
+  testWidgets('viewToggleFlipsPreference', (tester) async {
+    final api = api0();
+    await pump(tester, api);
+    expect(find.byType(SliverGrid), findsNothing);
+    await tester.tap(find.byTooltip(Fr.showGrid));
+    await tester.pumpAndSettle();
+    expect(api.viewPrefs.grid, isTrue);
+    expect(find.byType(SliverGrid), findsOneWidget);
+    await tester.tap(find.byTooltip(Fr.showList));
+    await tester.pumpAndSettle();
+    expect(api.viewPrefs.grid, isFalse);
+    expect(titles(tester), ['DCIM', 'a.jpg', 'b.txt']);
   });
 }

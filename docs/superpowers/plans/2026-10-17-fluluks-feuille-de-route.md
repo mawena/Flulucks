@@ -335,7 +335,7 @@ dans le même commit que le travail.
 - [x] T3 — Textes français (pluriels, unités, dates relatives)
 - [x] T4 — Accueil revu et logo
 - [x] T5 — Déverrouillage, formatage et saisies sensibles
-- [ ] T6 — Collection d'éléments et explorateur revu (fil d'Ariane, tout sélectionner, annuler la mise à la corbeille)
+- [x] T6 — Collection d'éléments et explorateur revu (fil d'Ariane, tout sélectionner, annuler la mise à la corbeille)
 - [ ] T7 — Liste ou grille dans les raccourcis et la recherche *(demande de l'utilisateur du 2026-10-23)*
 - [ ] T8 — Recherche dans tous les stockages
 - [ ] T9 — Réglages regroupés, « À propos », licences, aide et bienvenue

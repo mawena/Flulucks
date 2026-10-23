@@ -73,7 +73,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Téléphone'));
     await tester.pumpAndSettle();
-    expect(find.byType(GridView), findsOneWidget);
+    expect(find.byType(SliverGrid), findsOneWidget);
   });
 
   testWidgets('autoLockShowsCurrentValue', (tester) async {
