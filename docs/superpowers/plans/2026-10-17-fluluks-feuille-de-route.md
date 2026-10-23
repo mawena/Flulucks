@@ -348,24 +348,37 @@ dans le même commit que le travail.
 - [ ] Fusion `feature/interface` → `develop`
 - [ ] Version `v1.4.0`
 
-### Phase 12 — Vérification et réparation des disques
-- [ ] Plan de la phase 12 écrit *(demande du 2026-10-22 ; spec § 16 ; phase 11 jusqu'au 2026-10-23)*
+### Phase 12 — Lecteur vidéo : orientation, pistes et gestes ([plan](2026-10-23-phase12-lecteur-video.md))
+- [x] Plan de la phase 12 écrit *(demande du 2026-10-23 ; spec § 20)*
+- [x] T1 — Orientation : portrait par défaut, rotation selon le réglage d'Android, boutons « Tourner » et cadenas
+- [x] T2 — Choix des pistes audio et des sous-titres, désactivables
+- [x] T3 — Glisser pour avancer ou reculer, avec l'aperçu de la position visée
+- [x] T4 — Toucher deux fois pour reculer ou avancer de 10 s, cumulable
+- [x] T5 — Documentation
+- [ ] T6 — Essais instrumentés sur le Pixel
+- [ ] *(utilisateur)* T7 — Essais sur le Pixel ([fiche](../research/2026-10-23-essais-phase12/essais.md))
+- [ ] Relecture finale de toute la branche
+- [ ] Fusion `feature/lecteur-video` → `develop`
+- [ ] Version `v1.5.0`
+
+### Phase 13 — Vérification et réparation des disques
+- [ ] Plan de la phase 13 écrit *(demande du 2026-10-22 ; spec § 16 ; phase 11, puis phase 12, jusqu'au 2026-10-23)*
 - [ ] Vérification en lecture seule avec rapport, pour chaque système de fichiers
 - [ ] Réparation ext4 par e2fsck (e2fsprogs, sur l'accès USB du moteur)
 - [ ] Réparation NTFS par ntfsfix (ntfs-3g)
 - [ ] Réparation FAT32 et exFAT par fsck.fat et fsck.exfat
 - [ ] LUKS : vérification des deux en-têtes, sauvegarde et restauration de l'en-tête
-- [ ] Version `v1.5.0`
+- [ ] Version `v1.6.0`
 
-### Phase 13 — Gestion des partitions, comme GParted
-- [ ] Plan de la phase 13 écrit *(demande du 2026-10-22 ; spec § 17 ; phase 12 jusqu'au 2026-10-23)*
+### Phase 14 — Gestion des partitions, comme GParted
+- [ ] Plan de la phase 14 écrit *(demande du 2026-10-22 ; spec § 17 ; phase 12, puis phase 13, jusqu'au 2026-10-23)*
 - [ ] Vue du disque : partitions et espace libre à l'échelle, système de fichiers, étiquette, taille, place occupée
 - [ ] Taille choisie au formatage ; créer une partition dans un espace libre, en supprimer une, formater une seule partition
 - [ ] Changer l'étiquette d'une partition ; nouvelle table MBR ou GPT
 - [ ] Redimensionner (agrandir, réduire) : ext4 par resize2fs, NTFS par ntfsresize, système de fichiers dans LUKS2 ; FAT32 et exFAT à étudier
 - [ ] Déplacer une partition, si le plan sait le rendre sûr
 - [ ] Opérations préparées, résumées, puis appliquées après confirmation
-- [ ] Version `v1.6.0`
+- [ ] Version `v1.7.0`
 
 ---
 

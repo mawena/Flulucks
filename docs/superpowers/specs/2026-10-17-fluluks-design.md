@@ -353,7 +353,7 @@ fonctions choisies par le planificateur ; les lecteurs et stockages distants pas
 
 ## 16. Évolution du 2026-10-22 (suite) : vérification et réparation
 
-Décision de l'utilisateur : la **phase 12** (v1.5.0, phase 11 avant le 2026-10-23, voir § 19) apporte la **réparation des disques** dans
+Décision de l'utilisateur : la **phase 13** (v1.6.0 ; numérotée 11, puis 12, avant le 2026-10-23, voir § 19 et § 20) apporte la **réparation des disques** dans
 l'application, avec les outils de référence de Linux intégrés au moteur natif.
 - **Vérifier d'abord, en lecture seule**, et montrer un rapport en français ; réparer seulement après
   confirmation, avec le conseil de sauvegarder les données importantes avant.
@@ -368,7 +368,7 @@ l'application, avec les outils de référence de Linux intégrés au moteur nati
 
 ## 17. Évolution du 2026-10-22 (suite) : gestion des partitions
 
-Décision de l'utilisateur : la **phase 13** (v1.6.0, phase 12 avant le 2026-10-23, voir § 19) apporte la **gestion des partitions** d'un disque USB,
+Décision de l'utilisateur : la **phase 14** (v1.7.0 ; numérotée 12, puis 13, avant le 2026-10-23, voir § 19 et § 20) apporte la **gestion des partitions** d'un disque USB,
 à la manière de GParted, et le choix de la **taille** au formatage.
 - **Choisir la taille** : formater une partition de la taille voulue au lieu de tout le disque ; le reste
   reste libre.
@@ -379,7 +379,7 @@ Décision de l'utilisateur : la **phase 13** (v1.6.0, phase 12 avant le 2026-10-
   étiquette), **supprimer** une partition, **formater une seule partition**, changer son **étiquette**,
   créer une **nouvelle table** (MBR ou GPT).
 - **Redimensionner** une partition et son système de fichiers, agrandir ou réduire :
-  - ext4 par `resize2fs` (e2fsprogs, déjà intégré en phase 12) ;
+  - ext4 par `resize2fs` (e2fsprogs, déjà intégré en phase 13) ;
   - NTFS par `ntfsresize` (ntfs-3g) ;
   - dans un volume LUKS2, le système de fichiers intérieur (la taille du segment LUKS2 suit la
     partition) ;
@@ -392,7 +392,7 @@ Décision de l'utilisateur : la **phase 13** (v1.6.0, phase 12 avant le 2026-10-
   - comme dans GParted, les opérations sont préparées, résumées, puis appliquées après confirmation, une
     à la fois ;
   - jamais sur un volume ouvert ;
-  - le système de fichiers est vérifié (outils de la phase 12) avant un redimensionnement ;
+  - le système de fichiers est vérifié (outils de la phase 13) avant un redimensionnement ;
   - avertissement : un débranchement pendant un redimensionnement ou un déplacement peut rendre la
     partition illisible, sauvegardez d'abord ;
   - toutes les opérations sont jugées sur des images par les outils de référence (`sfdisk`, `sgdisk`,
@@ -450,3 +450,30 @@ Décision de l'utilisateur : une **phase 11** (v1.4.0) améliore l'interface de 
 phase 13 (v1.6.0).
 - Le contenu exact (charte visuelle, navigation, écrans revus, animations, thème sombre, accessibilité, tablette…) est
   arrêté avec l'utilisateur au moment d'écrire le plan de la phase, après la v1.3.0.
+
+## 20. Évolution du 2026-10-23 (suite) : lecteur vidéo (phase 12)
+
+Demande de l'utilisateur, après les essais de la phase 10 : « le lecteur vidéo est toujours en mode paysage, règle le
+problème pour le mettre en mode portrait par défaut et en activant l'impact de la rotation de l'écran quand l'android
+l'active, ajoute aussi un bouton pour changer l'orientation manuellement et bloquer l'orientation, ajoute aussi une
+option pour changer les pistes, fais en sorte qu'on puisse avancer ou reculer en glissant, mais aussi en tapotant comme
+le fait VLC ». Une **phase 12** (**v1.5.0**) améliore le lecteur vidéo du § 18. La réparation des disques devient la
+phase 13 (v1.6.0, § 16) et la gestion des partitions la phase 14 (v1.7.0, § 17).
+- **Orientation** :
+  - le lecteur s'ouvre en **portrait** et ne force plus le paysage ;
+  - il suit la rotation du téléphone **seulement si la rotation automatique d'Android est activée** ; sinon il reste
+    dans l'orientation courante du téléphone (portrait en général) ;
+  - un bouton **Tourner** passe à la main du portrait au paysage et inversement ;
+  - un bouton **cadenas** verrouille l'orientation affichée : plus aucune rotation tant qu'il est fermé ; le rouvrir
+    rend la rotation automatique ci-dessus.
+- **Pistes** : un bouton **Pistes** choisit la piste **audio** (langue, nom, canaux) et les **sous-titres** (pistes de
+  la vidéo et fichiers `.srt` trouvés à côté, § 18), ou les **désactive**. Libellés en français.
+- **Avancer et reculer par gestes, comme VLC** :
+  - **glisser horizontalement** sur l'image avance (vers la droite) ou recule (vers la gauche) ; pendant le geste, la
+    position visée et l'écart s'affichent au centre ; la lecture saute à la position visée au lever du doigt ;
+  - **toucher deux fois** la moitié gauche recule de 10 s, la moitié droite avance de 10 s ; chaque toucher suivant
+    rapproché ajoute 10 s (−20 s, −30 s… ou +20 s, +30 s…) ; le cumul s'affiche du côté touché ;
+  - un toucher simple montre ou cache les commandes, comme avant ; les gestes ne partent jamais d'un bouton ou de la
+    barre de progression visibles.
+- **Inchangé** : lecture par l'URI de contenu de la source, sous-titres en mémoire (rien d'un disque chiffré n'est écrit
+  sur le téléphone), écran allumé pendant la lecture, arrêt avec un message si le stockage est fermé.
