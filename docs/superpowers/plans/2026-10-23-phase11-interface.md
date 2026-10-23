@@ -794,7 +794,7 @@ touché : l'application tourne sur le faux pont.
 
 ### Task 14 : documentation et v1.4.0
 
-- [ ] README : section « Interface » (thèmes, accessibilité, recherche globale, aide), trois captures choisies dans
+- [x] README : section « Interface » (thèmes, accessibilité, recherche globale, aide), trois captures choisies dans
   T12, mention de la phase 11 dans le tableau ; feuille de route cochée. Commit `docs: interface complète et
   professionnelle`.
 - [ ] Relecture finale de toute la branche.

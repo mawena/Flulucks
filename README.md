@@ -55,7 +55,12 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
   suppression définitive ; Réglages → Confort → **Retours haptiques** pour les couper.
 - **Réglages regroupés** en sections : Apparence, Fichiers, Disques, Confort et Portail.
 
-<!-- captures T12 -->
+<p align="center">
+  <img src="docs/captures/accueil-clair.png" width="240" alt="Accueil en thème clair : recherche, raccourcis, stockages et disque USB ouvert">
+  <img src="docs/captures/explorateur-grille-sombre.png" width="240" alt="Explorateur en grille, thème sombre, avec vignettes">
+  <img src="docs/captures/deverrouillage-sombre.png" width="240" alt="Dialogue de déverrouillage, thème sombre, avec l'œil et la case Ouvrir en lecture seule">
+</p>
+<p align="center"><sub>Accueil en clair, explorateur en grille et déverrouillage en sombre, sur le Pixel 4 XL.</sub></p>
 
 ### Lecteurs intégrés et dossiers distants (1.3.0)
 
@@ -465,6 +470,7 @@ Plus de détails sur le moteur, l'outil `fluluks-cli` et la vérification par le
 | `tools/` | Génération des images de test, scripts téléphone, clé USB de test, rendu du logo |
 | `assets/logo/` | Logo source (SVG) et ses rendus PNG pour l'application |
 | `assets/licenses/` | Licences des bibliothèques Java, montrées dans « À propos » |
+| `docs/captures/` | Captures du README |
 | `docs/superpowers/` | Conception, plans de chaque phase, feuille de route et essais |
 
 ### Branches
