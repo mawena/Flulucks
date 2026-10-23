@@ -85,7 +85,8 @@ void main() {
 
   testWidgets('toggleShowsPassphrase', (tester) async {
     await openDialog(tester);
-    expect(find.byIcon(Icons.lock_rounded), findsOneWidget); // titre avec cadenas
+    // titre avec cadenas
+    expect(find.descendant(of: find.byType(AlertDialog), matching: find.byIcon(Icons.lock_rounded)), findsOneWidget);
     await tester.tap(find.byTooltip(Fr.showPassphrase));
     await tester.pump();
     expect(tester.widget<TextField>(field).obscureText, isFalse);

@@ -47,6 +47,17 @@ class Fr {
   static const allFilesButton = 'Autoriser';
   static const allFilesGranted = 'Autorisé';
   static const browse = 'Parcourir';
+
+  // accueil (phase 11)
+  static const searchEverywhere = 'Rechercher dans Portail';
+  static String sourceMenu(String label) => 'Options de $label';
+  static const chipEncrypted = 'Chiffré';
+  static const chipOpen = 'Ouvert';
+  static const chipReadOnly = 'Lecture seule';
+  static const chipLocked = 'Verrouillé';
+  static const chipDirty = 'Non démonté proprement';
+  static const help = 'Aide';
+  static const about = 'À propos';
   static const settings = 'Réglages';
   static const readOnlyHelp = "S'applique aux prochaines ouvertures de disques";
   static const autoLock = 'Verrouillage automatique';

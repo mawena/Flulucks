@@ -106,7 +106,7 @@ class FakeHostApi implements HostApi {
   Future<void> eject(String volumeId) async => ejected.add(volumeId);
 
   @override
-  Future<void> openInFiles(String volumeId) async {}
+  Future<void> openInFiles(String volumeId) async => calls.add('openInFiles $volumeId');
 
   @override
   Future<bool> getReadOnlyPreference() async => readOnlyPreference;

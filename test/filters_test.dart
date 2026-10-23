@@ -5,6 +5,7 @@ import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/screens/explorer_screen.dart';
 import 'package:fluluks/src/screens/filter_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
+import 'package:fluluks/src/widgets/shortcut_grid.dart';
 
 import 'fake_host_api.dart';
 
@@ -32,13 +33,20 @@ Future<AppState> pumpHome(WidgetTester tester, FakeHostApi api) async {
 }
 
 void main() {
-  testWidgets('homeShowsFilterChips', (tester) async {
+  testWidgets('shortcutsOpenFilter', (tester) async {
+    tester.view.physicalSize = const Size(412, 869); // Pixel 4 XL : 3 colonnes
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final api = api0();
     await pumpHome(tester, api);
+    final grid = find.byType(ShortcutGrid);
     for (final c in ['Photos', 'Vidéos', 'Musique', 'Documents', 'Archives', 'Récents']) {
-      expect(find.widgetWithText(ActionChip, c), findsOneWidget, reason: c);
+      expect(find.descendant(of: grid, matching: find.text(c)), findsOneWidget, reason: c);
     }
-    await tester.tap(find.widgetWithText(ActionChip, 'Documents'));
+    // 3 colonnes : Photos, Vidéos, Musique sur la première ligne, Documents sur la seconde
+    expect(tester.getTopLeft(find.text('Documents')).dy, greaterThan(tester.getTopLeft(find.text('Photos')).dy));
+    expect(tester.getTopLeft(find.text('Musique')).dy, tester.getTopLeft(find.text('Photos')).dy);
+    await tester.tap(find.descendant(of: grid, matching: find.text('Documents')));
     await tester.pumpAndSettle();
     expect(find.byType(FilterScreen), findsOneWidget);
     expect(api.calls, contains('quickFilter documents'));
@@ -47,10 +55,10 @@ void main() {
     expect(find.text('Carte SD · /Docs · 2,0 Mo'), findsOneWidget);
   });
 
-  testWidgets('noChipsWithoutFileAccess', (tester) async {
+  testWidgets('noShortcutsWithoutFileAccess', (tester) async {
     final api = api0()..allFilesAccess = false;
     await pumpHome(tester, api);
-    expect(find.byType(ActionChip), findsNothing);
+    expect(find.byType(ShortcutGrid), findsNothing);
   });
 
   testWidgets('filterScreenOpensFile', (tester) async {

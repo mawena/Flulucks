@@ -126,8 +126,10 @@ void main() {
   testWidgets('trashOpenedFromExplorerRootAndHome', (tester) async {
     final api = api0();
     final state = await pumpHome(tester, api);
-    // carte du stockage sur l'accueil
-    await tester.tap(find.byTooltip('Corbeille').first);
+    // menu de la carte du stockage sur l'accueil
+    await tester.tap(find.byTooltip(Fr.sourceMenu('Téléphone')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(Fr.trash));
     await tester.pumpAndSettle();
     expect(find.byType(TrashScreen), findsOneWidget);
     await tester.pageBack();

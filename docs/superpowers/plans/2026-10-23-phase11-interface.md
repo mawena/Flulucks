@@ -389,7 +389,7 @@ Valeurs fixées :
   - partition verrouillée : « Déverrouiller » (rempli, icône `lock_open_rounded`).
 - Aucun disque : `EmptyState(icon: Icons.usb_rounded, title: Fr.noDiskTitle, message: Fr.noDiskBody)`.
 
-- [ ] **Step 1 : tests** (`home_screen_test`, `filters_test`) :
+- [x] **Step 1 : tests** (`home_screen_test`, `filters_test`) :
   - `homeHeaderShowsBrandAndSearch` ;
   - `shortcutsOpenFilter` (la tuile « Documents » ouvre `FilterScreen`, `quickFilter documents` appelé). Il remplace
     `homeShowsFilterChips`, qui cherchait des `ActionChip` ;
@@ -401,12 +401,12 @@ Valeurs fixées :
   - `sourceMenuOpensTrashAndSpace` ;
   - `twoColumnsWhenExpanded` (1280 × 800 : l'en-tête « Disques USB » est dans la moitié droite) ;
   - les tests existants de l'accueil restent verts, sélecteurs ajustés.
-- [ ] **Step 2 :** Run `flutter test test/home_screen_test.dart test/filters_test.dart` → FAIL.
-- [ ] **Step 3 :** rendre les PNG par
+- [x] **Step 2 :** Run `flutter test test/home_screen_test.dart test/filters_test.dart` → FAIL.
+- [x] **Step 3 :** rendre les PNG par
   `python3 tools/logo/render_icons.py assets/logo/portail.svg android/app/src/main/res --flutter assets/logo`, puis
   implémenter l'accueil.
-- [ ] **Step 4 :** tests verts ; suites vertes.
-- [ ] **Step 5 :** commit `feat(interface): accueil revu, logo, raccourcis en tuiles et état des disques`.
+- [x] **Step 4 :** tests verts ; suites vertes.
+- [x] **Step 5 :** commit `feat(interface): accueil revu, logo, raccourcis en tuiles et état des disques`.
 
 ### Task 5 : déverrouillage, formatage et saisies sensibles
 

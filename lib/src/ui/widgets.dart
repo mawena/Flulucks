@@ -64,7 +64,8 @@ class StatusChip extends StatelessWidget {
   }
 }
 
-/// Bandeau d'état dans la page (lecture seule, accès aux fichiers, erreur) : icône, texte, actions sous le texte.
+/// Bandeau d'état dans la page (lecture seule, accès aux fichiers, erreur) : icône, titre facultatif, texte,
+/// actions sous le texte.
 class StatusBanner extends StatelessWidget {
   const StatusBanner({
     super.key,
@@ -72,12 +73,14 @@ class StatusBanner extends StatelessWidget {
     required this.text,
     this.tone = ChipTone.warning,
     this.actions = const [],
+    this.title,
   });
 
   final IconData icon;
   final String text;
   final ChipTone tone;
   final List<Widget> actions;
+  final String? title;
 
   @override
   Widget build(BuildContext context) {
@@ -91,7 +94,12 @@ class StatusBanner extends StatelessWidget {
           Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
             ExcludeSemantics(child: Icon(icon, color: fg)),
             const SizedBox(width: Space.m),
-            Expanded(child: Text(text, style: theme.textTheme.bodyMedium?.copyWith(color: fg))),
+            Expanded(
+              child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: Space.xs, children: [
+                if (title != null) Text(title!, style: theme.textTheme.titleSmall?.copyWith(color: fg)),
+                Text(text, style: theme.textTheme.bodyMedium?.copyWith(color: fg)),
+              ]),
+            ),
           ]),
           if (actions.isNotEmpty)
             Align(

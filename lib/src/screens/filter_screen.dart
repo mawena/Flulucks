@@ -10,12 +10,12 @@ import 'explorer_screen.dart';
 
 /// Filtres rapides de l'accueil : (identifiant côté Kotlin, libellé, icône).
 const quickFilters = [
-  ('photos', Fr.filterPhotos, Icons.photo),
-  ('videos', Fr.filterVideos, Icons.movie),
-  ('music', Fr.filterMusic, Icons.music_note),
-  ('documents', Fr.filterDocuments, Icons.description),
-  ('archives', Fr.filterArchives, Icons.folder_zip),
-  ('recent', Fr.filterRecent, Icons.schedule),
+  ('photos', Fr.filterPhotos, Icons.photo_rounded),
+  ('videos', Fr.filterVideos, Icons.movie_rounded),
+  ('music', Fr.filterMusic, Icons.music_note_rounded),
+  ('documents', Fr.filterDocuments, Icons.description_rounded),
+  ('archives', Fr.filterArchives, Icons.folder_zip_rounded),
+  ('recent', Fr.filterRecent, Icons.schedule_rounded),
 ];
 
 /// Fichiers d'un filtre rapide (téléphone et cartes SD), du plus récent : toucher ouvre le fichier, l'icône de

@@ -441,10 +441,10 @@ void main() {
     final img = (await tester.runAsync(() => createTestImage(width: 4, height: 4)))!;
     final cache = PaintingBinding.instance.imageCache;
     cache.putIfAbsent('vignette', () => OneFrameImageStreamCompleter(SynchronousFuture(ImageInfo(image: img))));
-    expect(cache.currentSize, 1);
+    expect(cache.containsKey('vignette'), isTrue); // le logo de l'accueil y est aussi : compter ne suffit plus
     api.sources = [src('phone')];
     await state.refreshSources();
     await tester.pumpAndSettle();
-    expect(cache.currentSize, 0);
+    expect(cache.containsKey('vignette'), isFalse);
   });
 }
