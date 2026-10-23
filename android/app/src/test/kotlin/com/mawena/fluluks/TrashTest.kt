@@ -1,5 +1,7 @@
 package com.mawena.fluluks
 
+import com.mawena.fluluks.files.Entry
+import com.mawena.fluluks.files.FileSource
 import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.LocalSource
 import com.mawena.fluluks.files.Search
@@ -46,6 +48,24 @@ class TrashTest {
         assertEquals(t0, x.deletedAtMs)
         val d2 = items["D2"]!!
         assertEquals("/D2", d2.originalPath); assertEquals(5L, d2.size); assertTrue(d2.isDir)
+    }
+
+    /** Source qui note les dossiers listés. */
+    private class Counting(val s: FileSource) : FileSource by s {
+        val listed = ArrayList<String>()
+        override fun list(path: String): List<Entry> = s.list(path).also { listed += path }
+    }
+
+    @Test fun deleteDoesNotScanTrashedFolders() {
+        for (i in 1..20) local("photos/a$i/b/p$i.jpg")
+        local("seul.txt")
+        val s = Counting(src())
+        Trash.moveToTrash(s, listOf("/photos"), t0)
+        s.listed.clear()
+        Trash.moveToTrash(s, listOf("/seul.txt"), t0 + day)
+        // la purge n'a besoin que des fiches et des dates : rien sous files/photos n'est relu
+        assertEquals(emptyList<String>(), s.listed.filter { it.startsWith("/.Portail-corbeille/files/") })
+        assertEquals(setOf("photos", "seul.txt"), Trash.list(s).map { it.name }.toSet())
     }
 
     @Test fun trashInfoFormat() {

@@ -63,11 +63,14 @@ object Trash {
     }
 
     /** Éléments de la corbeille, du plus récemment supprimé au plus ancien. */
-    fun list(src: FileSource): List<TrashItem> {
+    fun list(src: FileSource): List<TrashItem> = items(src, sizes = true)
+
+    /** [sizes] : taille des dossiers calculée (parcours complet de chacun) ; la purge s'en passe (taille 0). */
+    private fun items(src: FileSource, sizes: Boolean): List<TrashItem> {
         if (src.stat(FILES)?.type?.isDir() != true) return emptyList()
         return src.list(FILES).map { e ->
             val (original, date) = readInfo(src, e.name) ?: ("/${e.name}" to 0L)
-            val size = if (e.type.isDir()) dirSize(src, e.path) else e.size
+            val size = if (!e.type.isDir()) e.size else if (sizes) dirSize(src, e.path) else 0L
             TrashItem(e.name, WriteOps.nameOf(original), original, date, size, e.type.isDir())
         }.sortedByDescending { it.deletedAtMs }
     }
@@ -111,7 +114,7 @@ object Trash {
     /** Supprime les éléments mis à la corbeille il y a plus de 30 jours ; rien sur un stockage en lecture seule. */
     fun purgeExpired(src: FileSource, nowMs: Long = System.currentTimeMillis()) {
         if (src.readOnlyReason != null || src.stat(FILES)?.type?.isDir() != true) return
-        val old = list(src).filter { it.deletedAtMs > 0 && nowMs - it.deletedAtMs > KEEP_MS }.map { it.id }
+        val old = items(src, sizes = false).filter { it.deletedAtMs > 0 && nowMs - it.deletedAtMs > KEEP_MS }.map { it.id }
         if (old.isNotEmpty()) purge(src, old)
     }
 
