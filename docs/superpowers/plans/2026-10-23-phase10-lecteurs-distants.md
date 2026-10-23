@@ -315,7 +315,7 @@ fichier pour la clé), Pigeon (`importPrivateKey(serverId)` → type et empreint
   `passwordAuth` ; `ed25519KeyAuth` et `encryptedKeyNeedsPassphrase` ; `readAtOffsets` ; `uploadRenameDelete` ;
   `symlinkListedNotFollowed` ; `badCredentialsMessage` ; `channelsNeverExceedThree` ; `secretsNotInMessages`.
 - [x] **Step 2 :** Run `./gradlew -q :app:testDebugUnitTest --tests '*SftpClientTest'` → FAIL.
-- [ ] **Step 3 :** implémenter (`HostKeyRepository` maison, `get(path, null, offset)`, `put(…, OVERWRITE)`,
+- [x] **Step 3 :** implémenter (`HostKeyRepository` maison, `get(path, null, offset)`, `put(…, OVERWRITE)`,
   `ServerAliveInterval` 30 s) ; règles R8 ; construction release vérifiée.
 - [x] **Step 4 :** tests verts ; suite JVM verte ; `flutter build apk --release` (si permis) ou `--debug`.
 - [x] **Step 5 :** commit `feat(distant): dossiers SFTP`.
@@ -371,7 +371,7 @@ positionMs?)`, événement `onPlayerChanged(PlayerMsg?)`), `app_state.dart`, `ho
 
 **Files :** Create `docs/superpowers/research/2026-10-23-essais-phase10/essais.md`.
 
-- [ ] Fiche d'essais : photos (glisser, zoom, HEIC si possible), musique d'un disque chiffré écran éteint puis
+- [x] Fiche d'essais : photos (glisser, zoom, HEIC si possible), musique d'un disque chiffré écran éteint puis
   débranchement, vidéo avec `.srt` accentué, texte modifié sur ext4 puis vérifié sous Ubuntu, serveur FTP
   (`python3 -m pyftpdlib`) et SFTP (`openssh-server` d'Ubuntu, par mot de passe puis par clé) : parcourir, copier
   dans les deux sens, ouvrir une vidéo distante et l'avancer, extraire une archive distante. APK installée avant.

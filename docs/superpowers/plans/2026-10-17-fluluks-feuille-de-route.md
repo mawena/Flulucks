@@ -322,9 +322,9 @@ dans le même commit que le travail.
 - [x] T9 — Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)
 - [x] T10 — Lecteur de musique (lecture en arrière-plan, file d'attente du dossier)
 - [x] T11 — Essais instrumentés sur le Pixel
-- [ ] *(utilisateur)* T12 — Essais sur le Pixel
+- [x] *(utilisateur)* T12 — Essais sur le Pixel
 - [x] T13 — Documentation
-- [ ] Relecture finale de toute la branche
+- [x] Relecture finale de toute la branche
 - [ ] Fusion `feature/lecteurs-distants` → `develop`
 - [ ] Version `v1.3.0`
 
