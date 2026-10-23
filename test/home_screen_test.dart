@@ -1,9 +1,17 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluluks/src/app.dart';
 import 'package:fluluks/src/bridge/fluluks_api.g.dart';
+import 'package:fluluks/src/screens/space_screen.dart';
+import 'package:fluluks/src/screens/trash_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
 import 'package:fluluks/src/strings_fr.dart';
+import 'package:fluluks/src/ui/states.dart';
+import 'package:fluluks/src/ui/theme.dart';
+import 'package:fluluks/src/ui/widgets.dart';
+import 'package:fluluks/src/widgets/brand_mark.dart';
 
 import 'fake_host_api.dart';
 
@@ -19,19 +27,131 @@ Future<void> openSettings(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
-SourceMsg src(String id, String kind, String label, {String? key}) => SourceMsg(
+/// Fait défiler les Réglages (en sections) jusqu'au réglage [text], entièrement visible ; [delta] négatif pour
+/// remonter.
+Future<void> showSetting(WidgetTester tester, String text, {double delta = 100}) async {
+  await tester.scrollUntilVisible(find.text(text), delta);
+  await tester.ensureVisible(find.text(text));
+  await tester.pumpAndSettle();
+}
+
+SourceMsg src(String id, String kind, String label, {String? key, int free = 16000000000}) => SourceMsg(
       id: id,
       stableKey: key ?? id,
       kind: kind,
       label: label,
       totalBytes: 64000000000,
-      freeBytes: 16000000000,
+      freeBytes: free,
       readOnly: false,
       roReason: '',
       encrypted: false,
     );
 
+/// Ouvre le menu ⋮ de [tooltip] et touche [item].
+Future<void> menu(WidgetTester tester, String tooltip, String item) async {
+  await tester.tap(find.byTooltip(tooltip));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(item));
+  await tester.pumpAndSettle();
+}
+
 void main() {
+  testWidgets('homeHeaderShowsBrandAndSearch', (tester) async {
+    await pump(tester, FakeHostApi());
+    final header = find.byType(AppBar);
+    expect(find.descendant(of: header, matching: find.byType(BrandMark)), findsOneWidget);
+    expect(find.descendant(of: header, matching: find.text(Fr.title)), findsOneWidget);
+    expect(find.byTooltip(Fr.settings), findsOneWidget);
+    // logo décoratif : exclu de TalkBack
+    final image = tester.widget<Image>(find.descendant(of: find.byType(BrandMark), matching: find.byType(Image)));
+    expect(image.excludeFromSemantics, isTrue);
+  });
+
+  testWidgets('noDiskShowsEmptyState', (tester) async {
+    await pump(tester, FakeHostApi());
+    final empty = tester.widget<EmptyState>(find.byType(EmptyState));
+    expect([empty.icon, empty.title, empty.message], [Icons.usb_rounded, Fr.noDiskTitle, Fr.noDiskBody]);
+  });
+
+  testWidgets('usageBarDangerAbove90', (tester) async {
+    await pump(tester, FakeHostApi()..sources = [src('phone', 'phone', 'Téléphone', free: 3200000000)]); // 95 %
+    final bar = find.descendant(of: find.widgetWithText(Card, 'Téléphone'), matching: find.byType(UsageBar));
+    expect(tester.widget<UsageBar>(bar).used, closeTo(0.95, 0.001));
+    final indicator = find.descendant(of: bar, matching: find.byType(LinearProgressIndicator));
+    expect(tester.widget<LinearProgressIndicator>(indicator).color, portailScheme(Brightness.light).error);
+  });
+
+  testWidgets('lockedPartitionShowsUnlockAndChips', (tester) async {
+    await pump(tester, FakeHostApi()..disks = [disk([part()])]);
+    for (final chip in [Fr.chipEncrypted, 'LUKS2', Fr.chipLocked]) {
+      expect(find.widgetWithText(StatusChip, chip), findsOneWidget, reason: chip);
+    }
+    expect(find.byIcon(Icons.lock_rounded), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, Fr.unlock), findsOneWidget);
+    expect(find.descendant(of: find.widgetWithText(FilledButton, Fr.unlock), matching: find.byIcon(Icons.lock_open_rounded)),
+        findsOneWidget);
+    expect(find.widgetWithText(StatusChip, Fr.chipOpen), findsNothing);
+  });
+
+  testWidgets('openPartitionPrimaryActions', (tester) async {
+    final api = FakeHostApi()
+      ..sources = [src('v1', 'disk', 'Données')]
+      ..disks = [disk([part(volumeId: 'v1')])]
+      ..volumes = [volume(readOnly: true, roReason: 'ouvert en lecture seule à votre demande')]
+      ..trash['v1'] = [];
+    await pump(tester, api);
+    expect(find.widgetWithText(FilledButton, Fr.browse), findsOneWidget);
+    expect(find.widgetWithText(OutlinedButton, Fr.eject), findsOneWidget);
+    expect(find.byIcon(Icons.eject_rounded), findsOneWidget);
+    expect(find.byIcon(Icons.lock_open_rounded), findsOneWidget); // cadenas ouvert
+    final open = tester.widget<StatusChip>(find.widgetWithText(StatusChip, Fr.chipOpen));
+    expect(open.tone, ChipTone.good);
+    expect(tester.widget<StatusChip>(find.widgetWithText(StatusChip, Fr.chipReadOnly)).tone, ChipTone.warning);
+    expect(find.text(Fr.openInFiles), findsNothing); // dans le menu
+    await menu(tester, Fr.sourceMenu(Fr.partitionName(1)), Fr.openInFiles);
+    expect(api.calls, contains('openInFiles v1'));
+    await menu(tester, Fr.sourceMenu(Fr.partitionName(1)), Fr.trash);
+    expect(find.byType(TrashScreen), findsOneWidget);
+  });
+
+  testWidgets('dirtyVolumeDangerChip', (tester) async {
+    final v = volume()..needsRecovery = true;
+    await pump(tester, FakeHostApi()..disks = [disk([part(volumeId: 'v1')])]..volumes = [v]);
+    expect(tester.widget<StatusChip>(find.widgetWithText(StatusChip, Fr.chipDirty)).tone, ChipTone.danger);
+  });
+
+  testWidgets('sourceMenuOpensTrashAndSpace', (tester) async {
+    final api = FakeHostApi()
+      ..sources = [src('phone', 'phone', 'Téléphone')]
+      ..spaceFuture = Completer<SpaceReportMsg>().future; // analyse en cours
+    await pump(tester, api);
+    await menu(tester, Fr.sourceMenu('Téléphone'), Fr.trash);
+    expect(find.byType(TrashScreen), findsOneWidget);
+    expect(api.calls, contains('listTrash phone'));
+    await tester.tap(find.byTooltip('Retour'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip(Fr.sourceMenu('Téléphone')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(Fr.spaceAnalysis));
+    // analyse en cours : l'indicateur tourne sans fin, pas de pumpAndSettle
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 200));
+    }
+    expect(find.byType(SpaceScreen), findsOneWidget);
+    expect(api.calls, contains('analyzeSpace phone /'));
+  });
+
+  testWidgets('twoColumnsWhenExpanded', (tester) async {
+    tester.view.physicalSize = const Size(1280, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await pump(tester, FakeHostApi()..sources = [src('phone', 'phone', 'Téléphone')]);
+    expect(tester.getTopLeft(find.text(Fr.usbDisks)).dx, greaterThan(640));
+    expect(tester.getTopLeft(find.text(Fr.remoteFolders)).dx, greaterThan(640));
+    expect(tester.getTopLeft(find.text(Fr.storage)).dx, lessThan(640));
+    expect(tester.getTopLeft(find.text(Fr.shortcuts)).dx, lessThan(640));
+  });
+
   testWidgets('homeShowsPhoneSdDisksFavorites', (tester) async {
     final api = FakeHostApi()
       ..sources = [src('phone', 'phone', 'Téléphone'), src('sd:AB12', 'sd', 'Carte SD'), src('v1', 'disk', 'Données')]
@@ -98,10 +218,12 @@ void main() {
     await pump(tester, api);
     expect(find.text('Ouvrir les disques en lecture seule'), findsNothing); // plus sur l'accueil
     await openSettings(tester);
+    await showSetting(tester, 'Ouvrir les disques en lecture seule'); // section Disques
     expect(find.text("S'applique aux prochaines ouvertures de disques"), findsOneWidget);
     await tester.tap(find.text('Ouvrir les disques en lecture seule'));
     await tester.pump();
     expect(api.readOnlyPreference, isTrue);
+    await showSetting(tester, 'Afficher les fichiers cachés', delta: -100); // section Apparence, plus haut
     await tester.tap(find.text('Afficher les fichiers cachés'));
     await tester.pump();
     expect(api.viewPrefs.showHidden, isTrue);
@@ -115,14 +237,14 @@ void main() {
     await tester.pump();
     expect(api.accessRequests, 1);
     api.allFilesAccess = true;
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
   });
 
   testWidgets('liste vide', (tester) async {
     await pump(tester, FakeHostApi());
     expect(find.text('Portail'), findsOneWidget);
-    expect(find.text('Branchez un disque USB-C'), findsOneWidget);
+    expect(find.text(Fr.noDiskTitle), findsOneWidget);
   });
 
   testWidgets('disque LUKS2 : bouton Déverrouiller', (tester) async {
@@ -146,7 +268,7 @@ void main() {
       ..volumes = [volume(readOnly: true, roReason: 'ouvert en lecture seule à votre demande')];
     await pump(tester, api);
     expect(find.text("Ouvert — visible dans l'application Fichiers"), findsOneWidget);
-    expect(find.text('Ouvrir dans Fichiers'), findsOneWidget);
+    expect(find.byTooltip(Fr.sourceMenu(Fr.partitionName(1))), findsOneWidget); // Ouvrir dans Fichiers : menu
     expect(find.text('Déverrouiller'), findsNothing);
     await tester.tap(find.text('Éjecter'));
     await tester.pump();
@@ -169,13 +291,14 @@ void main() {
       ];
     await pump(tester, api);
     await openSettings(tester);
+    await showSetting(tester, 'Ouvrir les disques en lecture seule'); // section Disques
     final sw = find.widgetWithText(SwitchListTile, 'Ouvrir les disques en lecture seule');
     expect(tester.widget<SwitchListTile>(sw).value, isFalse);
     await tester.tap(sw);
     await tester.pump();
     expect(api.readOnlyPreference, isTrue);
     expect(tester.widget<SwitchListTile>(sw).value, isTrue);
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ouvrir'));
     await tester.pump();
@@ -204,7 +327,7 @@ void main() {
         ..disks = [disk([part(volumeId: 'v1')])]
         ..volumes = [volume(readOnly: true, roReason: 'journal à rejouer : branchez le disque sous Ubuntu')],
     );
-    expect(find.text('Lecture seule : journal à rejouer : branchez le disque sous Ubuntu'), findsOneWidget);
+    expect(find.text(Fr.readOnly('journal à rejouer : branchez le disque sous Ubuntu')), findsOneWidget);
     expect(find.text("Ouvert — visible dans l'application Fichiers"), findsOneWidget);
   });
 
@@ -229,7 +352,7 @@ void main() {
     state.onEjectStateChanged(true, null);
     await tester.pump();
     expect(find.text('Écriture des données en attente…'), findsOneWidget);
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget);
     expect(tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Éjecter')).onPressed, isNull);
     expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Ouvrir')).onPressed, isNull);
     state.onEjectStateChanged(false, 'Éjection impossible : volume occupé');
@@ -283,7 +406,7 @@ void main() {
         ..volumes = [v],
     );
     expect(
-      find.text("Le volume n'a pas été démonté proprement : contenu possiblement incomplet"),
+      find.text(Fr.needsRecovery),
       findsOneWidget,
     );
   });

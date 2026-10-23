@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/feedback.dart';
 
 /// Renommage par lot de [paths] : numérotation, remplacement d'un texte ou date de prise de vue, avec l'aperçu
 /// des nouveaux noms (calculé côté Kotlin, conflits signalés). « Renommer » n'est permis que sans conflit et si un
@@ -90,7 +91,7 @@ class _BatchRenameScreenState extends State<BatchRenameScreen> {
     } on PlatformException catch (e) {
       if (!mounted) return;
       setState(() => _busy = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? Fr.genericError)));
+      showMessage(context, e.message ?? Fr.genericError, kind: MessageKind.error);
       _refresh();
     }
   }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Couleurs de la charte (phase 11). portail_fond = surface claire du thème Flutter (portailScheme), vérifiée par
+     test/theme_test.dart (androidColorsMatchTheme) : pas d'éclair de couleur entre le démarrage et le premier rendu. -->
+<resources>
+    <color name="portail_terracotta">#C2410C</color>
+    <color name="portail_fond">#FFF8F6</color>
+</resources>

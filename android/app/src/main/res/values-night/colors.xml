@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Couleurs de la charte en mode sombre. portail_fond = surface sombre du thème Flutter : aucun éclair blanc. -->
+<resources>
+    <color name="portail_terracotta">#C2410C</color>
+    <color name="portail_fond">#1D100C</color>
+</resources>

@@ -5,6 +5,7 @@ import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/screens/explorer_screen.dart';
 import 'package:fluluks/src/screens/trash_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
+import 'package:fluluks/src/strings_fr.dart';
 
 import 'fake_host_api.dart';
 
@@ -88,7 +89,7 @@ void main() {
     final state = await pumpHome(tester, api);
     await push(tester, TrashScreen(state: state, sourceId: 'phone'));
     expect(find.text('Corbeille'), findsOneWidget);
-    expect(find.text('2 élément(s), 3,0 Mo'), findsOneWidget);
+    expect(find.text(Fr.trashSummary(2, 3000000)), findsOneWidget);
     expect(find.text('a.txt'), findsOneWidget); // nom d'origine, pas celui de la corbeille
     expect(find.textContaining('/docs/a.txt'), findsOneWidget);
 
@@ -99,7 +100,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.calls, contains('restoreTrash phone a (1).txt'));
     expect(find.text('a.txt'), findsNothing);
-    expect(find.text('1 élément(s), 3,0 Mo'), findsOneWidget);
+    expect(find.text(Fr.trashSummary(1, 3000000)), findsOneWidget);
 
     // supprimer définitivement un élément, après confirmation
     api.trash['phone']!.add(item('c.txt', '/c.txt'));
@@ -114,22 +115,24 @@ void main() {
     // vider, après confirmation
     await tester.tap(find.byTooltip('Vider la corbeille'));
     await tester.pumpAndSettle();
-    expect(find.text('Vider la corbeille ?'), findsOneWidget);
+    expect(find.text(Fr.emptyTrashTitle), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Vider'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('emptyTrash phone'));
     expect(find.text('La corbeille est vide'), findsOneWidget);
-    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.delete_forever)).onPressed, isNull);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.delete_forever_rounded)).onPressed, isNull);
   });
 
   testWidgets('trashOpenedFromExplorerRootAndHome', (tester) async {
     final api = api0();
     final state = await pumpHome(tester, api);
-    // carte du stockage sur l'accueil
-    await tester.tap(find.byTooltip('Corbeille').first);
+    // menu de la carte du stockage sur l'accueil
+    await tester.tap(find.byTooltip(Fr.sourceMenu('Téléphone')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(Fr.trash));
     await tester.pumpAndSettle();
     expect(find.byType(TrashScreen), findsOneWidget);
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     // menu de l'explorateur, à la racine seulement
     await push(tester, ExplorerScreen(state: state, sourceId: 'phone'));
@@ -138,7 +141,7 @@ void main() {
     await tester.tap(find.text('Corbeille'));
     await tester.pumpAndSettle();
     expect(find.byType(TrashScreen), findsOneWidget);
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('DCIM'));
     await tester.pumpAndSettle();

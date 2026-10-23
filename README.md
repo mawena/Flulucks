@@ -12,18 +12,57 @@ photo dans les applications habituelles.
 Elle est née d'un besoin simple : utiliser sur un téléphone non rooté (un Pixel 4 XL) le disque
 LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permettait.
 
-> **État actuel : version 1.3.0 ; gestionnaire de fichiers (lecteurs intégrés de photos, musique, vidéos et textes,
-> dossiers distants FTP et SFTP, archives ZIP, 7z, RAR et TAR, corbeille, analyse de l'espace, renommage par lot),
-> lecture et écriture sur ext4, FAT, exFAT et NTFS, formatage des disques USB, en
-> clair ou chiffrés.** L'écriture a été vérifiée sur PC (batteries de non-corruption jugées par des outils indépendants
-> et le noyau Linux, coupures simulées), sur le téléphone avec des images, puis essayée sur une vraie clé
-> et un vrai disque pour chaque système de fichiers (ext4 compris : `e2fsck` propre ensuite sous Ubuntu).
+> **État actuel : version 1.4.0 ; gestionnaire de fichiers (interface claire ou sombre et accessible, recherche dans
+> tous les stockages, lecteurs intégrés de photos, musique, vidéos et textes, dossiers distants FTP et SFTP, archives
+> ZIP, 7z, RAR et TAR, corbeille, analyse de l'espace, renommage par lot), lecture et écriture sur ext4, FAT, exFAT
+> et NTFS, formatage des disques USB, en clair ou chiffrés.** L'écriture a été vérifiée sur PC (batteries de
+> non-corruption jugées par des outils indépendants et le noyau Linux, coupures simulées), sur le téléphone avec des
+> images, puis essayée sur une vraie clé et un vrai disque pour chaque système de fichiers (ext4 compris : `e2fsck`
+> propre ensuite sous Ubuntu).
 > Une sauvegarde reste recommandée avant d'écrire sur un disque qui compte. Voir les
 > [limites](#limites-actuelles).
 
-## Ce que fait la version 1.3.0
+## Ce que fait la version 1.4.0
 
-### Lecteurs intégrés et dossiers distants (nouveau en 1.3.0)
+### Interface (nouveau en 1.4.0)
+
+- **Thèmes clair et sombre**, aux couleurs terracotta du logo : Réglages → Apparence → **Thème** (Système, par
+  défaut, Clair ou Sombre). L'écran de démarrage est terracotta, sans éclair blanc en mode sombre.
+- **Accessibilité** : le texte suit la taille choisie dans Android jusqu'à 200 % sans déborder ; les écrans se
+  lisent avec **TalkBack**, en français (tuiles de la grille, jauges de place, puces d'état, lecteur de musique) ;
+  boutons et éléments touchables de 48 dp au moins ; contraste AA (4,5:1 pour le texte), vérifié par les tests en
+  clair comme en sombre. Les animations s'arrêtent quand Android les coupe.
+- **Grands écrans et paysage** : l'accueil passe sur deux colonnes dès 840 dp de large (le Pixel 4 XL en
+  paysage), la grille ajoute des colonnes selon la largeur, et les formulaires restent dans une largeur lisible.
+- **Liste ou grille partout** où cela a du sens : explorateur, raccourcis de l'accueil, recherche et recherche
+  globale suivent le même choix (Réglages, ou le bouton de la barre de titre), vignettes comprises. La corbeille et
+  l'analyse de l'espace restent en liste, pour l'emplacement d'origine, les dates et les barres de taille.
+- **Recherche dans tous les stockages** : la barre en haut de l'accueil fouille le téléphone, les cartes SD et les
+  disques ouverts, et groupe les résultats par stockage ; la puce **Partout** y mène depuis la recherche de
+  l'explorateur. Les dossiers distants n'y sont pas inclus, pour rester rapide.
+- **Explorateur** : fil d'Ariane, menu **⋮** sur chaque élément (en liste), **Tout sélectionner**, et **Annuler**
+  juste après une mise à la corbeille. Les états vides, les chargements et les erreurs (avec **Réessayer**) ont la
+  même présentation partout.
+- **Déverrouillage** : bouton pour afficher ou masquer la phrase de passe, et case **Ouvrir en lecture seule**,
+  préremplie par le réglage.
+- **Bienvenue** au premier lancement, montrée une seule fois : ce que fait Portail, la confidentialité de la phrase
+  de passe, et l'accès aux fichiers, inutile pour les disques USB.
+- **Aide** (menu **⋮** de l'accueil, ou Réglages) : huit questions courantes, de l'ouverture d'un disque chiffré au
+  formatage.
+- **À propos** : version, appareil, et **Licences des bibliothèques** embarquées (lwext4, ntfs-3g, FatFs,
+  libarchive, XZ Utils, Argon2, cJSON, Mbed TLS, Media3, Apache Commons Net, JSch, Bouncy Castle).
+- **Retours haptiques** : légère vibration à la sélection, au déverrouillage, à la fin d'une copie et à une
+  suppression définitive ; Réglages → Confort → **Retours haptiques** pour les couper.
+- **Réglages regroupés** en sections : Apparence, Fichiers, Disques, Confort et Portail.
+
+<p align="center">
+  <img src="docs/captures/accueil-clair.png" width="240" alt="Accueil en thème clair : recherche, raccourcis, stockages et disque USB ouvert">
+  <img src="docs/captures/explorateur-grille-sombre.png" width="240" alt="Explorateur en grille, thème sombre, avec vignettes">
+  <img src="docs/captures/deverrouillage-sombre.png" width="240" alt="Dialogue de déverrouillage, thème sombre, avec l'œil et la case Ouvrir en lecture seule">
+</p>
+<p align="center"><sub>Accueil en clair, explorateur en grille et déverrouillage en sombre, sur le Pixel 4 XL.</sub></p>
+
+### Lecteurs intégrés et dossiers distants (1.3.0)
 
 - **Ouvrir dans Portail** (réglage actif par défaut) : toucher un fichier l'ouvre dans le lecteur de Portail qui lui
   convient ; les autres types, ou tous si le réglage est coupé, s'ouvrent dans une autre application comme avant.
@@ -321,9 +360,10 @@ La construction demande les outils listés plus bas, dans [Développement](#dév
 
 ## Utilisation
 
-1. Au premier lancement, touchez **Autoriser** sur la carte « Accès aux fichiers du téléphone », puis
-   activez Portail dans la page Android qui s'ouvre. L'accueil liste alors le téléphone et la carte SD :
-   touchez-en un pour le parcourir.
+1. Au premier lancement, l'écran de bienvenue propose **Autoriser l'accès** : activez Portail dans la page
+   Android qui s'ouvre, puis touchez **Commencer**. Sans cet accès, les disques USB restent utilisables, et la
+   carte « Accès aux fichiers du téléphone » de l'accueil le redemande. L'accueil liste le téléphone et la carte
+   SD : touchez-en un pour le parcourir.
 2. Branchez le disque sur le port USB-C du téléphone. Android propose d'ouvrir Portail : acceptez, puis
    autorisez l'accès au périphérique USB.
 3. Dans **Disques USB**, touchez **Déverrouiller** sur la partition chiffrée et saisissez la phrase de
@@ -428,7 +468,9 @@ Plus de détails sur le moteur, l'outil `fluluks-cli` et la vérification par le
 | `android/app/src/main/kotlin/` | USB, gestionnaire de volumes, service, DocumentsProvider, gestionnaire de fichiers (`files/`), pont Pigeon |
 | `lib/`, `pigeons/` | Interface Flutter et définition du pont |
 | `tools/` | Génération des images de test, scripts téléphone, clé USB de test, rendu du logo |
-| `assets/logo/` | Logo source (SVG) |
+| `assets/logo/` | Logo source (SVG) et ses rendus PNG pour l'application |
+| `assets/licenses/` | Licences des bibliothèques Java, montrées dans « À propos » |
+| `docs/captures/` | Captures du README |
 | `docs/superpowers/` | Conception, plans de chaque phase, feuille de route et essais |
 
 ### Branches
@@ -453,7 +495,7 @@ Le dépôt suit git flow :
 | 8 | Formatage des disques USB : FAT32, exFAT, ext4, NTFS, en clair ou chiffré LUKS2 | **v1.1.0** |
 | 9 | Compression et décompression (ZIP, 7z, RAR, TAR), corbeille, analyse de l'espace, propriétés et SHA-256, renommage par lot, filtres | **v1.2.0** |
 | 10 | Visionneuse d'images, lecteurs de musique et de vidéo, éditeur de texte, dossiers distants FTP puis SFTP | **v1.3.0** |
-| 11 | Interface complète et professionnelle | v1.4.0 |
+| 11 | Interface complète et professionnelle : thèmes clair et sombre, accessibilité, grands écrans, liste ou grille partout, recherche dans tous les stockages, aide, à propos et licences | v1.4.0 |
 | 12 | Lecteur vidéo : portrait par défaut, rotation et verrou, pistes audio et sous-titres, gestes comme VLC | v1.5.0 |
 | 13 | Vérification et réparation des disques : e2fsck, ntfsfix, fsck.fat, fsck.exfat, en-têtes LUKS | v1.6.0 |
 | 14 | Gestion des partitions comme GParted : taille au formatage, créer, supprimer, redimensionner | v1.7.0 |
@@ -471,4 +513,5 @@ AndroidX Media3 1.11.1 et Apache Commons Net 3.13.0 (Apache-2.0), JSch 2.28.8 de
 1.86 (licence MIT), toutes compatibles avec la GPL ; Apache FtpServer 1.2.1 et Apache MINA SSHD 2.20.0 (Apache-2.0)
 ne servent qu'aux tests. Les licences des bibliothèques natives sont dans
 `native/third_party/` (`ntfs-3g/COPYING`, `fatfs/LICENSE.txt`, `libarchive/COPYING`, `xz/COPYING`…) ; leurs correctifs sont décrits dans
-[native/third_party/PATCHES.md](native/third_party/PATCHES.md).
+[native/third_party/PATCHES.md](native/third_party/PATCHES.md). Depuis la phase 11, toutes ces licences se lisent aussi
+dans l'application : À propos → **Licences des bibliothèques**.

@@ -2,17 +2,26 @@ import 'package:flutter/material.dart';
 
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/states.dart';
+import '../ui/tokens.dart';
+import '../ui/widgets.dart';
+import '../widgets/bottom_dock.dart';
+import '../widgets/brand_mark.dart';
 import '../widgets/disk_card.dart';
 import '../widgets/server_tile.dart';
+import '../widgets/shortcut_grid.dart';
 import '../widgets/source_tile.dart';
-import '../widgets/transfer_bar.dart';
 import 'explorer_screen.dart';
 import 'filter_screen.dart';
+import 'global_search_screen.dart';
 import 'server_form_screen.dart';
 import 'settings_screen.dart';
+import 'space_screen.dart';
 import 'trash_screen.dart';
 
-/// Accueil : stockages du téléphone, disques USB et favoris.
+/// Accueil : en-tête au logo, puis accès aux fichiers, Raccourcis, Stockage, Disques USB, Dossiers distants et
+/// Favoris. En largeur étendue, deux colonnes : à gauche ce qui est sur le téléphone, à droite les disques USB et
+/// les dossiers distants.
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key, required this.state});
 
@@ -20,126 +29,219 @@ class HomeScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
       appBar: AppBar(
-        title: const Text(Fr.title),
+        titleSpacing: Space.l,
+        title: Row(children: [
+          const BrandMark(),
+          const SizedBox(width: Space.m),
+          Flexible(child: Text(Fr.title, style: theme.textTheme.headlineSmall)),
+        ]),
         actions: [
           IconButton(
             tooltip: Fr.settings,
-            icon: const Icon(Icons.settings),
+            icon: const Icon(Icons.settings_rounded),
             onPressed: () => Navigator.of(context)
                 .push(MaterialPageRoute<void>(builder: (_) => SettingsScreen(state: state))),
           ),
+          PopupMenuButton<void Function()>(
+            tooltip: Fr.moreOptions,
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (open) => open(),
+            itemBuilder: (context) => [
+              PopupMenuItem(value: () => openHelp(context), child: const Text(Fr.help)),
+              PopupMenuItem(value: () => openAbout(context, state), child: const Text(Fr.about)),
+            ],
+          ),
         ],
       ),
-      bottomNavigationBar: TransferBar(state: state), // copie en cours ou interrompue, même hors de l'explorateur
+      bottomNavigationBar: BottomDock(state: state), // copie en cours ou interrompue, même hors de l'explorateur
       body: ListenableBuilder(
         listenable: state,
         builder: (context, _) {
-          final theme = Theme.of(context);
-          final err = state.lastError;
-          final ejectErr = state.ejectError;
-          final local = state.sources.where((s) => s.kind != 'disk' && s.kind != 'remote').toList();
+          final top = _top(context);
+          final phone = [..._shortcuts(context), ..._storage(context)];
+          final away = [..._disks(context), ..._remote(context)];
+          final favorites = _favorites(context);
+          if (windowClassOf(context) == WindowClass.expanded) {
+            return ListView(padding: const EdgeInsets.all(Space.l), children: [
+              ...top,
+              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(child: _column([...phone, ...favorites])),
+                const SizedBox(width: Space.xl),
+                Expanded(child: _column(away)),
+              ]),
+            ]);
+          }
           return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              if (err != null)
-                MaterialBanner(
-                  content: Text(err),
-                  actions: [TextButton(onPressed: state.clearError, child: const Text(Fr.ok))],
-                ),
-              if (!state.allFilesAccess)
-                Card(
-                  color: theme.colorScheme.secondaryContainer,
-                  margin: const EdgeInsets.only(bottom: 12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 8, children: [
-                      Text(Fr.allFilesTitle, style: theme.textTheme.titleMedium),
-                      const Text(Fr.allFilesBody),
-                      FilledButton(onPressed: state.requestAllFilesAccess, child: const Text(Fr.allFilesButton)),
-                    ]),
-                  ),
-                ),
-              if (local.isNotEmpty && state.allFilesAccess) ...[
-                _Section(Fr.shortcuts),
-                Wrap(spacing: 8, runSpacing: 4, children: [
-                  for (final (id, label, icon) in quickFilters)
-                    ActionChip(
-                      avatar: Icon(icon, size: 18),
-                      label: Text(label),
-                      onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
-                        builder: (_) => FilterScreen(state: state, filter: id, title: label),
-                      )),
-                    ),
-                ]),
-              ],
-              if (local.isNotEmpty) ...[
-                _Section(Fr.storage),
-                for (final s in local)
-                  SourceTile(
-                    source: s,
-                    onTap: state.allFilesAccess ? () => openExplorer(context, state, s.id) : null,
-                    onTrash: state.allFilesAccess ? () => openTrash(context, state, s.id) : null,
-                  ),
-              ],
-              _Section(Fr.usbDisks),
-              if (state.ejecting)
-                const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 8),
-                  child: Row(children: [
-                    SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-                    SizedBox(width: 12),
-                    Expanded(child: Text(Fr.ejecting)),
-                  ]),
-                ),
-              if (ejectErr != null && !state.ejecting)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Text(ejectErr, style: TextStyle(color: theme.colorScheme.error)),
-                ),
-              if (state.disks.isEmpty)
-                const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: Text(Fr.emptyList)))
-              else
-                for (final d in state.disks) DiskCard(state: state, disk: d),
-              _Section(Fr.remoteFolders),
-              for (final s in state.servers) ServerTile(state: state, server: s),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton.icon(
-                  icon: const Icon(Icons.add),
-                  label: const Text(Fr.addServer),
-                  onPressed: () => Navigator.of(context)
-                      .push(MaterialPageRoute<void>(builder: (_) => ServerFormScreen(state: state))),
-                ),
-              ),
-              if (state.favorites.isNotEmpty) ...[
-                _Section(Fr.favorites),
-                for (final f in state.favorites)
-                  ListTile(
-                    leading: const Icon(Icons.star),
-                    title: Text(f.label),
-                    subtitle: Text(f.sourceId == null ? Fr.favoriteUnavailable : f.path),
-                    enabled: f.sourceId != null,
-                    onTap: f.sourceId == null ? null : () => openExplorer(context, state, f.sourceId!, path: f.path),
-                  ),
-              ],
-            ],
+            padding: const EdgeInsets.all(Space.l),
+            children: [...top, ...phone, ...away, ...favorites],
           );
         },
       ),
     );
   }
+
+  Widget _column(List<Widget> children) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: children);
+
+  /// Les cartes, séparées comme les autres éléments de la liste.
+  Widget _gap(Widget child) => Padding(padding: const EdgeInsets.only(bottom: Space.s), child: child);
+
+  /// Recherche dans tous les stockages, erreur d'action et carte d'accès aux fichiers, au-dessus des sections.
+  List<Widget> _top(BuildContext context) {
+    final err = state.lastError;
+    return [
+      _gap(_SearchEntry(
+        onTap: () =>
+            Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) => GlobalSearchScreen(state: state))),
+      )),
+      if (err != null)
+        _gap(StatusBanner(
+          icon: Icons.error_rounded,
+          text: err,
+          tone: ChipTone.danger,
+          actions: [TextButton(onPressed: state.clearError, child: const Text(Fr.ok))],
+        )),
+      if (!state.allFilesAccess)
+        _gap(StatusBanner(
+          icon: Icons.folder_rounded,
+          title: Fr.allFilesTitle,
+          text: Fr.allFilesBody,
+          tone: ChipTone.neutral,
+          actions: [FilledButton(onPressed: state.requestAllFilesAccess, child: const Text(Fr.allFilesButton))],
+        )),
+    ];
+  }
+
+  List<Widget> _shortcuts(BuildContext context) {
+    if (!_hasLocal || !state.allFilesAccess) return const [];
+    return [
+      const SectionHeader(Fr.shortcuts),
+      ShortcutGrid(
+        onOpen: (id, label) => Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => FilterScreen(state: state, filter: id, title: label),
+        )),
+      ),
+    ];
+  }
+
+  /// Stockages du téléphone : mémoire interne, cartes SD (les disques USB et dossiers distants ont leur section).
+  bool _isLocal(String kind) => kind != 'disk' && kind != 'remote';
+
+  bool get _hasLocal => state.sources.any((s) => _isLocal(s.kind));
+
+  List<Widget> _storage(BuildContext context) {
+    final access = state.allFilesAccess;
+    return [
+      if (_hasLocal) const SectionHeader(Fr.storage),
+      for (final s in state.sources.where((s) => _isLocal(s.kind)))
+        _gap(SourceTile(
+          source: s,
+          onTap: access ? () => openExplorer(context, state, s.id) : null,
+          onTrash: access ? () => openTrash(context, state, s.id) : null,
+          onSpace: access ? () => openSpace(context, state, s.id) : null,
+        )),
+    ];
+  }
+
+  List<Widget> _disks(BuildContext context) {
+    final theme = Theme.of(context);
+    final ejectErr = state.ejectError;
+    return [
+      const SectionHeader(Fr.usbDisks),
+      if (state.ejecting)
+        const Padding(
+          padding: EdgeInsets.only(bottom: Space.m),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, spacing: Space.s, children: [
+            LinearProgressIndicator(),
+            Text(Fr.ejecting),
+          ]),
+        ),
+      if (ejectErr != null && !state.ejecting)
+        _gap(StatusBanner(icon: Icons.error_rounded, text: ejectErr, tone: ChipTone.danger)),
+      if (state.disks.isEmpty)
+        Card(
+          color: theme.colorScheme.surfaceContainerLow,
+          child: const EmptyState(icon: Icons.usb_rounded, title: Fr.noDiskTitle, message: Fr.noDiskBody),
+        )
+      else
+        for (final d in state.disks) _gap(DiskCard(state: state, disk: d)),
+    ];
+  }
+
+  List<Widget> _remote(BuildContext context) => [
+        const SectionHeader(Fr.remoteFolders),
+        for (final s in state.servers) _gap(ServerTile(state: state, server: s)),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton.icon(
+            icon: const Icon(Icons.add_rounded),
+            label: const Text(Fr.addServer),
+            onPressed: () => Navigator.of(context)
+                .push(MaterialPageRoute<void>(builder: (_) => ServerFormScreen(state: state))),
+          ),
+        ),
+      ];
+
+  List<Widget> _favorites(BuildContext context) {
+    if (state.favorites.isEmpty) return const [];
+    return [
+      const SectionHeader(Fr.favorites),
+      for (final f in state.favorites)
+        _gap(Card(
+          clipBehavior: Clip.antiAlias,
+          child: ListTile(
+            leading: const TonalIcon(Icons.star_rounded),
+            title: Text(f.label),
+            subtitle: Text(f.sourceId == null ? Fr.favoriteUnavailable : f.path),
+            enabled: f.sourceId != null,
+            onTap: f.sourceId == null ? null : () => openExplorer(context, state, f.sourceId!, path: f.path),
+          ),
+        )),
+    ];
+  }
 }
 
-class _Section extends StatelessWidget {
-  const _Section(this.title);
+/// Entrée de la recherche dans tous les stockages : l'apparence d'une barre de recherche, mais un simple bouton.
+/// La saisie se fait dans l'écran de recherche, sans champ ni clavier sur l'accueil.
+class _SearchEntry extends StatelessWidget {
+  const _SearchEntry({required this.onTap});
 
-  final String title;
+  final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 8),
-        child: Text(title, style: Theme.of(context).textTheme.titleSmall),
-      );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final s = theme.colorScheme;
+    return Semantics(
+      button: true,
+      excludeSemantics: true,
+      label: Fr.searchEverywhere,
+      onTap: onTap,
+      child: Material(
+        color: s.surfaceContainerHigh,
+        shape: const StadiumBorder(),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: Space.xxl + Space.xl),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: Space.l, vertical: Space.m),
+              child: Row(children: [
+                Icon(Icons.search_rounded, color: s.onSurfaceVariant),
+                const SizedBox(width: Space.l),
+                Expanded(
+                  child: Text(Fr.searchEverywhere,
+                      style: theme.textTheme.bodyLarge?.copyWith(color: s.onSurfaceVariant)),
+                ),
+              ]),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

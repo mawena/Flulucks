@@ -4,10 +4,15 @@ import 'package:flutter/services.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/feedback.dart';
+import '../ui/states.dart';
+import '../ui/tokens.dart';
+import '../ui/widgets.dart';
 
 /// Éditeur de texte (phase 10) : fichier UTF-8 de 2 Mio au plus, BOM et fins de ligne Windows rendus à
 /// l'enregistrement. Kotlin écrit un fichier temporaire qui remplace l'original, et refuse si le fichier a changé
 /// depuis son ouverture : l'éditeur propose alors de le remplacer. Quitter avec des modifications demande d'abord.
+/// En bas, une ligne d'état : encodage, fins de ligne, nombre de lignes, et « Lecture seule » le cas échéant.
 class TextEditorScreen extends StatefulWidget {
   const TextEditorScreen({super.key, required this.state, required this.sourceId, required this.path, required this.name});
 
@@ -71,6 +76,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   }
 
   Future<void> _load() async {
+    if (_error != null) setState(() => _error = null); // Réessayer : de nouveau en chargement
     try {
       final d = await widget.state.api.readText(widget.sourceId, widget.path);
       if (!mounted) return;
@@ -83,8 +89,6 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
       if (mounted) setState(() => _error = e.message ?? Fr.genericError);
     }
   }
-
-  void _snack(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
 
   /// Enregistre ; vrai si c'est fait. Fichier changé entre-temps : demande avant de le remplacer.
   Future<bool> _save({bool force = false}) async {
@@ -102,10 +106,10 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
         _doc = TextFileMsg(text: text, bom: d.bom, crlf: d.crlf, mtime: r.mtime, size: r.size);
         _saved = text;
       });
-      _snack(Fr.saved);
+      showMessage(context, Fr.saved, kind: MessageKind.success);
       return true;
     } on PlatformException catch (e) {
-      if (mounted) _snack(e.message ?? Fr.genericError);
+      if (mounted) showMessage(context, e.message ?? Fr.genericError, kind: MessageKind.error);
       return false;
     } finally {
       if (mounted) setState(() => _saving = false);
@@ -145,26 +149,64 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
+  /// Lignes du texte : « a\nb » et « a\nb\n » en ont deux, un texte vide aucune.
+  /// Recompté à chaque frappe : une simple boucle, sans objet par ligne (2 Mio au plus).
+  static int lineCount(String t) {
+    var breaks = 0;
+    for (var i = 0; i < t.length; i++) {
+      if (t.codeUnitAt(i) == 0x0A) breaks++;
+    }
+    return t.isEmpty || t.endsWith('\n') ? breaks : breaks + 1;
+  }
+
+  Widget _statusLine() {
+    final theme = Theme.of(context);
+    final d = _doc!;
+    return Material(
+      color: theme.colorScheme.surfaceContainerHigh,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: Space.l, vertical: Space.xs),
+          child: Wrap(
+            spacing: Space.m,
+            runSpacing: Space.xs,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              if (_readOnly)
+                StatusChip(
+                  label: Fr.readOnlyText(d.readOnlyReason!),
+                  icon: Icons.lock_rounded,
+                  tone: ChipTone.warning,
+                ),
+              Text(
+                Fr.editorStatus(bom: d.bom, crlf: d.crlf, lines: lineCount(_ctrl.text)),
+                style: numeric(theme.textTheme.labelSmall!).copyWith(color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _body() {
-    if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(32), child: Text(_error!)));
-    if (_doc == null) return const Center(child: CircularProgressIndicator());
+    if (_error != null) return ErrorState(message: _error!, onRetry: _load);
+    if (_doc == null) return const DelayedProgress();
     return Column(children: [
       if (_gone)
-        MaterialBanner(
-          leading: const Icon(Icons.warning_amber),
-          content: const Text(Fr.storageGoneKeepText),
-          actions: [
-            TextButton(
-              onPressed: () => Clipboard.setData(ClipboardData(text: _ctrl.text)),
-              child: const Text(Fr.copyText),
-            ),
-          ],
-        ),
-      if (_readOnly)
-        ListTile(
-          dense: true,
-          leading: const Icon(Icons.lock_outline),
-          title: Text(Fr.readOnlyText(_doc!.readOnlyReason!)),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(Space.l, Space.s, Space.l, 0),
+          child: StatusBanner(
+            icon: Icons.warning_rounded,
+            text: Fr.storageGoneKeepText,
+            actions: [
+              TextButton(
+                onPressed: () => Clipboard.setData(ClipboardData(text: _ctrl.text)),
+                child: const Text(Fr.copyText),
+              ),
+            ],
+          ),
         ),
       Expanded(
         child: TextField(
@@ -179,9 +221,11 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
           autocorrect: false,
           textAlignVertical: TextAlignVertical.top,
           style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
-          decoration: const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.all(12)),
+          // pas de cadre : la page entière est le champ
+          decoration: const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.all(Space.m)),
         ),
       ),
+      _statusLine(),
     ]);
   }
 
@@ -198,7 +242,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
               if (_doc != null && !_readOnly)
                 IconButton(
                   tooltip: Fr.save,
-                  icon: const Icon(Icons.save),
+                  icon: const Icon(Icons.save_rounded),
                   onPressed: _dirty && !_saving && !_gone ? () => _save() : null,
                 ),
             ],

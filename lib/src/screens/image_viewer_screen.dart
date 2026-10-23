@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/feedback.dart';
+import '../ui/tokens.dart';
 import '../widgets/properties_sheet.dart';
 
 /// Visionneuse d'images (phase 10) : les images du dossier dans l'ordre de l'explorateur, glisser de l'une à
@@ -69,7 +71,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
     try {
       await action();
     } on PlatformException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? Fr.genericError)));
+      if (mounted) showMessage(context, e.message ?? Fr.genericError, kind: MessageKind.error);
     }
   }
 
@@ -81,22 +83,23 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
       foregroundColor: Colors.white,
       title: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(e.name, overflow: TextOverflow.ellipsis),
-        Text(Fr.imagePosition(_index + 1, widget.images.length), style: const TextStyle(fontSize: 12)),
+        // compteur en chiffres tabulaires : il ne bouge pas d'une image à l'autre
+        Text(Fr.imagePosition(_index + 1, widget.images.length), style: numeric(const TextStyle(fontSize: 12))),
       ]),
       actions: [
         IconButton(
           tooltip: Fr.share,
-          icon: const Icon(Icons.share),
+          icon: const Icon(Icons.share_rounded),
           onPressed: () => _run(() => widget.state.api.share(widget.sourceId, [e.path])),
         ),
         IconButton(
           tooltip: Fr.openWith,
-          icon: const Icon(Icons.open_in_new),
+          icon: const Icon(Icons.open_in_new_rounded),
           onPressed: () => _run(() => widget.state.api.openWith(widget.sourceId, e.path)),
         ),
         IconButton(
           tooltip: Fr.properties,
-          icon: const Icon(Icons.info_outline),
+          icon: const Icon(Icons.info_outline_rounded),
           onPressed: () => showProperties(context, widget.state, widget.sourceId, e.path),
         ),
       ],
@@ -185,10 +188,10 @@ class _ImagePageState extends State<_ImagePage> {
             final err = snap.error;
             return Center(
               child: Padding(
-                padding: const EdgeInsets.all(32),
+                padding: const EdgeInsets.all(Space.xxl),
                 child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  const Icon(Icons.broken_image, color: Colors.white54, size: 48),
-                  const SizedBox(height: 12),
+                  const Icon(Icons.broken_image_rounded, color: Colors.white54, size: 48),
+                  const SizedBox(height: Space.m),
                   Text(
                     err is PlatformException ? err.message ?? Fr.genericError : Fr.genericError,
                     textAlign: TextAlign.center,
@@ -209,7 +212,7 @@ class _ImagePageState extends State<_ImagePage> {
                 image: ResizeImage(MemoryImage(snap.data!), width: side, height: side, policy: ResizeImagePolicy.fit),
                 fit: BoxFit.contain,
                 gaplessPlayback: true,
-                errorBuilder: (_, _, _) => const Center(child: Icon(Icons.broken_image, color: Colors.white54, size: 48)),
+                errorBuilder: (_, _, _) => const Center(child: Icon(Icons.broken_image_rounded, color: Colors.white54, size: 48)),
               ),
             ),
           );

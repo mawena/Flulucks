@@ -6,6 +6,7 @@ import 'package:fluluks/src/app.dart';
 import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/screens/explorer_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
+import 'package:fluluks/src/strings_fr.dart';
 
 import 'fake_host_api.dart';
 
@@ -81,7 +82,7 @@ void main() {
     expect(api.calls, contains('sha256 phone /b.txt'));
     state.onHashProgress(40);
     await tester.pump();
-    expect(find.text('40 %'), findsOneWidget);
+    expect(find.text(Fr.percent(40)), findsOneWidget);
     expect(find.byType(LinearProgressIndicator), findsOneWidget);
     pending.complete('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad');
     state.onHashProgress(null);
@@ -92,7 +93,7 @@ void main() {
     // feuille fermée (la sélection a été quittée) puis rouverte ; annulé : message, le bouton revient
     await tester.tapAt(const Offset(10, 10));
     await tester.pumpAndSettle();
-    expect(find.text('1 sélectionné(s)'), findsNothing);
+    expect(find.text('1 sélectionné'), findsNothing);
     await openProperties(tester, 'b.txt');
     pending = Completer<String?>();
     api.sha256Future = pending.future;
@@ -112,7 +113,7 @@ void main() {
     await pump(tester, api, 'phone');
     await openProperties(tester, 'DCIM');
     expect(api.calls, contains('folderSize phone /DCIM'));
-    expect(find.text('3,0 Mo — 12 fichier(s), 3 dossier(s)'), findsOneWidget);
+    expect(find.text('3,0 Mo — 12 fichiers, 3 dossiers'), findsOneWidget);
     expect(find.text("Calculer l'empreinte SHA-256"), findsNothing); // pas d'empreinte pour un dossier
   });
 }
