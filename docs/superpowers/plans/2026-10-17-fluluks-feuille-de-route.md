@@ -298,8 +298,10 @@ dans le même commit que le travail.
 - [x] T9 — Propriétés d'un fichier, avec empreinte SHA-256
 - [x] T10 — Renommage par lot
 - [x] T11 — Filtres rapides sur l'accueil (photos, vidéos, musique, documents, archives, récents)
-- [ ] *(utilisateur)* T12 — Essais sur le Pixel
-- [ ] T13 — Documentation
+- [x] Essais instrumentés sur le Pixel : archives 3/3, filtres 1/1, copies 5/5 *(2026-10-23)*
+- [ ] *(utilisateur)* T12 — Essais sur le Pixel ([fiche](../research/2026-10-22-essais-phase9/essais.md))
+- [x] T13 — Documentation
+- [ ] Relecture finale de toute la branche
 - [ ] Fusion `feature/compression` → `develop`
 - [ ] Version `v1.2.0`
 

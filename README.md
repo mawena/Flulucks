@@ -2,23 +2,57 @@
 
 Portail (anciennement FluLuks) est un **gestionnaire de fichiers** Android qui ouvre aussi les **disques
 externes chiffrés avec LUKS** branchés en USB-C, **sans root**, ainsi que les clés et disques en clair
-formatés en ext4, FAT, exFAT ou NTFS. Il parcourt le téléphone, la carte SD et les disques USB, et copie
-ou déplace d'un stockage à l'autre. Le contenu des disques apparaît aussi dans l'application **Fichiers**
-d'Android : on ouvre une vidéo dans VLC, un PDF ou une photo dans les applications habituelles.
+formatés en ext4, FAT, exFAT ou NTFS. Il parcourt le téléphone, la carte SD et les disques USB, copie ou
+déplace d'un stockage à l'autre, compresse et extrait les archives, et garde une corbeille. Le contenu des
+disques apparaît aussi dans l'application **Fichiers** d'Android : on ouvre une vidéo dans VLC, un PDF ou une
+photo dans les applications habituelles.
 
 Elle est née d'un besoin simple : utiliser sur un téléphone non rooté (un Pixel 4 XL) le disque
 LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permettait.
 
-> **État actuel : version 1.1.0 ; gestionnaire de fichiers, lecture et écriture sur ext4, FAT, exFAT et
-> NTFS, formatage des disques USB, en clair ou chiffrés.** L'écriture a été vérifiée sur PC (batteries de non-corruption jugées par des outils indépendants
+> **État actuel : version 1.2.0 ; gestionnaire de fichiers (archives ZIP, 7z, RAR et TAR, corbeille, analyse de
+> l'espace, renommage par lot), lecture et écriture sur ext4, FAT, exFAT et NTFS, formatage des disques USB, en
+> clair ou chiffrés.** L'écriture a été vérifiée sur PC (batteries de non-corruption jugées par des outils indépendants
 > et le noyau Linux, coupures simulées), sur le téléphone avec des images, puis essayée sur une vraie clé
 > et un vrai disque pour chaque système de fichiers (ext4 compris : `e2fsck` propre ensuite sous Ubuntu).
 > Une sauvegarde reste recommandée avant d'écrire sur un disque qui compte. Voir les
 > [limites](#limites-actuelles).
 
-## Ce que fait la version 1.1.0
+## Ce que fait la version 1.2.0
 
-### Formatage des disques USB (nouveau en 1.1.0)
+### Archives, corbeille et outils (nouveau en 1.2.0)
+
+- **Extraire** une archive ZIP, 7z, RAR (RAR4 et RAR5), TAR, TAR.GZ ou TAR.XZ, ou un fichier `.gz` ou `.xz`
+  seul : touchez-la, puis **Extraire ici** (dans un nouveau dossier au nom de l'archive) ou **Extraire vers…**
+  (ouvrez ensuite le dossier voulu, sur n'importe quel stockage, et touchez **Extraire ici** dans la barre).
+  Progression et **Annuler**, comme une copie. Les noms des ZIP de Windows sans accents Unicode (page de code
+  437) sont lus correctement.
+- **Compresser** une sélection en ZIP : menu **⋮** de la sélection, **Compresser**, nom proposé (celui de
+  l'élément seul, sinon « Archive »). Les photos, vidéos, musiques et archives déjà compressées sont stockées
+  telles quelles, le reste est compressé ; les noms accentués restent lisibles sous Windows et Linux ; au-delà de
+  4 Gio, le ZIP passe en ZIP64.
+- **Archives hostiles** : rien n'est jamais écrit hors du dossier de destination. Les chemins en `../` ou
+  absolus, les liens et les fichiers spéciaux sont ignorés et comptés (« 3 élément(s) de l'archive
+  ignoré(s) »). Avant d'écrire, la taille annoncée doit tenir dans la place libre, moins une réserve de 256 Mio
+  (ou 5 % du stockage) ; pendant l'extraction, tout s'arrête au-delà (bombe de décompression, taille
+  mensongère), et le fichier en cours est supprimé.
+- **Corbeille** : **Supprimer** met les éléments dans la corbeille du stockage (dossier caché
+  `.Portail-corbeille`, au format freedesktop d'Ubuntu), pendant 30 jours ; **Supprimer définitivement**
+  reste proposé. La corbeille s'ouvre depuis la carte du stockage, la tuile d'un volume ouvert ou le menu de
+  l'explorateur : **Restaurer** (les dossiers d'origine sont recréés), supprimer définitivement, **Vider**.
+  Sur un disque chiffré, elle reste dans le volume chiffré.
+- **Analyse de l'espace** : menu de l'explorateur, à la racine. Dossiers et fichiers du plus gros au plus
+  petit, avec leur pourcentage ; on descend dans les dossiers sans relire le stockage ; les 100 plus gros
+  fichiers.
+- **Propriétés** (menu **⋮** de la sélection) : taille (totale pour un dossier), date, système de fichiers ;
+  droits et propriétaire sur ext4 ; **empreinte SHA-256** calculée à la demande, à comparer à `sha256sum`.
+- **Renommage par lot** (**Renommer** sur plusieurs éléments) : numérotation (« Vacances (01).jpg »),
+  remplacement d'un texte, ou **date de prise de vue** des photos (« 2024-05-01 12.34.56.jpg »). Aperçu des
+  noms ; le lot est refusé en entier si un nom est pris ou invalide.
+- **Raccourcis de l'accueil** : Photos, Vidéos, Musique, Documents, Archives et Récents (30 jours), sur le
+  téléphone et les cartes SD, d'après l'index d'Android.
+
+### Formatage des disques USB (1.1.0)
 
 - **Formate un disque entier** depuis le menu **⋮** de sa carte (**Formater…**), en **exFAT** (choix par
   défaut : Windows, macOS, Linux, téléviseurs), **FAT32** (ancien matériel), **ext4** (Ubuntu) ou **NTFS**
@@ -54,7 +88,7 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
 - **Un accueil pour tous les stockages** : le téléphone, la carte SD, les disques USB (à déverrouiller,
   ouvrir ou éjecter) et les favoris.
 - **Explorateur** : naviguer, ouvrir avec une autre application, partager, créer un dossier, renommer et
-  supprimer, sur le téléphone comme sur un disque.
+  supprimer (à la corbeille), sur le téléphone comme sur un disque.
 - **Copier et déplacer entre tous les stockages** (téléphone ↔ carte SD ↔ disque, ou d'un disque à
   l'autre), avec la progression dans une barre et un bouton pour annuler. Les noms interdits sur la
   destination (`:` ou `?` vers FAT, exFAT ou NTFS, par exemple) sont remplacés.
@@ -185,6 +219,17 @@ Mesures sur le même téléphone, sur une image (test `PerfInstrumentedTest`, sa
   - gardez Portail ouvert pendant le formatage : Android peut arrêter une application en arrière-plan, et
     le disque serait à reformater ;
   - l'étiquette d'un disque NTFS n'est pas encore affichée sur sa carte.
+- **Archives** :
+  - archives protégées par mot de passe : non prises en charge (« Archive protégée par mot de passe ») ;
+  - RAR en lecture seule (le format n'est pas libre en écriture) : Portail compresse en ZIP ;
+  - archives en plusieurs volumes (`.part1.rar`, `.z01`…) non prises en charge ;
+  - liens et fichiers spéciaux d'une archive non extraits ; les fichiers extraits portent la date de
+    l'extraction, pas celle de l'archive.
+- **Corbeille** : les suppressions faites par une autre application (Fichiers d'Android) sur un disque restent
+  définitives. Un nom de plus de 245 octets est restauré à la racine du stockage.
+- **Raccourcis de l'accueil** : les disques USB n'y figurent pas (Android ne les indexe pas ; la recherche de
+  l'explorateur les couvre). La date de prise de vue n'est lue que dans les JPEG (une photo HEIC est datée par
+  sa date de modification).
 - **LVM, BitLocker, btrfs, XFS…** sont signalés comme « non pris en charge ».
 - **Boîtiers USB** : seuls ceux qui proposent le protocole *Bulk-Only Transport* fonctionnent, ce qui est
   le cas de la plupart. Un boîtier en UAS seul est refusé avec un message clair.
@@ -238,7 +283,9 @@ La construction demande les outils listés plus bas, dans [Développement](#dév
 4. Touchez **Parcourir** pour l'explorer dans Portail, ou **Ouvrir dans Fichiers**. Le disque apparaît
    aussi dans le sélecteur de fichiers de toutes les applications.
 5. Pour copier ou déplacer : appui long sur un fichier pour le sélectionner, **Copier** ou **Couper**,
-   puis, dans le dossier de destination (sur n'importe quel stockage), **Coller ici**.
+   puis, dans le dossier de destination (sur n'importe quel stockage), **Coller ici**. Le menu **⋮** de la
+   sélection propose aussi **Renommer**, **Compresser** et **Propriétés** ; **Supprimer** met à la corbeille.
+   Pour extraire une archive, touchez-la.
 6. Pour **formater** un disque (tout son contenu est effacé) : menu **⋮** de sa carte, **Formater…**,
    choisissez le format, l'étiquette et éventuellement le chiffrement, puis tapez le nom du disque pour
    confirmer. Éjectez d'abord ses volumes ouverts.
@@ -256,12 +303,13 @@ Sans root, Android interdit dm-crypt, `mount` et les pilotes de systèmes de fic
 refait donc toute la chaîne dans l'espace utilisateur :
 
 ```
-Interface Flutter (Dart)       accueil, explorateur, recherche, réglages, liés par Pigeon
+Interface Flutter (Dart)       accueil, explorateur, recherche, corbeille, réglages, liés par Pigeon
 Couche Kotlin                  UsbManager, service au premier plan, DocumentsProvider,
-                               sources de fichiers (téléphone, carte SD, disques), copies, vignettes
+                               sources de fichiers (téléphone, carte SD, disques), copies, archives,
+                               corbeille, vignettes
 Moteur natif C11 (JNI)         USB (Bulk-Only Transport + SCSI) → cache de blocs → GPT/MBR
                                → LUKS1/LUKS2 → ext4 (lwext4) · FAT/exFAT (FatFs) · NTFS (libntfs-3g)
-                               → API fichiers unifiée
+                               → API fichiers unifiée ; archives (libarchive)
 ```
 
 Le moteur natif ne dépend pas de Flutter. Le DocumentsProvider fonctionne même quand l'interface est
@@ -278,6 +326,10 @@ Bibliothèques utilisées :
   `native/third_party/PATCHES.md`).
 - [ntfs-3g](https://github.com/tuxera/ntfs-3g) 2022.10.3 : libntfs-3g pour NTFS, et `mkntfs`, appelé
   comme une bibliothèque, pour le formatage. Corrigé par `native/third_party/patches/ntfs-3g/`.
+- [libarchive](https://www.libarchive.org/) 3.8.10 : lecture des ZIP, 7z, RAR, TAR, GZ et XZ, écriture des
+  ZIP ; avec liblzma de [XZ Utils](https://tukaani.org/xz/) 5.8.4 pour le format xz. Copiés dans
+  `native/third_party/libarchive/` et `native/third_party/xz/`, sans correctif (voir
+  `native/third_party/PATCHES.md`).
 
 ## Développement
 
@@ -309,6 +361,8 @@ tools/android/run_native_tests.sh <numéro-adb>
 (cd android && ./gradlew testDebugUnitTest)
 (cd android && ./gradlew connectedDebugAndroidTest -Pandroid.injected.androidTest.leaveApksInstalledAfterRun=true)
 tools/android/check_image.sh <numéro-adb> engine-ecriture.img   # e2fsck des images écrites sur le téléphone
+# les essais instrumentés des archives lisent trois archives de build/native/fixtures-archives/, à pousser avant :
+# adb push build/native/fixtures-archives/{test_read_format_7zip_lzma2.7z,test_read_format_rar5_multiple_files.rar,hostile.zip} /data/local/tmp/fluluks/fixtures/
 flutter test && flutter analyze
 ```
 
@@ -349,7 +403,7 @@ Le dépôt suit git flow :
 | 6 | Portail : nom, logo, gestionnaire de fichiers (téléphone, carte SD, disques) | **v0.5.0** |
 | 7 | Robustesse : verrouillage automatique, débranchement inattendu, performances, ext4 sur le vrai disque | **v1.0.0** |
 | 8 | Formatage des disques USB : FAT32, exFAT, ext4, NTFS, en clair ou chiffré LUKS2 | **v1.1.0** |
-| 9 | Compression et décompression (ZIP, 7z, RAR, TAR), corbeille, analyse de l'espace, propriétés et SHA-256, renommage par lot, filtres | v1.2.0 |
+| 9 | Compression et décompression (ZIP, 7z, RAR, TAR), corbeille, analyse de l'espace, propriétés et SHA-256, renommage par lot, filtres | **v1.2.0** |
 | 10 | Visionneuse d'images, lecteurs de musique et de vidéo, éditeur de texte, dossiers distants FTP puis SFTP | v1.3.0 |
 | 11 | Vérification et réparation des disques : e2fsck, ntfsfix, fsck.fat, fsck.exfat, en-têtes LUKS | v1.4.0 |
 | 12 | Gestion des partitions comme GParted : taille au formatage, créer, supprimer, redimensionner | v1.5.0 |
@@ -362,6 +416,6 @@ Conception : [docs/superpowers/specs/2026-10-17-fluluks-design.md](docs/superpow
 Aucune licence n'est encore choisie pour le code de Portail. Mais l'application est liée à libntfs-3g
 (GPL version 2 ou ultérieure, depuis la phase 5) et à une partie de lwext4 sous GPL : distribuée, elle doit
 l'être sous GPL, avec ses sources. FatFs est sous une licence de type BSD à une clause, compatible avec la
-GPL. Les licences des bibliothèques sont dans `native/third_party/` (`ntfs-3g/COPYING`,
-`fatfs/LICENSE.txt`…) ; leurs correctifs sont décrits dans
+GPL, comme libarchive (BSD à deux clauses) et liblzma (0BSD). Les licences des bibliothèques sont dans
+`native/third_party/` (`ntfs-3g/COPYING`, `fatfs/LICENSE.txt`, `libarchive/COPYING`, `xz/COPYING`…) ; leurs correctifs sont décrits dans
 [native/third_party/PATCHES.md](native/third_party/PATCHES.md).

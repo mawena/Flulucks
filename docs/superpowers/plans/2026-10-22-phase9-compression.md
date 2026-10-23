@@ -383,7 +383,7 @@ List<FilterItemMsg>` (`sourceId, path, name, size, mtime`).
 
 ### Task 13 : documentation et v1.2.0
 
-- [ ] README (archives, corbeille, outils, limites : archives chiffrées non prises en charge, RAR en lecture
+- [x] README (archives, corbeille, outils, limites : archives chiffrées non prises en charge, RAR en lecture
   seule, filtres sans les disques USB), feuille de route cochée ; commit `docs: compression et outils du
   gestionnaire`.
 - [ ] Relecture finale de toute la branche, puis fusion `feature/compression` → `develop` (après la
