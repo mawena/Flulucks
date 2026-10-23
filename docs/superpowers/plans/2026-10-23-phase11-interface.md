@@ -215,7 +215,7 @@ UiPrefsMsg get uiPrefs; Future<void> setUiPrefs(UiPrefsMsg prefs);   // chargé 
   - `pageTransitionsTheme` (Android : `FadeForwardsPageTransitionsBuilder`) ;
   - textes en graisse 600 (direction visuelle).
 
-- [ ] **Step 1 : tests.**
+- [x] **Step 1 : tests.**
   - `theme_test` :
     - `schemeContrastAA` : pour les deux luminosités, ratio ≥ 4,5 pour les paires `onPrimary`/`primary`,
       `onSurface`/`surface`, `onSurfaceVariant`/`surface`, `onSurfaceVariant`/`surfaceContainerLow`,
@@ -231,9 +231,9 @@ UiPrefsMsg get uiPrefs; Future<void> setUiPrefs(UiPrefsMsg prefs);   // chargé 
     - `copyWithKeepsOtherFields` pour les deux extensions.
   - `UiPrefsTest` (JVM) : `uiPrefsDefaultsWhenAbsent` ; `badThemeFallsBackToSystem` (`ui_theme = "violet"`) ;
     `roundTrip`.
-- [ ] **Step 2 :** Run `flutter test test/theme_test.dart` et
+- [x] **Step 2 :** Run `flutter test test/theme_test.dart` et
   `cd android && ./gradlew -q :app:testDebugUnitTest --tests '*UiPrefsTest'` → FAIL (symboles absents).
-- [ ] **Step 3 :** implémenter.
+- [x] **Step 3 :** implémenter.
   - `FluLuksApp` écoute `state` pour `themeMode` et enveloppe l'application dans
     `MediaQuery.withClampedTextScaling(maxScaleFactor: 2.0)`. `main` passe en `SystemUiMode.edgeToEdge`.
   - Les Réglages reçoivent un `SegmentedButton<String>` « Thème » : Système, Clair, Sombre.
@@ -244,8 +244,8 @@ UiPrefsMsg get uiPrefs; Future<void> setUiPrefs(UiPrefsMsg prefs);   // chargé 
     - `values-v31` : `android:windowSplashScreenBackground` `@color/portail_terracotta` et
       `android:windowSplashScreenAnimatedIcon` `@drawable/ic_launcher_avant`.
   - `ViewPrefsMsg(…)` n'est plus construit à la main dans les écrans : ils passent par `copyWith`.
-- [ ] **Step 4 :** tests verts ; `flutter test`, `flutter analyze` et la suite JVM verts.
-- [ ] **Step 5 :** commit `feat(interface): charte terracotta, thèmes clair et sombre, choix du thème`.
+- [x] **Step 4 :** tests verts ; `flutter test`, `flutter analyze` et la suite JVM verts.
+- [x] **Step 5 :** commit `feat(interface): charte terracotta, thèmes clair et sombre, choix du thème`.
 
 ### Task 2 : composants communs
 
@@ -284,7 +284,7 @@ class AdaptiveBody extends StatelessWidget { const AdaptiveBody({required Widget
   pas contenir « / » », `nameReserved` « Nom réservé », `nameTooLong` « Nom trop long », `undo` « Annuler »,
   `usedPercent(int p)` « $p % utilisés ».
 
-- [ ] **Step 1 : tests** (`ui_components_test`) :
+- [x] **Step 1 : tests** (`ui_components_test`) :
   - `emptyStateShowsTitleMessageAction` ;
   - `errorStateRetryCalls` ;
   - `delayedProgressHiddenFirst200ms` (rien à 199 ms, indicateur à 200 ms) ;
@@ -297,14 +297,14 @@ class AdaptiveBody extends StatelessWidget { const AdaptiveBody({required Widget
     `haptics` est faux ;
   - `usageBarSemanticsAndDanger` (valeur « 92 % utilisés », couleur `error`) ;
   - `stateSwitcherNoAnimationWhenDisabled` (`disableAnimations` → durée nulle).
-- [ ] **Step 2 :** Run `flutter test test/ui_components_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter.
+- [x] **Step 2 :** Run `flutter test test/ui_components_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter.
   - Corbeille, analyse, raccourcis, recherche et propriétés utilisent `DelayedProgress`, `ErrorState` (avec
     Réessayer), `EmptyState` et `showMessage`.
   - « Vider la corbeille » et « Supprimer définitivement » utilisent `confirmAction(destructive: true)`.
-- [ ] **Step 4 :** tests verts ; les suites existantes sont vertes (attentes ajustées seulement si un texte a
+- [x] **Step 4 :** tests verts ; les suites existantes sont vertes (attentes ajustées seulement si un texte a
   changé).
-- [ ] **Step 5 :** commit `feat(interface): états vides, chargements, erreurs, confirmations et feuilles communs`.
+- [x] **Step 5 :** commit `feat(interface): états vides, chargements, erreurs, confirmations et feuilles communs`.
 
 ### Task 3 : textes français
 
@@ -341,17 +341,17 @@ Valeurs fixées :
   - `emptyList` est remplacé par `noDiskTitle` « Aucun disque branché » et `noDiskBody` « Branchez un disque
     USB-C, chiffré LUKS ou non : ext4, NTFS, exFAT et FAT sont reconnus. ».
 
-- [ ] **Step 1 : tests** (`strings_test`) :
+- [x] **Step 1 : tests** (`strings_test`) :
   - `pluralFrench` (0, 1, 2) ;
   - `humanSizeUnits` (valeurs ci-dessus) ;
   - `friendlyDateRelative` (`now` fixé au 2026-10-23 15:00 locale : même jour, veille, 3 mars, 2025) ;
   - `frenchTypography` : lit `lib/src/strings_fr.dart` comme texte et n'y trouve aucune des suites `' ?'`, `' !'`,
     `' :'`, `' ;'`, `' %'`, `'« '`, `' »'` avec une espace ordinaire, ni `'(s)'`.
-- [ ] **Step 2 :** Run `flutter test test/strings_test.dart` → FAIL.
-- [ ] **Step 3 :** réécrire `Fr`. Les listes de l'explorateur, de la corbeille et des raccourcis affichent
+- [x] **Step 2 :** Run `flutter test test/strings_test.dart` → FAIL.
+- [x] **Step 3 :** réécrire `Fr`. Les listes de l'explorateur, de la corbeille et des raccourcis affichent
   `friendlyDate`. `shortDate` reste pour les propriétés.
-- [ ] **Step 4 :** `flutter test` vert après la mise à jour des attentes ; `flutter analyze` propre.
-- [ ] **Step 5 :** commit `fix(textes): pluriels, unités, dates relatives et typographie française`.
+- [x] **Step 4 :** `flutter test` vert après la mise à jour des attentes ; `flutter analyze` propre.
+- [x] **Step 5 :** commit `fix(textes): pluriels, unités, dates relatives et typographie française`.
 
 ### Task 4 : accueil revu et logo
 
@@ -389,7 +389,7 @@ Valeurs fixées :
   - partition verrouillée : « Déverrouiller » (rempli, icône `lock_open_rounded`).
 - Aucun disque : `EmptyState(icon: Icons.usb_rounded, title: Fr.noDiskTitle, message: Fr.noDiskBody)`.
 
-- [ ] **Step 1 : tests** (`home_screen_test`, `filters_test`) :
+- [x] **Step 1 : tests** (`home_screen_test`, `filters_test`) :
   - `homeHeaderShowsBrandAndSearch` ;
   - `shortcutsOpenFilter` (la tuile « Documents » ouvre `FilterScreen`, `quickFilter documents` appelé). Il remplace
     `homeShowsFilterChips`, qui cherchait des `ActionChip` ;
@@ -401,12 +401,12 @@ Valeurs fixées :
   - `sourceMenuOpensTrashAndSpace` ;
   - `twoColumnsWhenExpanded` (1280 × 800 : l'en-tête « Disques USB » est dans la moitié droite) ;
   - les tests existants de l'accueil restent verts, sélecteurs ajustés.
-- [ ] **Step 2 :** Run `flutter test test/home_screen_test.dart test/filters_test.dart` → FAIL.
-- [ ] **Step 3 :** rendre les PNG par
+- [x] **Step 2 :** Run `flutter test test/home_screen_test.dart test/filters_test.dart` → FAIL.
+- [x] **Step 3 :** rendre les PNG par
   `python3 tools/logo/render_icons.py assets/logo/portail.svg android/app/src/main/res --flutter assets/logo`, puis
   implémenter l'accueil.
-- [ ] **Step 4 :** tests verts ; suites vertes.
-- [ ] **Step 5 :** commit `feat(interface): accueil revu, logo, raccourcis en tuiles et état des disques`.
+- [x] **Step 4 :** tests verts ; suites vertes.
+- [x] **Step 5 :** commit `feat(interface): accueil revu, logo, raccourcis en tuiles et état des disques`.
 
 ### Task 5 : déverrouillage, formatage et saisies sensibles
 
@@ -421,7 +421,7 @@ Valeurs fixées :
 - Chaînes : `showPassphrase` « Afficher la phrase de passe », `hidePassphrase` « Masquer la phrase de passe »,
   `openReadOnly` « Ouvrir en lecture seule », `formatDanger(name, size)`.
 
-- [ ] **Step 1 : tests :**
+- [x] **Step 1 : tests :**
   - `toggleShowsPassphrase` (`obscureText` bascule, infobulle mise à jour) ;
   - `passphraseZeroedAfterToggle` : afficher, masquer, valider ; la référence reçue par le faux pont est mise à
     zéro, le champ est vidé ;
@@ -431,14 +431,14 @@ Valeurs fixées :
   - `formatChoicesAreCards` (4 choix, aide visible, sélection annoncée) ;
   - `renameSelectsBaseNameAndValidates` (explorateur : « a/b » refusé, OK désactivé ; même nom → aucun appel) ;
   - `newFolderRejectsReservedNames`.
-- [ ] **Step 2 :** Run `flutter test test/unlock_dialog_test.dart test/format_screen_test.dart test/explorer_screen_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter.
+- [x] **Step 2 :** Run `flutter test test/unlock_dialog_test.dart test/format_screen_test.dart test/explorer_screen_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter.
   - Le dialogue de déverrouillage a un titre avec icône de cadenas, une barre linéaire indéterminée pendant le calcul
     et l'erreur dans un `StatusBanner` `danger`.
   - Le formatage présente des cartes de choix (`RadioGroup` et `RadioListTile` en `Card`) et un résumé du danger en
     `StatusBanner` `danger`. Le bouton « Formater » est rouge.
-- [ ] **Step 4 :** tests verts ; suites vertes.
-- [ ] **Step 5 :** commit `feat(interface): déverrouillage, formatage et saisies de noms revus`.
+- [x] **Step 4 :** tests verts ; suites vertes.
+- [x] **Step 5 :** commit `feat(interface): déverrouillage, formatage et saisies de noms revus`.
 
 ### Task 6 : collection d'éléments et explorateur revu
 
@@ -482,7 +482,7 @@ class Breadcrumbs extends StatelessWidget implements PreferredSizeWidget {
 - Chaînes : `selectAll` « Tout sélectionner », `showGrid` « Afficher en grille », `showList` « Afficher en liste »,
   `movedToTrash(n)` « 3 éléments mis à la corbeille ».
 
-- [ ] **Step 1 : tests :**
+- [x] **Step 1 : tests :**
   - `file_types_test` : `kindOfExtensions` (casse ignorée ; `.tar.gz` → archive ; `.apk` → package ; lien →
     link) ; `viewerForUnchanged` (cas de `text_editor_test` repris).
   - `explorer_screen_test` :
@@ -500,14 +500,14 @@ class Breadcrumbs extends StatelessWidget implements PreferredSizeWidget {
     - `gridTileSemantics` ;
     - `viewToggleFlipsPreference` ;
     - `closedSourcePopsToHome` (existant, gardé).
-- [ ] **Step 2 :** Run `flutter test test/file_types_test.dart test/explorer_screen_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter.
+- [x] **Step 2 :** Run `flutter test test/file_types_test.dart test/explorer_screen_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter.
   - L'explorateur passe à un `CustomScrollView` dont le contenu est `EntrySliver`, sous `RefreshIndicator`.
   - Barre de titre : recherche, `ViewModeButton`, menu (tri, fichiers cachés, favori, corbeille, analyse) et
     `Breadcrumbs` en `bottom`.
   - Un rechargement discret affiche une barre linéaire en haut. Les états passent par `StateSwitcher`.
-- [ ] **Step 4 :** tests verts ; suites vertes.
-- [ ] **Step 5 :** commit `feat(explorateur): grille adaptative, fil d'Ariane, menu par élément et annulation`.
+- [x] **Step 4 :** tests verts ; suites vertes.
+- [x] **Step 5 :** commit `feat(explorateur): grille adaptative, fil d'Ariane, menu par élément et annulation`.
 
 ### Task 7 : liste ou grille dans les raccourcis et la recherche *(demande de l'utilisateur du 2026-10-23)*
 
@@ -536,7 +536,7 @@ enregistre `sourceId|path` à côté de `thumbRequests`).
   résultats **de la même source**, dans l'ordre affiché.
 - ⋮ (ou appui long en grille) ouvre une feuille : Ouvrir le dossier, Ouvrir avec…, Partager, Propriétés.
 
-- [ ] **Step 1 : tests** (ils échouent aujourd'hui) :
+- [x] **Step 1 : tests** (ils échouent aujourd'hui) :
   - `filterFollowsGridPreference` : `viewPrefs.grid = true`. Dans `FilterScreen` (`photos`, deux images du
     téléphone), `find.byType(SliverGrid)` trouve un widget, aucun `ListTile` n'est trouvé pour les éléments, et
     `api.thumbRequests` contient les deux chemins ;
@@ -551,11 +551,11 @@ enregistre `sourceId|path` à côté de `thumbRequests`).
   - `searchOpensInPortailViewer` ;
   - `trashAndSpaceStayLists` (grille choisie → corbeille et analyse toujours en liste ; ce test documente la
     décision).
-- [ ] **Step 2 :** Run `flutter test test/filters_test.dart test/search_screen_test.dart` → FAIL
+- [x] **Step 2 :** Run `flutter test test/filters_test.dart test/search_screen_test.dart` → FAIL
   (`filterFollowsGridPreference` : aucun `SliverGrid`).
-- [ ] **Step 3 :** implémenter (chaque écran garde un `ThumbCache` libéré par `dispose`).
-- [ ] **Step 4 :** tests verts ; suites vertes.
-- [ ] **Step 5 :** commit `fix(raccourcis): liste ou grille selon le réglage, vignettes et lecteurs de Portail`.
+- [x] **Step 3 :** implémenter (chaque écran garde un `ThumbCache` libéré par `dispose`).
+- [x] **Step 4 :** tests verts ; suites vertes.
+- [x] **Step 5 :** commit `fix(raccourcis): liste ou grille selon le réglage, vignettes et lecteurs de Portail`.
 
 ### Task 8 : recherche dans tous les stockages
 
@@ -581,7 +581,7 @@ Comportement :
 
 Chaînes : `searchHere` « Ici », `searchAll` « Partout », `searchingIn(label)` « Recherche dans $label… ».
 
-- [ ] **Step 1 : tests :**
+- [x] **Step 1 : tests :**
   - `searchesEveryOpenStorage` (appels pour `phone`, `sd:1` et `v1` ; aucun pour `remote:x`) ;
   - `groupsBySource` ;
   - `globalFollowsGridPreference` ;
@@ -591,10 +591,10 @@ Chaînes : `searchHere` « Ici », `searchAll` « Partout », `searchingIn(label
   - `homeSearchBarOpensGlobal` ;
   - `searchChipEverywhere` (depuis l'explorateur : « Partout » ouvre la recherche globale avec la même saisie) ;
   - `emptyQueryShowsHint` (`EmptyState`) et `noResultEmptyState`.
-- [ ] **Step 2 :** Run `flutter test test/global_search_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter.
-- [ ] **Step 4 :** tests verts ; suites vertes.
-- [ ] **Step 5 :** commit `feat(recherche): rechercher dans tous les stockages depuis l'accueil`.
+- [x] **Step 2 :** Run `flutter test test/global_search_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter.
+- [x] **Step 4 :** tests verts ; suites vertes.
+- [x] **Step 5 :** commit `feat(recherche): rechercher dans tous les stockages depuis l'accueil`.
 
 ### Task 9 : réglages regroupés, « À propos », licences, aide et bienvenue
 
@@ -645,7 +645,7 @@ Chaînes : `searchHere` « Ici », `searchAll` « Partout », `searchingIn(label
       USB » ;
   - boutons « Autoriser l'accès » (`requestAllFilesAccess`) et « Commencer » (`welcomeSeen = true`).
 
-- [ ] **Step 1 : tests :**
+- [x] **Step 1 : tests :**
   - `settingsGroupedSections` (les 5 en-têtes, dans l'ordre) ;
   - `hapticsSwitchCallsApi` ;
   - `aboutShowsVersion` (« Version 1.4.0 (11) » depuis le faux pont) ;
@@ -656,10 +656,10 @@ Chaînes : `searchHere` « Ici », `searchAll` « Partout », `searchingIn(label
     accueil directement) ;
   - `welcomeAllowAccessCallsApi` ;
   - `laterKeepsUsbUsable` (« Commencer » sans accès → accueil avec « Disques USB » et la carte d'accès).
-- [ ] **Step 2 :** Run `flutter test test/about_help_welcome_test.dart test/settings_screen_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter.
-- [ ] **Step 4 :** tests verts ; suites JVM et Flutter vertes.
-- [ ] **Step 5 :** commit `feat(interface): réglages regroupés, à propos, licences, aide et bienvenue`.
+- [x] **Step 2 :** Run `flutter test test/about_help_welcome_test.dart test/settings_screen_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter.
+- [x] **Step 4 :** tests verts ; suites JVM et Flutter vertes.
+- [x] **Step 5 :** commit `feat(interface): réglages regroupés, à propos, licences, aide et bienvenue`.
 
 ### Task 10 : barres du bas et écrans de la phase 10
 
@@ -697,7 +697,7 @@ tests suivent le nom réel, sans changer de comportement.
   - avertissement FTP en `StatusBanner` `warning` ;
   - empreinte SSH en police à chasse fixe, avec un bouton Copier.
 
-- [ ] **Step 1 : tests** (`phase10_screens_test`) :
+- [x] **Step 1 : tests** (`phase10_screens_test`) :
   - `dockOrder` (presse-papiers au-dessus du lecteur, lecteur au-dessus de la copie) ;
   - `dockHiddenWhenIdle` ;
   - `editorStatusLine` (BOM et CRLF ; LF) ;
@@ -707,10 +707,10 @@ tests suivent le nom réel, sans changer de comportement.
   - `nowPlayingSliderSemantics` ;
   - `serverFormValidation` (port 0, port 70000 et adresse vide refusés) ;
   - `ftpWarningBanner`.
-- [ ] **Step 2 :** Run `flutter test test/phase10_screens_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter (Kotlin : icône et couleur de la notification, thème de `VideoActivity`).
-- [ ] **Step 4 :** tests verts ; suites JVM et Flutter vertes.
-- [ ] **Step 5 :** commit `feat(interface): barres du bas unifiées et écrans des lecteurs alignés`.
+- [x] **Step 2 :** Run `flutter test test/phase10_screens_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter (Kotlin : icône et couleur de la notification, thème de `VideoActivity`).
+- [x] **Step 4 :** tests verts ; suites JVM et Flutter vertes.
+- [x] **Step 5 :** commit `feat(interface): barres du bas unifiées et écrans des lecteurs alignés`.
 
 ### Task 11 : accessibilité, grands écrans et tests dorés
 
@@ -726,7 +726,7 @@ tests suivent le nom réel, sans changer de comportement.
 - Valeurs de `screen` : `home`, `explorerList`, `explorerGrid`, `filterGrid`, `search`, `globalSearch`, `trash`,
   `space`, `settings`, `about`, `help`, `welcome`, `unlock`, `format`, `editor`, `serverForm`, `nowPlaying`.
 
-- [ ] **Step 1 : tests :**
+- [x] **Step 1 : tests :**
   - `accessibility_test` : pour chaque écran et chaque luminosité, `meetsGuideline(androidTapTargetGuideline)`,
     `labeledTapTargetGuideline` et `textContrastGuideline` ;
   - `adaptive_test` :
@@ -742,13 +742,13 @@ tests suivent le nom réel, sans changer de comportement.
       temporisation de recherche (400 ms) et de la barre d'opération (4 s) ;
   - `goldens_test` (Linux, police de test) : `home_light`, `home_dark`, `explorer_grid_dark`, `unlock_light`,
     `settings_light`, `welcome_light`, à 412 × 869.
-- [ ] **Step 2 :** Run `flutter test test/accessibility_test.dart test/adaptive_test.dart test/source_rules_test.dart` →
+- [x] **Step 2 :** Run `flutter test test/accessibility_test.dart test/adaptive_test.dart test/source_rules_test.dart` →
   noter les échecs.
-- [ ] **Step 3 :** corriger les écrans : `Semantics` manquants, infobulles, `Flexible`/`Wrap` là où cela déborde,
+- [x] **Step 3 :** corriger les écrans : `Semantics` manquants, infobulles, `Flexible`/`Wrap` là où cela déborde,
   libellés de jauge.
-- [ ] **Step 4 :** Run `flutter test --update-goldens test/goldens_test.dart`. Regarder chaque PNG avant de le
+- [x] **Step 4 :** Run `flutter test --update-goldens test/goldens_test.dart`. Regarder chaque PNG avant de le
   garder. Puis `flutter test` complet vert et `flutter analyze` propre.
-- [ ] **Step 5 :** commit `test(interface): accessibilité, grands écrans, règles de style et tests dorés`.
+- [x] **Step 5 :** commit `test(interface): accessibilité, grands écrans, règles de style et tests dorés`.
 
 ### Task 12 : captures et essais instrumentés sur le Pixel 4 XL
 
@@ -760,26 +760,27 @@ tests suivent le nom réel, sans changer de comportement.
 **Interfaces :** Consumes : `demoApi()` et `pumpScreen` (T11, importés depuis `../test/`). Aucun disque n'est
 touché : l'application tourne sur le faux pont.
 
-- [ ] **Step 1 :** écrire `ui_tour_test` :
+- [x] **Step 1 :** écrire `ui_tour_test` :
   - `captureTour` : captures (`binding.takeScreenshot`) de chaque écran de `pumpScreen`, en clair et en sombre, puis
     de l'accueil, de l'explorateur et du déverrouillage à 200 % et en paysage ;
   - `scroll2000EntriesSmooth` : `binding.watchPerformance` pendant le défilement d'un dossier de 2 000 éléments, en
     liste puis en grille. Le 90ᵉ centile de construction doit rester ≤ 8 ms, et celui du rendu ≤ 16 ms.
-- [ ] **Step 2 :** vérifier que le téléphone est au repos et sauvegarder l'APK de l'utilisateur
+- [x] **Step 2 :** vérifier que le téléphone est au repos et sauvegarder l'APK de l'utilisateur
   (`adb shell pm path com.mawena.fluluks`, puis `adb pull`). Run
   `flutter drive --profile --driver=test_driver/integration_test.dart --target=integration_test/ui_tour_test.dart -d <Pixel>`.
   Attendu : `All tests passed`, captures écrites dans le dossier ci-dessus.
-- [ ] **Step 3 :** relire les captures (contraste, coupures, alignements). Corriger ce qui doit l'être, avec ses tests
+- [x] **Step 3 :** relire les captures (contraste, coupures, alignements). Corriger ce qui doit l'être, avec ses tests
   Flutter, puis relancer.
-- [ ] **Step 4 :** réinstaller l'APK de l'utilisateur.
-- [ ] **Step 5 :** commit `test(interface): captures et fluidité mesurées sur le Pixel`.
+- [x] **Step 4 :** réinstaller l'APK de l'utilisateur.
+- [x] **Step 5 :** commit `test(interface): captures et fluidité mesurées sur le Pixel`.
 
 ### Task 13 *(utilisateur)* : essais
 
 **Files :** Create `docs/superpowers/research/<AAAA-MM-JJ>-essais-phase11/essais.md`.
 
-- [ ] Construire et installer l'APK release sur le Pixel **avant** de demander l'essai.
-- [ ] Fiche d'essais, une ligne par point, avec une case « Réussi / Remarque » :
+- [x] Construire et installer l'APK release sur le Pixel **avant** de demander l'essai (APK profile, compilée
+  comme la release et de même signature, installée par `adb install -r`).
+- [x] Fiche d'essais, une ligne par point, avec une case « Réussi / Remarque » :
   - premier lancement (bienvenue, accès refusé puis accordé) ;
   - thème Système, Clair et Sombre, et démarrage en mode sombre (aucun éclair blanc) ;
   - accueil avec le vrai disque : déverrouiller avec « afficher la phrase » ; puces d'état ; éjecter ;
@@ -793,11 +794,11 @@ touché : l'application tourne sur le faux pont.
 
 ### Task 14 : documentation et v1.4.0
 
-- [ ] README : section « Interface » (thèmes, accessibilité, recherche globale, aide), trois captures choisies dans
+- [x] README : section « Interface » (thèmes, accessibilité, recherche globale, aide), trois captures choisies dans
   T12, mention de la phase 11 dans le tableau ; feuille de route cochée. Commit `docs: interface complète et
   professionnelle`.
-- [ ] Relecture finale de toute la branche.
-- [ ] Fusion `feature/interface` → `develop`, puis `release/1.4.0` (pubspec `1.4.0+11`), `main`, et étiquette signée
+- [x] Relecture finale de toute la branche.
+- [x] Fusion `feature/interface` → `develop`, puis `release/1.4.0` (pubspec `1.4.0+11`), `main`, et étiquette signée
   `v1.4.0`. Pas de push sans l'accord de l'utilisateur.
 
 ---

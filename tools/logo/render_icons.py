@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Rendu du logo Portail (SVG) en PNG, par librsvg (PyGObject) : icônes des mipmaps et aperçu.
 
-Usage : render_icons.py <logo.svg> <dossier res/> [<aperçu.png>]
+Usage : render_icons.py <logo.svg> <dossier res/> [<aperçu.png>] [--flutter <dossier>]
   écrit mipmap-{m,h,xh,xxh,xxxh}dpi/ic_launcher.png (48, 72, 96, 144, 192 px), ic_launcher_round.png
   (même logo dans un disque) et, si demandé, un aperçu de 512 px.
+  --flutter : logo de l'interface Flutter, 96 dp de base, en 1×, 2×, 3× et 4× (portail.png, 2.0x/portail.png…).
 Depuis l'API 26, Android utilise l'icône adaptative (mipmap-anydpi-v26) : ces PNG ne servent que de
 repli et d'aperçu.
 """
@@ -18,6 +19,7 @@ import cairo  # noqa: E402
 from gi.repository import Rsvg  # noqa: E402
 
 SIZES = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
+FLUTTER = {"": 96, "2.0x": 192, "3.0x": 288, "4.0x": 384}
 
 
 def render(svg, size, out, round_mask=False):
@@ -34,6 +36,14 @@ def render(svg, size, out, round_mask=False):
 
 
 def main(argv):
+    flutter = None
+    if "--flutter" in argv:
+        i = argv.index("--flutter")
+        if i + 1 >= len(argv):
+            print(__doc__, file=sys.stderr)
+            return 2
+        flutter = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
     if len(argv) < 3:
         print(__doc__, file=sys.stderr)
         return 2
@@ -45,6 +55,11 @@ def main(argv):
         render(svg, px, os.path.join(d, "ic_launcher_round.png"), round_mask=True)
     if len(argv) > 3:
         render(svg, 512, argv[3])
+    if flutter is not None:
+        for ratio, px in FLUTTER.items():
+            d = os.path.join(flutter, ratio)
+            os.makedirs(d, exist_ok=True)
+            render(svg, px, os.path.join(d, "portail.png"))
     return 0
 
 

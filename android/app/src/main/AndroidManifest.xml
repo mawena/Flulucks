@@ -53,7 +53,7 @@
             android:exported="false"
             android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
-            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+            android:theme="@style/VideoTheme" />
         <!-- Lecture de la musique en arrière-plan (phase 10). -->
         <service
             android:name=".media.MusicService"

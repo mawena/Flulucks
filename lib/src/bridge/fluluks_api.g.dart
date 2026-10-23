@@ -1592,6 +1592,124 @@ class ViewPrefsMsg {
   }
 }
 
+/// Préférences d'interface (phase 11) ; `theme` : `system`, `light` ou `dark`.
+class UiPrefsMsg {
+  UiPrefsMsg({
+    required this.theme,
+    required this.haptics,
+    required this.welcomeSeen,
+  });
+
+  String theme;
+
+  bool haptics;
+
+  bool welcomeSeen;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      theme,
+      haptics,
+      welcomeSeen,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static UiPrefsMsg decode(Object result) {
+    result as List<Object?>;
+    return UiPrefsMsg(
+      theme: result[0]! as String,
+      haptics: result[1]! as bool,
+      welcomeSeen: result[2]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! UiPrefsMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(theme, other.theme) && _deepEquals(haptics, other.haptics) && _deepEquals(welcomeSeen, other.welcomeSeen);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'UiPrefsMsg(theme: $theme, haptics: $haptics, welcomeSeen: $welcomeSeen)';
+  }
+}
+
+/// Version de Portail (`versionName`, `versionCode` du paquet) et appareil (`Build.VERSION.RELEASE`, `Build.MODEL`),
+/// pour l'écran « À propos ».
+class AppInfoMsg {
+  AppInfoMsg({
+    required this.versionName,
+    required this.versionCode,
+    required this.androidRelease,
+    required this.device,
+  });
+
+  String versionName;
+
+  int versionCode;
+
+  String androidRelease;
+
+  String device;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      versionName,
+      versionCode,
+      androidRelease,
+      device,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static AppInfoMsg decode(Object result) {
+    result as List<Object?>;
+    return AppInfoMsg(
+      versionName: result[0]! as String,
+      versionCode: result[1]! as int,
+      androidRelease: result[2]! as String,
+      device: result[3]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! AppInfoMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(versionName, other.versionName) && _deepEquals(versionCode, other.versionCode) && _deepEquals(androidRelease, other.androidRelease) && _deepEquals(device, other.device);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'AppInfoMsg(versionName: $versionName, versionCode: $versionCode, androidRelease: $androidRelease, device: $device)';
+  }
+}
+
 /// Favori ; `sourceId` null si le stockage n'est pas ouvert.
 class FavoriteMsg {
   FavoriteMsg({
@@ -1721,8 +1839,14 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is ViewPrefsMsg) {
       buffer.putUint8(148);
       writeValue(buffer, value.encode());
-    }    else if (value is FavoriteMsg) {
+    }    else if (value is UiPrefsMsg) {
       buffer.putUint8(149);
+      writeValue(buffer, value.encode());
+    }    else if (value is AppInfoMsg) {
+      buffer.putUint8(150);
+      writeValue(buffer, value.encode());
+    }    else if (value is FavoriteMsg) {
+      buffer.putUint8(151);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -1773,6 +1897,10 @@ class _PigeonCodec extends StandardMessageCodec {
       case 148:
         return ViewPrefsMsg.decode(readValue(buffer)!);
       case 149:
+        return UiPrefsMsg.decode(readValue(buffer)!);
+      case 150:
+        return AppInfoMsg.decode(readValue(buffer)!);
+      case 151:
         return FavoriteMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -2940,6 +3068,62 @@ class FluLuksHostApi {
         isNullValid: true,
     )
     ;
+  }
+
+  Future<UiPrefsMsg> getUiPrefs() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.getUiPrefs$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as UiPrefsMsg;
+  }
+
+  Future<void> setUiPrefs(UiPrefsMsg prefs) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.setUiPrefs$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[prefs]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<AppInfoMsg> getAppInfo() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.getAppInfo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as AppInfoMsg;
   }
 
   /// Formate tout le disque : fs parmi fat32, exfat, ext4, ntfs ; passphrase si encrypted (mise à zéro).

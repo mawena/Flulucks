@@ -6,10 +6,15 @@ import 'package:flutter/services.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/dialogs.dart';
+import '../ui/feedback.dart';
+import '../ui/tokens.dart';
+import '../ui/widgets.dart';
 
 /// Fiche d'un serveur distant (phase 10) : protocole, nom, adresse, port (21 ou 22 par défaut), utilisateur, mot de
 /// passe (mémorisé seulement si coché), dossier de départ. FTP : avertissement « en clair ». Un serveur existant
-/// montre l'empreinte SFTP acceptée (à oublier si le serveur a été réinstallé) et peut être supprimé.
+/// montre l'empreinte SFTP acceptée (à oublier si le serveur a été réinstallé) et peut être supprimé. Adresse
+/// obligatoire, port de 1 à 65535 : vérifiés avant l'enregistrement.
 class ServerFormScreen extends StatefulWidget {
   const ServerFormScreen({super.key, required this.state, this.server});
 
@@ -22,7 +27,14 @@ class ServerFormScreen extends StatefulWidget {
   State<ServerFormScreen> createState() => _ServerFormScreenState();
 }
 
+/// Erreur du port saisi, ou null s'il va de 1 à 65535.
+String? portError(String text) {
+  final p = int.tryParse(text.trim());
+  return p == null || p < 1 || p > 65535 ? Fr.portInvalid : null;
+}
+
 class _ServerFormScreenState extends State<ServerFormScreen> {
+  final _form = GlobalKey<FormState>();
   late String _protocol = widget.server?.protocol ?? 'sftp';
   late final _name = TextEditingController(text: widget.server?.name ?? '');
   late final _host = TextEditingController(text: widget.server?.host ?? '');
@@ -51,16 +63,17 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
         _protocol = p;
       });
 
-  void _snack(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
+  void _snack(String m) => showMessage(context, m, kind: MessageKind.error);
 
   Future<void> _save() async {
+    if (!_form.currentState!.validate()) return;
     final s = widget.server;
     final msg = RemoteServerMsg(
       id: s?.id ?? '',
       protocol: _protocol,
       name: _name.text.trim(),
       host: _host.text.trim(),
-      port: int.tryParse(_port.text.trim()) ?? 0,
+      port: int.parse(_port.text.trim()),
       user: _user.text.trim(),
       startPath: _start.text.trim().isEmpty ? '/' : _start.text.trim(),
       remember: _remember,
@@ -103,31 +116,40 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
 
   Future<void> _delete() async {
     final s = widget.server!;
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text(Fr.deleteServer),
-        content: Text(Fr.deleteServerBody(s.name)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(Fr.cancel)),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(Fr.delete)),
-        ],
-      ),
+    final ok = await confirmAction(
+      context,
+      title: Fr.deleteServer,
+      body: Fr.deleteServerBody(s.name),
+      confirmLabel: Fr.delete,
+      destructive: true,
     );
-    if (ok != true || !mounted) return;
+    if (!ok || !mounted) return;
     await widget.state.deleteServer(s.id);
     if (mounted) Navigator.of(context).pop();
   }
 
-  Widget _field(TextEditingController c, String label, {String? helper, bool obscure = false, TextInputType? type}) =>
+  Future<void> _copyHostKey() async {
+    await Clipboard.setData(ClipboardData(text: _hostKey!));
+    if (mounted) showMessage(context, Fr.hashCopied, kind: MessageKind.success);
+  }
+
+  Widget _field(
+    TextEditingController c,
+    String label, {
+    String? helper,
+    bool obscure = false,
+    TextInputType? type,
+    String? Function(String)? validator,
+  }) =>
       Padding(
-        padding: const EdgeInsets.symmetric(vertical: 6),
-        child: TextField(
+        padding: const EdgeInsets.symmetric(vertical: Space.s),
+        child: TextFormField(
           controller: c,
           obscureText: obscure,
           keyboardType: type,
           autocorrect: false,
-          decoration: InputDecoration(labelText: label, helperText: helper, border: const OutlineInputBorder()),
+          validator: validator == null ? null : (v) => validator(v ?? ''),
+          decoration: InputDecoration(labelText: label, helperText: helper, helperMaxLines: 3, errorMaxLines: 3),
         ),
       );
 
@@ -139,72 +161,87 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
       appBar: AppBar(
         title: Text(s?.name ?? Fr.addServer),
         actions: [
-          if (s != null) IconButton(tooltip: Fr.deleteServer, icon: const Icon(Icons.delete), onPressed: _delete),
+          if (s != null)
+            IconButton(tooltip: Fr.deleteServer, icon: const Icon(Icons.delete_rounded), onPressed: _delete),
         ],
       ),
-      body: ListView(padding: const EdgeInsets.all(16), children: [
-        SegmentedButton<String>(
-          segments: const [
-            ButtonSegment(value: 'sftp', label: Text('SFTP')),
-            ButtonSegment(value: 'ftp', label: Text('FTP')),
-          ],
-          selected: {_protocol},
-          showSelectedIcon: false,
-          onSelectionChanged: (v) => _setProtocol(v.first),
-        ),
-        if (_protocol == 'ftp')
-          Padding(
-            padding: const EdgeInsets.only(top: 12),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(Icons.warning_amber, color: theme.colorScheme.error),
-              const SizedBox(width: 8),
-              Expanded(child: Text(Fr.ftpClear, style: TextStyle(color: theme.colorScheme.error))),
-            ]),
-          ),
-        const SizedBox(height: 8),
-        _field(_name, Fr.serverName),
-        _field(_host, Fr.serverHost, type: TextInputType.url),
-        _field(_port, Fr.serverPort, type: TextInputType.number),
-        _field(_user, Fr.serverUser, helper: _protocol == 'ftp' ? Fr.serverUserHelpFtp : null),
-        _field(_password, Fr.password, obscure: true, helper: s?.hasPassword == true ? Fr.passwordKeep : null),
-        CheckboxListTile(
-          contentPadding: EdgeInsets.zero,
-          title: const Text(Fr.rememberPassword),
-          subtitle: const Text(Fr.rememberHelp),
-          value: _remember,
-          onChanged: (v) => setState(() => _remember = v ?? false),
-        ),
-        _field(_start, Fr.startFolder),
-        if (_protocol == 'sftp' && s == null)
-          Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(Fr.keyAfterSave, style: theme.textTheme.bodySmall)),
-        if (_protocol == 'sftp' && s != null) ...[
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.key),
-            title: const Text(Fr.privateKey),
-            subtitle: SelectableText(_keyInfo ?? Fr.noPrivateKey),
-          ),
-          if (_keyInfo != null) _field(_keyPassphrase, Fr.keyPassphrase, obscure: true, helper: Fr.keyPassphraseHelp),
-          Wrap(spacing: 8, children: [
-            TextButton(onPressed: _importKey, child: const Text(Fr.importKey)),
-            if (_keyInfo != null) TextButton(onPressed: _removeKey, child: const Text(Fr.removeKey)),
+      body: AdaptiveBody(
+        maxWidth: Layout.maxForm,
+        child: Form(
+          key: _form,
+          child: ListView(padding: listPadding(context, const EdgeInsets.all(Space.l)), children: [
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(value: 'sftp', label: Text('SFTP')),
+                ButtonSegment(value: 'ftp', label: Text('FTP')),
+              ],
+              selected: {_protocol},
+              showSelectedIcon: false,
+              onSelectionChanged: (v) => _setProtocol(v.first),
+            ),
+            if (_protocol == 'ftp')
+              const Padding(
+                padding: EdgeInsets.only(top: Space.m),
+                child: StatusBanner(icon: Icons.lock_open_rounded, text: Fr.ftpClear),
+              ),
+            const SizedBox(height: Space.s),
+            _field(_name, Fr.serverName),
+            _field(_host, Fr.serverHost,
+                type: TextInputType.url, validator: (v) => v.trim().isEmpty ? Fr.hostRequired : null),
+            _field(_port, Fr.serverPort, type: TextInputType.number, validator: portError),
+            _field(_user, Fr.serverUser, helper: _protocol == 'ftp' ? Fr.serverUserHelpFtp : null),
+            _field(_password, Fr.password, obscure: true, helper: s?.hasPassword == true ? Fr.passwordKeep : null),
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text(Fr.rememberPassword),
+              subtitle: const Text(Fr.rememberHelp),
+              value: _remember,
+              onChanged: (v) => setState(() => _remember = v ?? false),
+            ),
+            _field(_start, Fr.startFolder),
+            if (_protocol == 'sftp' && s == null)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: Space.s),
+                child: Text(Fr.keyAfterSave,
+                    style: theme.textTheme.bodySmall?.copyWith(color: theme.colorScheme.onSurfaceVariant)),
+              ),
+            if (_protocol == 'sftp' && s != null) ...[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.key_rounded),
+                title: const Text(Fr.privateKey),
+                subtitle: SelectableText(_keyInfo ?? Fr.noPrivateKey),
+              ),
+              if (_keyInfo != null)
+                _field(_keyPassphrase, Fr.keyPassphrase, obscure: true, helper: Fr.keyPassphraseHelp),
+              Wrap(spacing: Space.s, children: [
+                TextButton(onPressed: _importKey, child: const Text(Fr.importKey)),
+                if (_keyInfo != null) TextButton(onPressed: _removeKey, child: const Text(Fr.removeKey)),
+              ]),
+            ],
+            if (_hostKey != null) ...[
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.fingerprint_rounded),
+                title: const Text(Fr.hostKey),
+                // empreinte à chasse fixe : comparable caractère par caractère avec celle du serveur
+                subtitle: SelectableText(_hostKey!, style: const TextStyle(fontFamily: 'monospace')),
+                trailing: IconButton(
+                  tooltip: Fr.copyHash,
+                  icon: const Icon(Icons.copy_rounded),
+                  onPressed: _copyHostKey,
+                ),
+              ),
+              Align(
+                alignment: AlignmentDirectional.centerStart,
+                child: TextButton(onPressed: _forgetHostKey, child: const Text(Fr.forgetHostKey)),
+              ),
+            ],
+            const SizedBox(height: Space.l),
+            FilledButton(onPressed: _save, child: const Text(Fr.save)),
           ]),
-        ],
-        if (_hostKey != null) ...[
-          ListTile(
-            contentPadding: EdgeInsets.zero,
-            leading: const Icon(Icons.fingerprint),
-            title: const Text(Fr.hostKey),
-            subtitle: SelectableText(_hostKey!),
-          ),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(onPressed: _forgetHostKey, child: const Text(Fr.forgetHostKey)),
-          ),
-        ],
-        const SizedBox(height: 16),
-        FilledButton(onPressed: _save, child: const Text(Fr.save)),
-      ]),
+        ),
+      ),
     );
   }
 }
