@@ -363,7 +363,7 @@ dans le même commit que le travail.
 
 ### Phase 13 — Connexions SSH : terminal, clés, tunnels ([plan](2026-10-23-phase13-ssh.md))
 - [x] Plan de la phase 13 écrit *(demande du 2026-10-23 ; spec § 21)*
-- [ ] T1 — Connexions SSH fiables et expliquées : messages précis, Tester la connexion, keyboard-interactive, `mawena.cloud:2244`
+- [x] T1 — Connexions SSH fiables et expliquées : messages précis, Tester la connexion, keyboard-interactive, `mawena.cloud:2244` *(connexion à mawena.cloud rétablie avant la phase)*
 - [ ] T2 — Sessions de terminal (Kotlin) : PTY xterm, sortie par lots, 8 sessions
 - [ ] T3 — Sessions gardées en arrière-plan : service et notification « Tout fermer »
 - [ ] T4 — Écran Terminal (xterm) : thème, copier-coller, pincement, Reconnecter
