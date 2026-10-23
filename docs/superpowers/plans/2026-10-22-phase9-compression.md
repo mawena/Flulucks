@@ -239,7 +239,7 @@ int fl_arcw_close(fl_arc_writer *w, bool commit);  /* commit faux : abandon, rie
   - `ArchivePaths.decodeName(raw: ByteArray, zip: Boolean): String`, `ArchivePaths.safeRelative(name):
     String?` (null : entrée refusée).
 
-- [ ] **Step 1 : tests JVM** (moteur d'archives simulé qui rend des entrées choisies) :
+- [x] **Step 1 : tests JVM** (moteur d'archives simulé qui rend des entrées choisies) :
   - `safeRelativeRules` : `a/b` gardé ; `../x`, `/x`, `a/../../x`, `a/./b` → normalisé ou refusé, `\` traité
     comme un caractère, NUL refusé, profondeur > `WriteOps.MAX_DEPTH` refusée ;
   - `cp437NamesDecoded` : `0x82` → « é » ;
@@ -251,15 +251,15 @@ int fl_arcw_close(fl_arc_writer *w, bool commit);  /* commit faux : abandon, rie
   - `encryptedRefused`, `cancelRemovesPartial`, `sourceGoneDuringExtract`, `extractIntoNewFolderUnique`,
     `compressStoresMediaDeflatesText`, `compressNameUnique`, `oneOperationAtATime` (une copie en cours →
     `MSG_BUSY`).
-- [ ] **Step 2 :** Run `./gradlew testDebugUnitTest --tests '*Archive*'` → FAIL.
-- [ ] **Step 3 :** implémenter. Extraction : dossiers créés à la demande (`mkdir` par segment, sous la
+- [x] **Step 2 :** Run `./gradlew testDebugUnitTest --tests '*Archive*'` → FAIL.
+- [x] **Step 3 :** implémenter. Extraction : dossiers créés à la demande (`mkdir` par segment, sous la
   destination seulement), fichier écrit sous un nom temporaire puis renommé (mêmes règles que
   `Transfers.copyFile`) ; doublon d'entrée → nom unique. Compression : parcours borné de la sélection
   (comme `Transfers.scan`), fichier ZIP écrit sous un nom temporaire, renommé à la fin, supprimé en cas
   d'échec ou d'annulation ; l'archive en cours d'écriture n'est jamais ajoutée à elle-même.
 - [ ] **Step 4 :** tests JVM verts ; test instrumenté (compresser un dossier d'une image de disque,
   extraire sur une autre image, comparer ; extraire les fixtures 7z et RAR5) vert sur le Pixel.
-- [ ] **Step 5 :** commit `feat(archives): compresser et extraire d'un stockage à l'autre`.
+- [x] **Step 5 :** commit `feat(archives): compresser et extraire d'un stockage à l'autre`.
 
 ### Task 6 : pont et écrans des archives
 

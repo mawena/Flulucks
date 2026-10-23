@@ -18,7 +18,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
-/** Avancement d'une copie ou d'un déplacement. `fileIndex` part de 1 ; `error` peut accompagner `finished`. */
+/**
+ * Avancement d'une opération longue (copie, déplacement, compression, extraction). `fileIndex` part de 1 ;
+ * `error` peut accompagner `finished`.
+ */
 data class TransferState(
     val move: Boolean,
     val currentName: String,
@@ -31,10 +34,13 @@ data class TransferState(
     val error: String? = null,
     /** Durée de l'opération (ms), connue à la fin. */
     val elapsedMs: Long = 0,
+    /** `copy`, `move`, `compress` ou `extract`. */
+    val kind: String = if (move) "move" else "copy",
 )
 
 /**
- * Copier et déplacer entre deux sources quelconques, une opération à la fois.
+ * Copier et déplacer entre deux sources quelconques, une opération à la fois : le créneau est partagé avec la
+ * compression et l'extraction ([Archives], par [launch]).
  *
  * Avant toute écriture : parcours borné de la source, place libre de la destination, copie dans soi-même
  * refusée. Un déplacement entre deux sources ne supprime un élément de premier niveau qu'une fois tous ses
@@ -65,7 +71,7 @@ object Transfers {
     private val _state = MutableStateFlow<TransferState?>(null)
     val state: StateFlow<TransferState?> = _state.asStateFlow()
 
-    private class Running(val srcId: String, val dstId: String) {
+    internal class Running(val srcId: String, val dstId: String) {
         @Volatile var cancelled = false
     }
 
@@ -86,16 +92,24 @@ object Transfers {
     fun isBusy(sourceId: String): Boolean = running?.let { it.srcId == sourceId || it.dstId == sourceId } ?: false
 
     /** Lance l'opération ; [FilesException] avec [MSG_BUSY] si une autre est en cours. */
-    fun start(srcId: String, paths: List<String>, dstId: String, dstDir: String, move: Boolean) {
+    fun start(srcId: String, paths: List<String>, dstId: String, dstDir: String, move: Boolean) =
+        launch(if (move) "move" else "copy", srcId, dstId) { Job(it, srcId, paths, dstId, dstDir, move).run() }
+
+    /**
+     * Prend le créneau unique et lance [body] sur le fil des opérations ; [FilesException] avec [MSG_BUSY] si une
+     * autre opération est en cours. [body] termine par [JobContext.finish].
+     */
+    internal fun launch(kind: String, srcId: String, dstId: String, body: (JobContext) -> Unit) {
         val r = Running(srcId, dstId)
         synchronized(this) {
             if (running != null) throw FilesException(EngineError.FL_EBUSY, MSG_BUSY)
             running = r
         }
-        _state.value = TransferState(move, "", 0, 0, 0, 0)
+        val c = JobContext(r, kind)
+        _state.value = c.st
         CoroutineScope(SupervisorJob() + dispatcher).launch {
             try {
-                Job(r, srcId, paths, dstId, dstDir, move).run()
+                body(c)
             } finally {
                 synchronized(this@Transfers) { if (running === r) running = null }
             }
@@ -107,19 +121,14 @@ object Transfers {
         running?.cancelled = true
     }
 
-    private class Cancelled : Exception()
+    /** Annulation demandée : levée par [JobContext.checkCancel]. */
+    internal class Cancelled : Exception()
 
-    /** Élément à copier : chemin source, chemin relatif au premier niveau (vide pour lui-même). */
-    private class Node(val src: String, val rel: String, val type: FileType, val size: Long, val depth: Int)
-
-    private class Job(
-        val r: Running, val srcId: String, val paths: List<String>, val dstId: String, val dstDir: String, val move: Boolean,
-    ) {
-        var st = TransferState(move, "", 0, 0, 0, 0)
-        val startMs = clock()
-        var lastPublish = 0L
-        var skipped = 0
-        var changed = 0
+    /** Avancement de l'opération qui tient le créneau ; publié dans [state]. */
+    internal class JobContext(private val r: Running, kind: String) {
+        var st = TransferState(kind == "move", "", 0, 0, 0, 0, kind = kind)
+        private val startMs = clock()
+        private var lastPublish = 0L
 
         fun publish(force: Boolean = false) {
             val now = clock()
@@ -130,16 +139,60 @@ object Transfers {
         }
 
         fun finish(error: String? = null, cancelled: Boolean = false) {
+            st = st.copy(finished = true, cancelled = cancelled, error = error, elapsedMs = clock() - startMs)
+            _state.value = st
+        }
+
+        fun checkCancel() { if (r.cancelled) throw Cancelled() }
+    }
+
+    /** Élément d'une sélection : chemin source, chemin relatif au premier niveau (vide pour lui-même). */
+    internal class Node(val src: String, val rel: String, val type: FileType, val size: Long, val mtime: Long, val depth: Int)
+
+    /** Arborescence de [top], parents avant enfants dans l'ordre des noms, bornée (profondeur, nombre d'éléments). */
+    internal fun scanTree(src: FileSource, top: String, checkCancel: () -> Unit): List<Node> {
+        val root = src.stat(top) ?: throw FileNotFoundException("Document introuvable")
+        val out = ArrayList<Node>()
+        val stack = ArrayDeque<Node>()
+        stack.addLast(Node(top, "", root.type, root.size, root.mtime, 0))
+        while (stack.isNotEmpty()) {
+            checkCancel()
+            val n = stack.removeLast()
+            if (n.depth > WriteOps.MAX_DEPTH || out.size >= WriteOps.MAX_ENTRIES) throw FileNotFoundException(WriteOps.TOO_DEEP)
+            out.add(n)
+            if (n.type != FileType.DIR) continue
+            // ordre des noms à la sortie de la pile : la copie suit l'ordre affiché
+            for (e in src.list(n.src).sortedByDescending { it.name.lowercase() }) {
+                if (e.name == "." || e.name == "..") continue
+                val rel = if (n.rel.isEmpty()) "/${e.name}" else "${n.rel}/${e.name}"
+                stack.addLast(Node(e.path, rel, e.type, e.size, e.mtime, n.depth + 1))
+                if (stack.size + out.size > WriteOps.MAX_ENTRIES) throw FileNotFoundException(WriteOps.TOO_DEEP)
+            }
+        }
+        return out
+    }
+
+    private class Job(
+        val c: JobContext, val srcId: String, val paths: List<String>, val dstId: String, val dstDir: String, val move: Boolean,
+    ) {
+        var st: TransferState
+            get() = c.st
+            set(v) { c.st = v }
+        var skipped = 0
+        var changed = 0
+
+        fun publish(force: Boolean = false) = c.publish(force)
+
+        fun finish(error: String? = null, cancelled: Boolean = false) {
             val warning = when {
                 changed > 0 -> MSG_CHANGED
                 skipped > 0 -> MSG_LINKS
                 else -> null
             }
-            st = st.copy(finished = true, cancelled = cancelled, error = error ?: warning, elapsedMs = clock() - startMs)
-            _state.value = st
+            c.finish(error ?: warning, cancelled)
         }
 
-        fun checkCancel() { if (r.cancelled) throw Cancelled() }
+        fun checkCancel() = c.checkCancel()
 
         fun run() {
             val src = Files.sourceOrNull(srcId)
@@ -169,7 +222,7 @@ object Transfers {
             if (move && srcId == dstId) return moveSameSource(src, tops, dir)
 
             // parcours borné de toute la sélection avant d'écrire quoi que ce soit
-            val plans = tops.map { scan(src, it) }
+            val plans = tops.map { scanTree(src, it, ::checkCancel) }
             val files = plans.sumOf { p -> p.count { it.type == FileType.FILE } }
             val total = plans.sumOf { p -> p.filter { it.type == FileType.FILE }.sumOf { it.size } }
             val (free, _) = dst.space()
@@ -211,29 +264,6 @@ object Transfers {
                 src.move(p, dir)
             }
             finish()
-        }
-
-        /** Arborescence de [top], parents avant enfants, bornée (profondeur, nombre d'éléments). */
-        fun scan(src: FileSource, top: String): List<Node> {
-            val root = src.stat(top) ?: throw FileNotFoundException("Document introuvable")
-            val out = ArrayList<Node>()
-            val stack = ArrayDeque<Node>()
-            stack.addLast(Node(top, "", root.type, root.size, 0))
-            while (stack.isNotEmpty()) {
-                checkCancel()
-                val n = stack.removeLast()
-                if (n.depth > WriteOps.MAX_DEPTH || out.size >= WriteOps.MAX_ENTRIES) throw FileNotFoundException(WriteOps.TOO_DEEP)
-                out.add(n)
-                if (n.type != FileType.DIR) continue
-                // ordre des noms à la sortie de la pile : la copie suit l'ordre affiché
-                for (e in src.list(n.src).sortedByDescending { it.name.lowercase() }) {
-                    if (e.name == "." || e.name == "..") continue
-                    val rel = if (n.rel.isEmpty()) "/${e.name}" else "${n.rel}/${e.name}"
-                    stack.addLast(Node(e.path, rel, e.type, e.size, n.depth + 1))
-                    if (stack.size + out.size > WriteOps.MAX_ENTRIES) throw FileNotFoundException(WriteOps.TOO_DEEP)
-                }
-            }
-            return out
         }
 
         /** Copie un fichier ; faux si la source a changé de taille depuis le parcours (encore en écriture). */
@@ -287,7 +317,7 @@ object Transfers {
     }
 
     /** La source répond encore (volume ouvert, carte SD présente). */
-    private fun alive(s: FileSource): Boolean = try {
+    internal fun alive(s: FileSource): Boolean = try {
         s.stat("/") != null
     } catch (e: Exception) {
         false

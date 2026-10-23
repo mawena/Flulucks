@@ -88,8 +88,11 @@ sealed class NativeIn {
     /** Fichier local, ouvert en descripteur au moment de l'ouverture de l'archive. */
     class Fd(val file: File) : NativeIn()
 
-    /** Fichier d'un volume du moteur (poignée de openFile) et sa taille ; [onClosed] après la fermeture. */
-    class EngineFile(val handle: Long, val size: Long, val onClosed: () -> Unit) : NativeIn()
+    /**
+     * Fichier d'un volume du moteur (poignée de openFile) et sa taille ; [onActivity] à chaque lecture (activité du
+     * volume), lève une erreur si le volume a été fermé.
+     */
+    class EngineFile(val handle: Long, val size: Long, val onActivity: () -> Unit) : NativeIn()
 }
 
 /** Destination d'un ZIP écrit par le moteur (Engine.arcwOpenFd / arcwOpenFile), fermée par l'archive. */
