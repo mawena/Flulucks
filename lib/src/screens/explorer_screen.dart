@@ -6,6 +6,7 @@ import '../state/app_state.dart';
 import '../state/prefs.dart';
 import '../state/sorting.dart';
 import '../strings_fr.dart';
+import '../ui/dialogs.dart';
 import '../viewers.dart';
 import '../widgets/clipboard_bar.dart';
 import '../widgets/properties_sheet.dart';
@@ -252,25 +253,10 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
 
   void _toggle(EntryMsg e) => setState(() => _selected.contains(e.path) ? _selected.remove(e.path) : _selected.add(e.path));
 
-  Future<String?> _askName(String title, String label, {String initial = ''}) => showDialog<String>(
-        context: context,
-        builder: (ctx) {
-          final c = TextEditingController(text: initial);
-          return AlertDialog(
-            title: Text(title),
-            content: TextField(
-              controller: c,
-              autofocus: true,
-              decoration: InputDecoration(labelText: label),
-              onSubmitted: (v) => Navigator.pop(ctx, v),
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text(Fr.cancel)),
-              FilledButton(onPressed: () => Navigator.pop(ctx, c.text), child: const Text(Fr.ok)),
-            ],
-          );
-        },
-      );
+  /// Nom d'un nouvel élément ; OK reste désactivé tant que le nom est refusé (vide, « / », « .. », trop long).
+  Future<String?> _askName(String title, String label, {String initial = '', bool selectBaseName = false}) =>
+      promptText(context,
+          title: title, label: label, initial: initial, selectBaseName: selectBaseName, validator: nameError);
 
   Future<void> _newFolder() async {
     final name = (await _askName(Fr.newFolder, Fr.folderName))?.trim();
@@ -283,7 +269,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
 
   Future<void> _rename() async {
     final path = _selected.single;
-    final name = (await _askName(Fr.rename, Fr.newName, initial: nameOf(path)))?.trim();
+    final name = (await _askName(Fr.rename, Fr.newName, initial: nameOf(path), selectBaseName: true))?.trim();
     if (name == null || name.isEmpty || name == nameOf(path)) return;
     await _run(() async {
       await state.api.rename(widget.sourceId, path, name);

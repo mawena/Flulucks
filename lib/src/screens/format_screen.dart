@@ -6,6 +6,9 @@ import 'package:flutter/material.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/feedback.dart';
+import '../ui/tokens.dart';
+import '../ui/widgets.dart';
 
 /// Système de fichiers proposé : identifiant passé au moteur, nom affiché, ligne d'aide.
 typedef _Fs = ({String id, String name, String help});
@@ -38,7 +41,8 @@ bool labelOk(String fs, String label) {
 }
 
 /// Formatage d'un disque USB (phase 8) : système de fichiers, chiffrement, étiquette, puis confirmation en
-/// tapant le nom du disque. Rien n'est envoyé au moteur avant la confirmation.
+/// tapant le nom du disque. Rien n'est envoyé au moteur avant la confirmation. Le danger est rappelé en haut, et
+/// les boutons « Formater » sont rouges.
 class FormatScreen extends StatefulWidget {
   const FormatScreen({super.key, required this.state, required this.disk});
 
@@ -89,15 +93,13 @@ class _FormatScreenState extends State<FormatScreen> {
     if (ok != true || !mounted) return;
     final pass = _encrypted ? Uint8List.fromList(utf8.encode(_pass.text)) : null;
     setState(() => _busy = true);
-    final messenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
     final err = await widget.state.formatDisk(widget.disk.id, _fs, _encrypted, _label.text, pass);
     _pass.clear();
     _confirm.clear();
     if (!mounted) return;
     if (err == null) {
-      navigator.pop();
-      messenger.showSnackBar(const SnackBar(content: Text(Fr.formatted)));
+      showMessage(context, Fr.formatted, kind: MessageKind.success); // reste affiché sur l'accueil
+      Navigator.of(context).pop();
     } else {
       setState(() {
         _busy = false;
@@ -109,88 +111,108 @@ class _FormatScreenState extends State<FormatScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final s = theme.colorScheme;
     final labelValid = labelOk(_fs, _label.text);
+    final size = Fr.humanSize(widget.disk.sizeBytes);
     return PopScope(
       canPop: !_busy,
       child: Scaffold(
         appBar: AppBar(title: const Text(Fr.formatTitle)),
-        body: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text(widget.disk.name, style: theme.textTheme.titleMedium),
-            Text(Fr.humanSize(widget.disk.sizeBytes), style: theme.textTheme.bodySmall),
-            const SizedBox(height: 8),
-            RadioGroup<String>(
-              groupValue: _fs,
-              onChanged: (v) {
-                if (!_busy && v != null) setState(() => _fs = v);
-              },
-              child: Column(children: [
-                for (final c in _choices)
-                  RadioListTile<String>(
-                    contentPadding: EdgeInsets.zero,
-                    value: c.id,
-                    enabled: !_busy,
-                    title: Text(c.name),
-                    subtitle: Text(c.help),
-                  ),
-              ]),
-            ),
-            TextField(
-              controller: _label,
-              enabled: !_busy,
-              decoration: InputDecoration(
-                labelText: Fr.formatLabel,
-                helperText: labelValid ? _labelLimit(_fs) : null,
-                errorText: labelValid ? null : Fr.labelInvalid,
+        body: AdaptiveBody(
+          maxWidth: Layout.maxForm,
+          child: ListView(
+            padding: const EdgeInsets.all(Space.l),
+            children: [
+              Text(widget.disk.name, style: theme.textTheme.titleMedium),
+              Text(size, style: numeric(theme.textTheme.bodySmall!)),
+              const SizedBox(height: Space.m),
+              StatusBanner(
+                icon: Icons.warning_rounded,
+                text: Fr.formatDanger(widget.disk.name, size),
+                tone: ChipTone.danger,
               ),
-            ),
-            const SizedBox(height: 8),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text(Fr.encryptSwitch),
-              subtitle: const Text(Fr.encryptHelp),
-              value: _encrypted,
-              onChanged: _busy ? null : (v) => setState(() => _encrypted = v),
-            ),
-            if (_encrypted) ...[
-              TextField(
-                controller: _pass,
-                enabled: !_busy,
-                obscureText: true,
-                enableSuggestions: false,
-                autocorrect: false,
-                decoration: const InputDecoration(labelText: Fr.passphrase),
-              ),
-              TextField(
-                controller: _confirm,
-                enabled: !_busy,
-                obscureText: true,
-                enableSuggestions: false,
-                autocorrect: false,
-                decoration: InputDecoration(labelText: Fr.passConfirm, errorText: _passError),
-              ),
-            ],
-            const SizedBox(height: 16),
-            if (_error != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
-              ),
-            if (_busy)
-              ListenableBuilder(
-                listenable: widget.state,
-                builder: (context, _) {
-                  final pct = widget.state.formatProgress ?? 0;
-                  return Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: 8, children: [
-                    LinearProgressIndicator(value: pct / 100),
-                    Text(Fr.formatting(pct)),
-                  ]);
+              const SizedBox(height: Space.l),
+              RadioGroup<String>(
+                groupValue: _fs,
+                onChanged: (v) {
+                  if (!_busy && v != null) setState(() => _fs = v);
                 },
-              )
-            else
-              FilledButton(onPressed: _submit, child: const Text(Fr.formatButton)),
-          ],
+                // une carte par choix ; celle choisie prend la couleur « bon »
+                child: Column(spacing: Space.s, children: [
+                  for (final c in _choices)
+                    Card(
+                      clipBehavior: Clip.antiAlias,
+                      color: c.id == _fs ? s.secondaryContainer : null,
+                      child: RadioListTile<String>(
+                        value: c.id,
+                        enabled: !_busy,
+                        title: Text(c.name),
+                        subtitle: Text(c.help),
+                      ),
+                    ),
+                ]),
+              ),
+              const SizedBox(height: Space.l),
+              TextField(
+                controller: _label,
+                enabled: !_busy,
+                decoration: InputDecoration(
+                  labelText: Fr.formatLabel,
+                  helperText: labelValid ? _labelLimit(_fs) : null,
+                  errorText: labelValid ? null : Fr.labelInvalid,
+                ),
+              ),
+              const SizedBox(height: Space.s),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text(Fr.encryptSwitch),
+                subtitle: const Text(Fr.encryptHelp),
+                value: _encrypted,
+                onChanged: _busy ? null : (v) => setState(() => _encrypted = v),
+              ),
+              if (_encrypted) ...[
+                TextField(
+                  controller: _pass,
+                  enabled: !_busy,
+                  obscureText: true,
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  decoration: const InputDecoration(labelText: Fr.passphrase),
+                ),
+                TextField(
+                  controller: _confirm,
+                  enabled: !_busy,
+                  obscureText: true,
+                  enableSuggestions: false,
+                  autocorrect: false,
+                  decoration: InputDecoration(labelText: Fr.passConfirm, errorText: _passError),
+                ),
+              ],
+              const SizedBox(height: Space.l),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: Space.s),
+                  child: StatusBanner(icon: Icons.error_rounded, text: _error!, tone: ChipTone.danger),
+                ),
+              if (_busy)
+                ListenableBuilder(
+                  listenable: widget.state,
+                  builder: (context, _) {
+                    final pct = widget.state.formatProgress ?? 0;
+                    return Column(crossAxisAlignment: CrossAxisAlignment.start, spacing: Space.s, children: [
+                      LinearProgressIndicator(value: pct / 100),
+                      Text(Fr.formatting(pct), style: numeric(theme.textTheme.bodyMedium!)),
+                    ]);
+                  },
+                )
+              else
+                FilledButton(
+                  style: FilledButton.styleFrom(backgroundColor: s.error, foregroundColor: s.onError),
+                  onPressed: _submit,
+                  child: const Text(Fr.formatButton),
+                ),
+            ],
+          ),
         ),
       ),
     );
@@ -234,7 +256,10 @@ class _ConfirmDialogState extends State<_ConfirmDialog> {
       actions: [
         TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text(Fr.cancel)),
         FilledButton(
-          style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+          style: FilledButton.styleFrom(
+            backgroundColor: Theme.of(context).colorScheme.error,
+            foregroundColor: Theme.of(context).colorScheme.onError,
+          ),
           onPressed: match ? () => Navigator.of(context).pop(true) : null,
           child: const Text(Fr.formatButton),
         ),

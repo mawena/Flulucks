@@ -421,7 +421,7 @@ Valeurs fixées :
 - Chaînes : `showPassphrase` « Afficher la phrase de passe », `hidePassphrase` « Masquer la phrase de passe »,
   `openReadOnly` « Ouvrir en lecture seule », `formatDanger(name, size)`.
 
-- [ ] **Step 1 : tests :**
+- [x] **Step 1 : tests :**
   - `toggleShowsPassphrase` (`obscureText` bascule, infobulle mise à jour) ;
   - `passphraseZeroedAfterToggle` : afficher, masquer, valider ; la référence reçue par le faux pont est mise à
     zéro, le champ est vidé ;
@@ -431,14 +431,14 @@ Valeurs fixées :
   - `formatChoicesAreCards` (4 choix, aide visible, sélection annoncée) ;
   - `renameSelectsBaseNameAndValidates` (explorateur : « a/b » refusé, OK désactivé ; même nom → aucun appel) ;
   - `newFolderRejectsReservedNames`.
-- [ ] **Step 2 :** Run `flutter test test/unlock_dialog_test.dart test/format_screen_test.dart test/explorer_screen_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter.
+- [x] **Step 2 :** Run `flutter test test/unlock_dialog_test.dart test/format_screen_test.dart test/explorer_screen_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter.
   - Le dialogue de déverrouillage a un titre avec icône de cadenas, une barre linéaire indéterminée pendant le calcul
     et l'erreur dans un `StatusBanner` `danger`.
   - Le formatage présente des cartes de choix (`RadioGroup` et `RadioListTile` en `Card`) et un résumé du danger en
     `StatusBanner` `danger`. Le bouton « Formater » est rouge.
-- [ ] **Step 4 :** tests verts ; suites vertes.
-- [ ] **Step 5 :** commit `feat(interface): déverrouillage, formatage et saisies de noms revus`.
+- [x] **Step 4 :** tests verts ; suites vertes.
+- [x] **Step 5 :** commit `feat(interface): déverrouillage, formatage et saisies de noms revus`.
 
 ### Task 6 : collection d'éléments et explorateur revu
 

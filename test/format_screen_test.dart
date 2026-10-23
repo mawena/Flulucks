@@ -6,6 +6,8 @@ import 'package:fluluks/src/app.dart';
 import 'package:fluluks/src/screens/format_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
 import 'package:fluluks/src/strings_fr.dart';
+import 'package:fluluks/src/ui/theme.dart';
+import 'package:fluluks/src/ui/widgets.dart';
 
 import 'fake_host_api.dart';
 
@@ -27,6 +29,13 @@ Future<void> openFormat(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Fait défiler la page de formatage jusqu'à [f] (la liste construit ses éléments au fil du défilement).
+Future<void> scrollTo(WidgetTester tester, Finder f) async {
+  await tester.scrollUntilVisible(f, 200,
+      scrollable: find.byWidgetPredicate((w) => w is Scrollable && w.axisDirection == AxisDirection.down).first);
+  await tester.pump(); // mise en page après le dernier défilement, avant de toucher
+}
+
 FakeHostApi apiWithDisk() => FakeHostApi()..disks = [disk([part()])];
 
 void main() {
@@ -46,9 +55,11 @@ void main() {
   testWidgets('emptyOrMismatchedPassphraseRefused', (tester) async {
     final (_, api) = await pumpHome(tester, apiWithDisk());
     await openFormat(tester);
+    await scrollTo(tester, find.byType(SwitchListTile)); // sous les cartes de choix
     await tester.tap(find.byType(SwitchListTile));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.widgetWithText(FilledButton, Fr.formatButton));
+    // bas de la liste, construite au fil du défilement
+    await scrollTo(tester, find.widgetWithText(FilledButton, Fr.formatButton));
     await tester.tap(find.widgetWithText(FilledButton, Fr.formatButton));
     await tester.pumpAndSettle();
     expect(find.text(Fr.passEmpty), findsOneWidget);
@@ -65,7 +76,8 @@ void main() {
   testWidgets('confirmRequiresExactDiskName', (tester) async {
     final (_, api) = await pumpHome(tester, apiWithDisk());
     await openFormat(tester);
-    await tester.ensureVisible(find.widgetWithText(FilledButton, Fr.formatButton));
+    // bas de la liste, construite au fil du défilement
+    await scrollTo(tester, find.widgetWithText(FilledButton, Fr.formatButton));
     await tester.tap(find.widgetWithText(FilledButton, Fr.formatButton));
     await tester.pumpAndSettle();
     expect(find.text(Fr.formatConfirm('Disque USB', Fr.humanSize(4000000000))), findsOneWidget);
@@ -89,11 +101,13 @@ void main() {
     await tester.tap(find.text('ext4'));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, Fr.formatLabel), 'Données');
+    await scrollTo(tester, find.byType(SwitchListTile)); // sous les cartes de choix
     await tester.tap(find.byType(SwitchListTile));
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, Fr.passphrase), 'secret');
     await tester.enterText(find.widgetWithText(TextField, Fr.passConfirm), 'secret');
-    await tester.ensureVisible(find.widgetWithText(FilledButton, Fr.formatButton));
+    // bas de la liste, construite au fil du défilement
+    await scrollTo(tester, find.widgetWithText(FilledButton, Fr.formatButton));
     await tester.tap(find.widgetWithText(FilledButton, Fr.formatButton));
     await tester.pumpAndSettle();
     await tester.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), 'Disque USB');
@@ -116,7 +130,8 @@ void main() {
     final (_, api) = await pumpHome(tester, apiWithDisk());
     api.formatError = 'Disque débranché pendant le formatage : recommencez le formatage';
     await openFormat(tester);
-    await tester.ensureVisible(find.widgetWithText(FilledButton, Fr.formatButton));
+    // bas de la liste, construite au fil du défilement
+    await scrollTo(tester, find.widgetWithText(FilledButton, Fr.formatButton));
     await tester.tap(find.widgetWithText(FilledButton, Fr.formatButton));
     await tester.pumpAndSettle();
     await tester.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), 'Disque USB');
@@ -156,12 +171,56 @@ void main() {
     await tester.enterText(find.widgetWithText(TextField, Fr.formatLabel), 'clé');
     await tester.pump();
     expect(find.text(Fr.labelInvalid), findsOneWidget);
-    await tester.ensureVisible(find.widgetWithText(FilledButton, Fr.formatButton));
+    // bas de la liste, construite au fil du défilement
+    await scrollTo(tester, find.widgetWithText(FilledButton, Fr.formatButton));
     await tester.tap(find.widgetWithText(FilledButton, Fr.formatButton));
     await tester.pumpAndSettle();
     expect(find.byType(AlertDialog), findsNothing);
     expect(api.formats, isEmpty);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('formatStillNeedsTypedName', (tester) async {
+    final (_, api) = await pumpHome(tester, apiWithDisk());
+    await openFormat(tester);
+    final error = portailScheme(Brightness.light).error;
+    final button = find.widgetWithText(FilledButton, Fr.formatButton);
+    expect(tester.widget<FilledButton>(button).style!.backgroundColor!.resolve({}), error); // bouton rouge
+    expect(find.text(Fr.formatDanger('Disque USB', Fr.humanSize(4000000000))), findsOneWidget);
+    final banner = find.ancestor(
+        of: find.text(Fr.formatDanger('Disque USB', Fr.humanSize(4000000000))), matching: find.byType(StatusBanner));
+    expect(tester.widget<StatusBanner>(banner).tone, ChipTone.danger);
+    await scrollTo(tester, button);
+    await tester.tap(button);
+    await tester.pumpAndSettle();
+    final confirm = find.descendant(of: find.byType(AlertDialog), matching: find.widgetWithText(FilledButton, Fr.formatButton));
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+    expect(tester.widget<FilledButton>(confirm).style!.backgroundColor!.resolve({}), error);
+    await tester.enterText(find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)), 'Disque');
+    await tester.pump();
+    expect(tester.widget<FilledButton>(confirm).onPressed, isNull);
+    await tester.tap(find.widgetWithText(TextButton, Fr.cancel));
+    await tester.pumpAndSettle();
+    expect(api.formats, isEmpty);
+  });
+
+  testWidgets('formatChoicesAreCards', (tester) async {
+    final semantics = tester.ensureSemantics();
+    await pumpHome(tester, apiWithDisk());
+    await openFormat(tester);
+    final group = find.byType(RadioGroup<String>);
+    expect(find.descendant(of: group, matching: find.byType(Card)), findsNWidgets(4));
+    expect(find.descendant(of: group, matching: find.byType(RadioListTile<String>)), findsNWidgets(4));
+    for (final help in [Fr.fsHelpExfat, Fr.fsHelpFat32, Fr.fsHelpExt4, Fr.fsHelpNtfs]) {
+      expect(find.text(help), findsOneWidget);
+    }
+    expect(tester.getSemantics(find.widgetWithText(RadioListTile<String>, 'exFAT')), isSemantics(isChecked: true));
+    await tester.tap(find.text('NTFS'));
+    await tester.pumpAndSettle();
+    expect(tester.getSemantics(find.widgetWithText(RadioListTile<String>, 'NTFS')), isSemantics(isChecked: true));
+    expect(tester.getSemantics(find.widgetWithText(RadioListTile<String>, 'exFAT')), isSemantics(isChecked: false));
+    expect(tester.takeException(), isNull);
+    semantics.dispose();
   });
 
   test('exfatLabelRejectsFatFsForbiddenChars', () {

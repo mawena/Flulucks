@@ -105,7 +105,12 @@ class _PromptDialogState extends State<_PromptDialog> {
   }
 
   void _submit() {
-    if (_error != null) return;
+    // revalidé ici : Entrée peut arriver avant que le bouton ne reflète la dernière frappe
+    final error = widget.validator?.call(_c.text);
+    if (error != null) {
+      setState(() => _error = error);
+      return;
+    }
     Navigator.pop(context, _c.text);
   }
 

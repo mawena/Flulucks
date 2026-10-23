@@ -26,6 +26,9 @@ class Fr {
   static const needsRecovery =
       "Le volume n'a pas été démonté proprement\u00A0: contenu possiblement incomplet";
   static const passphrase = 'Phrase de passe';
+  static const showPassphrase = 'Afficher la phrase de passe';
+  static const hidePassphrase = 'Masquer la phrase de passe';
+  static const openReadOnly = 'Ouvrir en lecture seule';
   static const unlocking =
       'Déverrouillage en cours… cela peut prendre quelques secondes';
   static const cancel = 'Annuler';
@@ -356,6 +359,8 @@ class Fr {
   static String formatConfirm(String name, String size) =>
       'Tout le contenu de «\u00A0$name\u00A0» ($size) sera effacé. Tapez le nom du disque pour confirmer.';
   static const formatConfirmHint = 'Nom du disque';
+  static String formatDanger(String name, String size) =>
+      'Tout le contenu de «\u00A0$name\u00A0» ($size) sera effacé définitivement, sur toutes ses partitions.';
   static String formatting(int pct) => 'Formatage… $pct\u202F%';
   static const formatted = 'Disque formaté';
 }

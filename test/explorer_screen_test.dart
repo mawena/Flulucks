@@ -234,6 +234,46 @@ void main() {
     expect(tester.widget<PopupMenuItem<String>>(find.widgetWithText(PopupMenuItem<String>, 'Renommer')).enabled, isTrue);
   });
 
+  testWidgets('renameSelectsBaseNameAndValidates', (tester) async {
+    final api = api0();
+    await pump(tester, api);
+    await longPress(tester, 'b.txt');
+    await tester.tap(find.byTooltip("Plus d'actions"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Renommer'));
+    await tester.pumpAndSettle();
+    final controller = tester.widget<TextField>(find.byType(TextField)).controller!;
+    expect(controller.selection, const TextSelection(baseOffset: 0, extentOffset: 1)); // « b » sans « .txt »
+    FilledButton ok() => tester.widget<FilledButton>(find.widgetWithText(FilledButton, Fr.ok));
+    await tester.enterText(find.byType(TextField), 'a/b');
+    await tester.pump();
+    expect(ok().onPressed, isNull);
+    expect(find.text(Fr.nameSlash), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'b.txt'); // même nom : rien n'est envoyé
+    await tester.pump();
+    await tester.tap(find.text(Fr.ok));
+    await tester.pumpAndSettle();
+    expect(api.calls.where((c) => c.startsWith('rename')), isEmpty);
+  });
+
+  testWidgets('newFolderRejectsReservedNames', (tester) async {
+    final api = api0();
+    await pump(tester, api);
+    await tester.tap(find.byTooltip(Fr.newFolder));
+    await tester.pumpAndSettle();
+    FilledButton ok() => tester.widget<FilledButton>(find.widgetWithText(FilledButton, Fr.ok));
+    expect(ok().onPressed, isNull); // vide
+    await tester.enterText(find.byType(TextField), '..');
+    await tester.pump();
+    expect(ok().onPressed, isNull);
+    expect(find.text(Fr.nameReserved), findsOneWidget);
+    await tester.enterText(find.byType(TextField), 'Vacances');
+    await tester.pump();
+    await tester.tap(find.text(Fr.ok));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('createFolder phone / Vacances'));
+  });
+
   testWidgets('shareDisabledForFolder', (tester) async {
     final api = api0();
     await pump(tester, api);
@@ -308,6 +348,7 @@ void main() {
     await tester.tap(find.byType(FloatingActionButton));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'Vacances');
+    await tester.pump(); // OK s'active une fois le nom validé
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('createFolder phone / Vacances'));

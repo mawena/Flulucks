@@ -1,15 +1,19 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:fluluks/src/app.dart';
 import 'package:fluluks/src/state/app_state.dart';
+import 'package:fluluks/src/strings_fr.dart';
+import 'package:fluluks/src/ui/widgets.dart';
 
 import 'fake_host_api.dart';
 
-Future<FakeHostApi> openDialog(WidgetTester tester, {String correct = 'bonne'}) async {
+Future<FakeHostApi> openDialog(WidgetTester tester, {String correct = 'bonne', bool readOnlyPreference = false}) async {
   final api = FakeHostApi()
     ..correctPassphrase = correct
+    ..readOnlyPreference = readOnlyPreference
     ..disks = [disk([part()])];
   final state = AppState(api);
   await state.refresh();
@@ -71,11 +75,80 @@ void main() {
     await tester.enterText(field, 'bonne');
     await tester.tap(submit);
     await tester.pump();
-    expect(find.byType(CircularProgressIndicator), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsOneWidget); // barre indéterminée
     expect(find.text('Déverrouillage en cours… cela peut prendre quelques secondes'), findsOneWidget);
     expect(tester.widget<FilledButton>(submit).onPressed, isNull);
     api.gate!.complete();
     await tester.pumpAndSettle();
-    expect(find.byType(CircularProgressIndicator), findsNothing);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+  });
+
+  testWidgets('toggleShowsPassphrase', (tester) async {
+    await openDialog(tester);
+    expect(find.byIcon(Icons.lock_rounded), findsOneWidget); // titre avec cadenas
+    await tester.tap(find.byTooltip(Fr.showPassphrase));
+    await tester.pump();
+    expect(tester.widget<TextField>(field).obscureText, isFalse);
+    expect(find.byTooltip(Fr.hidePassphrase), findsOneWidget);
+    await tester.tap(find.byTooltip(Fr.hidePassphrase));
+    await tester.pump();
+    expect(tester.widget<TextField>(field).obscureText, isTrue);
+    expect(find.byTooltip(Fr.showPassphrase), findsOneWidget);
+  });
+
+  testWidgets('passphraseZeroedAfterToggle', (tester) async {
+    final api = await openDialog(tester);
+    await tester.enterText(field, 'mauvaise');
+    await tester.tap(find.byTooltip(Fr.showPassphrase));
+    await tester.pump();
+    await tester.tap(find.byTooltip(Fr.hidePassphrase));
+    await tester.pump();
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(api.passphraseCopy, 'mauvaise'.codeUnits);
+    expect(api.passphraseRef!.every((b) => b == 0), isTrue);
+    expect(tester.widget<TextField>(field).controller!.text, isEmpty);
+  });
+
+  testWidgets('readOnlyCheckboxSetsWritable', (tester) async {
+    var api = await openDialog(tester);
+    expect(tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value, isFalse);
+    await tester.tap(find.text(Fr.openReadOnly));
+    await tester.pump();
+    await tester.enterText(field, 'bonne');
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(api.unlockWritable, [false]);
+
+    // préremplie par le réglage « lecture seule », et décochable
+    api = await openDialog(tester, readOnlyPreference: true);
+    expect(tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value, isTrue);
+    await tester.tap(find.text(Fr.openReadOnly));
+    await tester.pump();
+    await tester.enterText(field, 'bonne');
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(api.unlockWritable, [true]);
+  });
+
+  testWidgets('wrongPassphraseWarnsHaptic', (tester) async {
+    final haptics = <String?>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {
+      if (call.method == 'HapticFeedback.vibrate') haptics.add(call.arguments as String?);
+      return null;
+    });
+    addTearDown(() => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, null));
+    await openDialog(tester);
+    await tester.enterText(field, 'mauvaise');
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(haptics, ['HapticFeedbackType.mediumImpact']);
+    final banner = find.ancestor(of: find.text('phrase de passe incorrecte'), matching: find.byType(StatusBanner));
+    expect(tester.widget<StatusBanner>(banner).tone, ChipTone.danger);
+    expect(find.descendant(of: banner, matching: find.byIcon(Icons.error_rounded)), findsOneWidget);
+    await tester.enterText(field, 'bonne');
+    await tester.tap(submit);
+    await tester.pumpAndSettle();
+    expect(haptics, ['HapticFeedbackType.mediumImpact', 'HapticFeedbackType.lightImpact']);
   });
 }
