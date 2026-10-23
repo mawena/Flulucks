@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fluluks/src/app.dart';
 import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/state/app_state.dart';
+import 'package:fluluks/src/strings_fr.dart';
+import 'package:fluluks/src/ui/widgets.dart';
 
 import 'fake_host_api.dart';
 
@@ -19,6 +21,38 @@ Set<bool> selected(WidgetTester tester) =>
     tester.widget<SegmentedButton<bool>>(find.byType(SegmentedButton<bool>)).selected;
 
 void main() {
+  testWidgets('settingsGroupedSections', (tester) async {
+    tester.view.physicalSize = const Size(412, 2400); // toute la liste construite
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    await pumpSettings(tester, FakeHostApi());
+    final headers = tester.widgetList<SectionHeader>(find.byType(SectionHeader)).map((h) => h.title).toList();
+    expect(headers, [Fr.sectionAppearance, Fr.sectionFiles, Fr.sectionDisks, Fr.sectionComfort, Fr.title]);
+    expect(headers, ['Apparence', 'Fichiers', 'Disques', 'Confort', 'Portail']);
+    // chaque réglage sous son en-tête, dans l'ordre
+    const order = [
+      Fr.sectionAppearance, Fr.theme, Fr.display, Fr.showHidden, //
+      Fr.sectionFiles, Fr.builtInViewers, Fr.allFilesTitle, //
+      Fr.sectionDisks, Fr.readOnlySwitch, Fr.autoLock, //
+      Fr.sectionComfort, Fr.haptics, //
+      Fr.title, Fr.help, Fr.about,
+    ];
+    final ys = [for (final t in order) tester.getTopLeft(find.text(t)).dy];
+    expect(ys, [...ys]..sort(), reason: '$ys');
+  });
+
+  testWidgets('hapticsSwitchCallsApi', (tester) async {
+    final api = FakeHostApi()..uiPrefs = UiPrefsMsg(theme: 'dark', haptics: true, welcomeSeen: true);
+    await pumpSettings(tester, api);
+    await tester.scrollUntilVisible(find.text(Fr.haptics), 100);
+    await tester.ensureVisible(find.text(Fr.haptics));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(Fr.haptics));
+    await tester.pump();
+    expect([api.uiPrefs.haptics, api.uiPrefs.theme, api.uiPrefs.welcomeSeen], [false, 'dark', true]);
+    expect(tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, Fr.haptics)).value, isFalse);
+  });
+
   testWidgets('displayChoiceShowsCurrentMode', (tester) async {
     tester.view.physicalSize = const Size(412, 869); // largeur du Pixel 4 XL : pas de débordement
     tester.view.devicePixelRatio = 1;
@@ -69,11 +103,11 @@ void main() {
     await pumpSettings(tester, api);
     await tester.tap(find.text('Grille'));
     await tester.pump();
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Téléphone'));
     await tester.pumpAndSettle();
-    expect(find.byType(GridView), findsOneWidget);
+    expect(find.byType(SliverGrid), findsOneWidget);
   });
 
   testWidgets('autoLockShowsCurrentValue', (tester) async {
@@ -81,6 +115,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
     await pumpSettings(tester, FakeHostApi()..autoLockMinutes = 15);
+    await tester.scrollUntilVisible(find.text('15 min'), 100); // section Disques, sous Apparence et Fichiers
     expect(find.text('Verrouillage automatique'), findsOneWidget);
     expect(find.text('Disques chiffrés, après ce délai sans activité'), findsOneWidget);
     expect(find.text('15 min'), findsOneWidget);
@@ -88,6 +123,9 @@ void main() {
 
   testWidgets('autoLockCallsApi', (tester) async {
     final api = await pumpSettings(tester, FakeHostApi());
+    await tester.scrollUntilVisible(find.text('Jamais'), 100);
+    await tester.ensureVisible(find.text('Jamais'));
+    await tester.pumpAndSettle();
     expect(find.text('Jamais'), findsOneWidget); // désactivé par défaut
     await tester.tap(find.text('Jamais'));
     await tester.pumpAndSettle();

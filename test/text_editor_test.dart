@@ -5,7 +5,8 @@ import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/screens/explorer_screen.dart';
 import 'package:fluluks/src/screens/text_editor_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
-import 'package:fluluks/src/viewers.dart';
+import 'package:fluluks/src/file_types.dart';
+import 'package:fluluks/src/strings_fr.dart';
 
 import 'fake_host_api.dart';
 
@@ -74,7 +75,7 @@ void main() {
     expect(find.text('ligne 1\nligne 2'), findsOneWidget);
     expect(api.calls, isNot(contains('openWith phone /notes.txt')));
     // un fichier sans lecteur de Portail s'ouvre dans une autre application
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('rapport.pdf'));
     await tester.pumpAndSettle();
@@ -119,14 +120,14 @@ void main() {
     await tester.enterText(find.byType(TextField), 'brouillon');
     await tester.pump();
     // Annuler : on reste dans l'éditeur
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
-    expect(find.text('Enregistrer les modifications avant de quitter ?'), findsOneWidget);
+    expect(find.text(Fr.unsavedBody), findsOneWidget);
     await tester.tap(find.text('Annuler'));
     await tester.pumpAndSettle();
     expect(find.byType(TextEditorScreen), findsOneWidget);
     // Ne pas enregistrer : on quitte sans écrire
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ne pas enregistrer'));
     await tester.pumpAndSettle();
@@ -136,7 +137,7 @@ void main() {
     await openNotes(tester);
     await tester.enterText(find.byType(TextField), 'gardé');
     await tester.pump();
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Enregistrer'));
     await tester.pumpAndSettle();
@@ -155,7 +156,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.byTooltip('Enregistrer'));
     await tester.pumpAndSettle();
-    expect(find.text('Le fichier a été modifié depuis son ouverture. Le remplacer par votre version ?'), findsOneWidget);
+    expect(find.text(Fr.textChangedBody), findsOneWidget);
     await tester.tap(find.text('Remplacer'));
     await tester.pumpAndSettle();
     expect(api.writes.map((w) => w.$7), [false, true]);
@@ -166,7 +167,7 @@ void main() {
     final api = api0()..texts['/notes.txt'] = text('figé', ro: 'Stockage en lecture seule');
     await pump(tester, api);
     await openNotes(tester);
-    expect(find.text('Lecture seule : Stockage en lecture seule'), findsOneWidget);
+    expect(find.text(Fr.readOnly('Stockage en lecture seule')), findsOneWidget);
     expect(find.byTooltip('Enregistrer'), findsNothing);
     expect(tester.widget<TextField>(find.byType(TextField)).readOnly, isTrue);
   });
@@ -203,7 +204,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(TextEditorScreen), findsOneWidget);
     expect(find.text('lisez-moi'), findsOneWidget);
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.longPress(find.text('rapport.pdf'));
     await tester.pump();
@@ -227,9 +228,9 @@ void main() {
     expect(find.byType(TextEditorScreen), findsOneWidget); // pas fermé
     expect(find.text('texte précieux'), findsOneWidget);
     expect(find.textContaining('Stockage fermé'), findsOneWidget);
-    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.save)).onPressed, isNull);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.save_rounded)).onPressed, isNull);
     // en partant, on peut abandonner le texte ; l'explorateur du stockage fermé part avec
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     expect(find.text('Enregistrer'), findsNothing); // plus d'enregistrement possible
     await tester.tap(find.text('Ne pas enregistrer'));

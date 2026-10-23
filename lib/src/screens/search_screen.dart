@@ -6,10 +6,17 @@ import 'package:flutter/services.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/states.dart';
+import '../ui/tokens.dart';
+import '../ui/widgets.dart';
+import '../widgets/entry_collection.dart';
+import '../widgets/found_entries.dart';
 import '../widgets/thumb.dart';
 import 'explorer_screen.dart';
+import 'global_search_screen.dart';
 
-/// Recherche par nom sous [path] : lancée 400 ms après la dernière frappe, la précédente annulée.
+/// Recherche par nom sous [path] : lancée 400 ms après la dernière frappe, la précédente annulée. Résultats en
+/// liste ou en grille selon le réglage d'affichage, ouverts dans les lecteurs de Portail.
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key, required this.state, required this.sourceId, required this.path});
 
@@ -30,9 +37,26 @@ class _SearchScreenState extends State<SearchScreen> {
   String _query = '';
   SearchResultMsg? _result;
   String? _error;
+  final _thumbs = ThumbCache();
+  final _text = TextEditingController();
+
+  AppState get state => widget.state;
+
+  @override
+  void initState() {
+    super.initState();
+    state.addListener(_onState);
+  }
+
+  void _onState() {
+    if (mounted) setState(() {}); // réglage d'affichage (liste ou grille)
+  }
 
   @override
   void dispose() {
+    state.removeListener(_onState);
+    _thumbs.dispose();
+    _text.dispose();
     _timer?.cancel();
     if (_running) widget.state.api.cancelSearch();
     super.dispose();
@@ -75,16 +99,22 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  void _open(EntryMsg e) {
-    if (e.type == 'dir') {
-      openExplorer(context, widget.state, widget.sourceId, path: e.path);
-    } else {
-      widget.state.api.openWith(widget.sourceId, e.path).catchError((Object err) {
-        if (mounted && err is PlatformException) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err.message ?? Fr.genericError)));
-        }
-      });
-    }
+  Widget _results(List<EntryMsg> entries) {
+    final items = [
+      for (final e in entries) EntryItem(sourceId: widget.sourceId, entry: e, subtitle: parentOf(e.path)),
+    ];
+    return CustomScrollView(slivers: [
+      EntrySliver(
+        state: state,
+        thumbs: _thumbs,
+        items: items,
+        grid: state.viewPrefs.grid,
+        onTap: (i) => openFoundEntry(context, state, i, items),
+        onLongPress: (i) => showFoundEntrySheet(context, state, i),
+        onMore: (i) => showFoundEntrySheet(context, state, i),
+      ),
+      const SliverNavBarGap(),
+    ]);
   }
 
   @override
@@ -93,6 +123,7 @@ class _SearchScreenState extends State<SearchScreen> {
     return Scaffold(
       appBar: AppBar(
         title: TextField(
+          controller: _text,
           autofocus: true,
           decoration: const InputDecoration(hintText: Fr.searchHint, border: InputBorder.none),
           onChanged: _changed,
@@ -101,30 +132,52 @@ class _SearchScreenState extends State<SearchScreen> {
             _search(q.trim());
           },
         ),
+        actions: [ViewModeButton(state: state)],
+        // « Ici » : ce dossier ; « Partout » : tous les stockages, avec la même saisie
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(Layout.minTouch),
+          // défilable : à 200 % de texte, les deux puces dépassent la largeur d'un téléphone
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: Space.l),
+            child: Row(spacing: Space.s, children: [
+              ChoiceChip(label: const Text(Fr.searchHere), selected: true, onSelected: (_) {}),
+              ChoiceChip(
+                label: const Text(Fr.searchAll),
+                selected: false,
+                onSelected: (_) {
+                  // recherche d'ici arrêtée tout de suite : annulée à la fermeture de l'écran, après la transition,
+                  // elle couperait la recherche globale, déjà lancée
+                  _timer?.cancel();
+                  _gen++;
+                  if (_running) {
+                    _running = false;
+                    state.api.cancelSearch();
+                  }
+                  Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
+                    builder: (_) => GlobalSearchScreen(state: state, initialQuery: _text.text.trim()),
+                  ));
+                },
+              ),
+            ]),
+          ),
+        ),
       ),
       body: Column(children: [
         if (_running) const LinearProgressIndicator(),
         if (r != null && r.truncated)
-          MaterialBanner(content: const Text(Fr.tooManyResults), actions: const [SizedBox.shrink()]),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(Space.l, Space.s, Space.l, 0),
+            child: StatusBanner(icon: Icons.info_outline_rounded, text: Fr.tooManyResults, tone: ChipTone.neutral),
+          ),
         Expanded(
           child: _error != null
-              ? Center(child: Text(_error!))
+              ? ErrorState(message: _error!, onRetry: () => _search(_query))
               : r == null
                   ? const SizedBox.shrink()
                   : r.entries.isEmpty && !_running && _query.isNotEmpty
-                      ? const Center(child: Text(Fr.noResult))
-                      : ListView.builder(
-                          itemCount: r.entries.length,
-                          itemBuilder: (_, i) {
-                            final e = r.entries[i];
-                            return ListTile(
-                              leading: Icon(entryIcon(e)),
-                              title: Text(e.name),
-                              subtitle: Text(parentOf(e.path)),
-                              onTap: () => _open(e),
-                            );
-                          },
-                        ),
+                      ? const EmptyState(icon: Icons.search_off_rounded, title: Fr.noResult)
+                      : _results(r.entries),
         ),
       ]),
     );

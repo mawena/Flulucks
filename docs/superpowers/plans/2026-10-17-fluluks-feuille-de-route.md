@@ -341,12 +341,12 @@ dans le même commit que le travail.
 - [x] T9 — Réglages regroupés, « À propos », licences, aide et bienvenue
 - [x] T10 — Barres du bas et écrans de la phase 10
 - [x] T11 — Accessibilité, grands écrans et tests dorés
-- [ ] T12 — Captures et essais instrumentés sur le Pixel 4 XL
-- [ ] *(utilisateur)* T13 — Essais sur le Pixel
-- [ ] T14 — Documentation
-- [ ] Relecture finale de toute la branche
-- [ ] Fusion `feature/interface` → `develop`
-- [ ] Version `v1.4.0`
+- [x] T12 — Captures et essais instrumentés sur le Pixel 4 XL
+- [x] *(utilisateur)* T13 — Essais sur le Pixel *(2026-10-23 : toute la fiche réussie selon l'utilisateur ; [fiche](../research/2026-10-23-essais-phase11/essais.md))*
+- [x] T14 — Documentation *(README : section « Interface » et trois captures du Pixel)*
+- [x] Relecture finale de toute la branche *(6 points importants corrigés, chacun avec son test ; 430 tests Flutter)*
+- [x] Fusion `feature/interface` → `develop`
+- [x] Version `v1.4.0`
 
 ### Phase 12 — Lecteur vidéo : orientation, pistes et gestes ([plan](2026-10-23-phase12-lecteur-video.md))
 - [x] Plan de la phase 12 écrit *(demande du 2026-10-23 ; spec § 20)*

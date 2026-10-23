@@ -4,6 +4,9 @@ import 'package:flutter/services.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/feedback.dart';
+import '../ui/states.dart';
+import '../ui/tokens.dart';
 
 /// Ouvre la feuille des propriétés de [path] dans [sourceId].
 Future<void> showProperties(BuildContext context, AppState state, String sourceId, String path) =>
@@ -99,7 +102,7 @@ class _PropertiesSheetState extends State<PropertiesSheet> {
       return ListTile(
         title: const Text(Fr.hashLabel),
         subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const SizedBox(height: 4),
+          const SizedBox(height: Space.xs),
           LinearProgressIndicator(value: pct == null ? null : pct / 100),
           if (pct != null) Text(Fr.percent(pct)),
         ]),
@@ -113,18 +116,18 @@ class _PropertiesSheetState extends State<PropertiesSheet> {
         subtitle: SelectableText(h),
         trailing: IconButton(
           tooltip: Fr.copyHash,
-          icon: const Icon(Icons.copy),
+          icon: const Icon(Icons.copy_rounded),
           onPressed: () async {
             await Clipboard.setData(ClipboardData(text: h));
-            if (mounted) ScaffoldMessenger.maybeOf(context)?.showSnackBar(const SnackBar(content: Text(Fr.hashCopied)));
+            if (mounted) showMessage(context, Fr.hashCopied, kind: MessageKind.success);
           },
         ),
       );
     }
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      if (_hashNote != null) Padding(padding: const EdgeInsets.symmetric(horizontal: 16), child: Text(_hashNote!)),
+      if (_hashNote != null) Padding(padding: const EdgeInsets.symmetric(horizontal: Space.l), child: Text(_hashNote!)),
       Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(Space.l),
         child: OutlinedButton(onPressed: _computeHash, child: const Text(Fr.computeHash)),
       ),
     ]);
@@ -140,9 +143,15 @@ class _PropertiesSheetState extends State<PropertiesSheet> {
     final d = _details;
     final Widget body;
     if (_error != null) {
-      body = Padding(padding: const EdgeInsets.all(24), child: Text(_error!));
+      body = ErrorState(
+        message: _error!,
+        onRetry: () {
+          setState(() => _error = null);
+          _load();
+        },
+      );
     } else if (d == null) {
-      body = const Padding(padding: EdgeInsets.all(24), child: Center(child: CircularProgressIndicator()));
+      body = const DelayedProgress();
     } else {
       final f = _folder;
       final size = d.type == 'dir'

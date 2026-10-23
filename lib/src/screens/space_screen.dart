@@ -4,6 +4,10 @@ import 'package:flutter/services.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/feedback.dart';
+import '../ui/states.dart';
+import '../ui/tokens.dart';
+import '../ui/widgets.dart';
 
 /// Ouvre l'analyse de l'espace de [sourceId], depuis sa racine.
 Future<void> openSpace(BuildContext context, AppState state, String sourceId) =>
@@ -60,11 +64,19 @@ class _SpaceScreenState extends State<SpaceScreen> {
       });
     } on PlatformException catch (e) {
       if (!mounted) return;
+      final message = e.message ?? Fr.genericError;
+      // un dossier qui ne s'analyse pas : l'analyse affichée reste, l'échec est signalé
+      if (_stack.isNotEmpty) showMessage(context, message, kind: MessageKind.error);
       setState(() {
-        _error = e.message ?? Fr.genericError;
+        _error = _stack.isEmpty ? message : null;
         _loading = false;
       });
     }
+  }
+
+  void _retry() {
+    setState(() => _error = null);
+    _show(() => state.api.analyzeSpace(widget.sourceId, '/'));
   }
 
   void _open(SpaceItemMsg item) {
@@ -74,27 +86,27 @@ class _SpaceScreenState extends State<SpaceScreen> {
 
   int _pct(int size, int total) => total > 0 ? (size * 100 / total).round() : 0;
 
-  Widget _progress() => Center(
-        child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: 16),
-          const Text(Fr.analyzing),
-          TextButton(onPressed: state.api.cancelAnalysis, child: const Text(Fr.cancel)),
-        ]),
+  Widget _progress() => DelayedProgress(
+        label: Fr.analyzing,
+        action: TextButton(onPressed: state.api.cancelAnalysis, child: const Text(Fr.cancel)),
       );
 
   Widget _folders(SpaceReportMsg r) => ListView(children: [
         ListTile(title: Text(Fr.spaceTotal(r.totalBytes, r.fileCount)), subtitle: Text(r.path)),
-        if (r.truncated) const ListTile(leading: Icon(Icons.warning_amber), title: Text(Fr.spaceTruncated)),
+        if (r.truncated)
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: Space.l, vertical: Space.s),
+            child: StatusBanner(icon: Icons.warning_amber_rounded, text: Fr.spaceTruncated),
+          ),
         const Divider(height: 1),
         for (final c in r.children)
           ListTile(
             key: ValueKey(c.path),
-            leading: Icon(c.isDir ? Icons.folder : Icons.insert_drive_file),
+            leading: Icon(c.isDir ? Icons.folder_rounded : Icons.insert_drive_file_rounded),
             title: Text(c.name, maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(Fr.humanSize(c.size)),
-              const SizedBox(height: 4),
+              const SizedBox(height: Space.xs),
               LinearProgressIndicator(value: r.totalBytes > 0 ? c.size / r.totalBytes : 0),
             ]),
             trailing: Text(Fr.percent(_pct(c.size, r.totalBytes))),
@@ -108,7 +120,7 @@ class _SpaceScreenState extends State<SpaceScreen> {
         for (final e in r.biggest)
           ListTile(
             key: ValueKey(e.path),
-            leading: const Icon(Icons.insert_drive_file),
+            leading: const Icon(Icons.insert_drive_file_rounded),
             title: Text(e.name, maxLines: 1, overflow: TextOverflow.ellipsis),
             subtitle: Text(_parentOf(e.path), maxLines: 1, overflow: TextOverflow.ellipsis),
             trailing: Text(Fr.humanSize(e.size)),
@@ -122,7 +134,7 @@ class _SpaceScreenState extends State<SpaceScreen> {
     if (_loading && r == null) {
       body = _progress();
     } else if (_error != null && r == null) {
-      body = Center(child: Padding(padding: const EdgeInsets.all(32), child: Text(_error!)));
+      body = ErrorState(message: _error!, onRetry: _retry);
     } else {
       body = TabBarView(children: [_folders(r!), _biggest(r)]);
     }
@@ -138,7 +150,7 @@ class _SpaceScreenState extends State<SpaceScreen> {
             title: const Text(Fr.spaceAnalysis),
             bottom: const TabBar(tabs: [Tab(text: Fr.spaceFolders), Tab(text: Fr.biggestFiles)]),
           ),
-          body: body,
+          body: StateSwitcher(child: body),
         ),
       ),
     );

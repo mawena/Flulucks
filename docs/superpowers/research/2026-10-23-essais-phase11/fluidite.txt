@@ -1,0 +1,16 @@
+Fluidité du défilement, Pixel 4 XL, APK profil, integration_test/scroll_test.dart (2 000 éléments, 12 lancers)
+Temps de construction d'une image (fil de l'interface), en ms ; rendu (fil graphique) en ms.
+
+Passage final (2026-10-23, après les corrections) :
+  témoin (ListView Flutter nue)   moyenne 3,4   90e centile  8,4   images en retard  3   rendu 90e  3,5
+  explorateur, liste              moyenne 5,2   90e centile 15,1   images en retard 47   rendu 90e  5,5
+  explorateur, grille             moyenne 4,7   90e centile 13,4   images en retard 48   rendu 90e  6,5
+
+Historique de la liste (90e centile de construction) :
+  32,2 ms  au départ (SliverLayoutBuilder : toutes les lignes reconstruites à chaque image)
+  16,8 ms  marge de la liste tirée de la largeur de l'écran
+  14,8 ms  lignes de hauteur fixe (SliverPrototypeExtentList), coche animée seulement en sélection
+  15,1 ms  bouton ⋮ léger (sans infobulle) ; diagnostic : collection seule 14,9 ms, sans ⋮ 12,3 ms
+
+Seuil retenu : 90e centile de construction ≤ 2 × témoin du même passage, rendu ≤ 16 ms (le seuil absolu de 8 ms du
+plan est inférieur au témoin lui-même dans ce cadre de test).

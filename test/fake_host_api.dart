@@ -106,7 +106,7 @@ class FakeHostApi implements HostApi {
   Future<void> eject(String volumeId) async => ejected.add(volumeId);
 
   @override
-  Future<void> openInFiles(String volumeId) async {}
+  Future<void> openInFiles(String volumeId) async => calls.add('openInFiles $volumeId');
 
   @override
   Future<bool> getReadOnlyPreference() async => readOnlyPreference;
@@ -417,27 +417,41 @@ class FakeHostApi implements HostApi {
 
   /// Réponse de [search] selon la requête ; un completer dans [searchGates] la retarde.
   SearchResultMsg Function(String query) searchResult = (_) => SearchResultMsg(entries: [], truncated: false);
+
+  /// Résultats propres à une source (recherche dans tous les stockages) ; sinon [searchResult].
+  final searchBySource = <String, SearchResultMsg Function(String query)>{};
   final searchGates = <String, Completer<void>>{};
   int searchCancels = 0;
+
+  /// Recherches et annulations, dans l'ordre (« search source chemin requête », « cancel »).
+  final searchLog = <String>[];
 
   @override
   Future<SearchResultMsg> search(String sourceId, String path, String query, bool showHidden) async {
     calls.add('search $sourceId $path $query');
+    searchLog.add('search $sourceId $path $query');
     final gate = searchGates[query];
     if (gate != null) await gate.future;
-    return searchResult(query);
+    return (searchBySource[sourceId] ?? searchResult)(query);
   }
 
   @override
-  Future<void> cancelSearch() async => searchCancels++;
+  Future<void> cancelSearch() async {
+    searchCancels++;
+    searchLog.add('cancel');
+  }
 
   /// Octets rendus par [thumbnail] selon le chemin (null : pas de vignette).
   final thumbs = <String, Uint8List>{};
   final thumbRequests = <String>[];
 
+  /// Les mêmes demandes, avec leur source : `sourceId|chemin`.
+  final thumbSources = <String>[];
+
   @override
   Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx) async {
     thumbRequests.add(path);
+    thumbSources.add('$sourceId|$path');
     return thumbs[path];
   }
 
@@ -449,6 +463,21 @@ class FakeHostApi implements HostApi {
 
   @override
   Future<void> setViewPrefs(ViewPrefsMsg prefs) async => viewPrefs = prefs;
+
+  /// Préférences d'interface ; bienvenue déjà vue : les écrans s'ouvrent sur l'accueil.
+  UiPrefsMsg uiPrefs = UiPrefsMsg(theme: 'system', haptics: true, welcomeSeen: true);
+
+  @override
+  Future<UiPrefsMsg> getUiPrefs() async => uiPrefs;
+
+  @override
+  Future<void> setUiPrefs(UiPrefsMsg prefs) async => uiPrefs = prefs;
+
+  /// Version et appareil montrés par « À propos ».
+  AppInfoMsg appInfo = AppInfoMsg(versionName: '1.4.0', versionCode: 11, androidRelease: '13', device: 'Pixel 4 XL');
+
+  @override
+  Future<AppInfoMsg> getAppInfo() async => appInfo;
 
   @override
   Future<List<FavoriteMsg>> listFavorites() async => favorites;
