@@ -645,7 +645,7 @@ Chaînes : `searchHere` « Ici », `searchAll` « Partout », `searchingIn(label
       USB » ;
   - boutons « Autoriser l'accès » (`requestAllFilesAccess`) et « Commencer » (`welcomeSeen = true`).
 
-- [ ] **Step 1 : tests :**
+- [x] **Step 1 : tests :**
   - `settingsGroupedSections` (les 5 en-têtes, dans l'ordre) ;
   - `hapticsSwitchCallsApi` ;
   - `aboutShowsVersion` (« Version 1.4.0 (11) » depuis le faux pont) ;
@@ -656,10 +656,10 @@ Chaînes : `searchHere` « Ici », `searchAll` « Partout », `searchingIn(label
     accueil directement) ;
   - `welcomeAllowAccessCallsApi` ;
   - `laterKeepsUsbUsable` (« Commencer » sans accès → accueil avec « Disques USB » et la carte d'accès).
-- [ ] **Step 2 :** Run `flutter test test/about_help_welcome_test.dart test/settings_screen_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter.
-- [ ] **Step 4 :** tests verts ; suites JVM et Flutter vertes.
-- [ ] **Step 5 :** commit `feat(interface): réglages regroupés, à propos, licences, aide et bienvenue`.
+- [x] **Step 2 :** Run `flutter test test/about_help_welcome_test.dart test/settings_screen_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter.
+- [x] **Step 4 :** tests verts ; suites JVM et Flutter vertes.
+- [x] **Step 5 :** commit `feat(interface): réglages regroupés, à propos, licences, aide et bienvenue`.
 
 ### Task 10 : barres du bas et écrans de la phase 10
 

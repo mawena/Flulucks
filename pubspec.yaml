@@ -57,6 +57,17 @@ flutter:
   # Logo de l'interface (96 dp de base, variantes 2.0x à 4.0x), rendu par tools/logo/render_icons.py --flutter
   assets:
     - assets/logo/
+    # licences des bibliothèques, montrées par « À propos » (lib/src/licenses.dart)
+    - assets/licenses/
+    - native/third_party/lwext4/LICENSE
+    - native/third_party/ntfs-3g/COPYING
+    - native/third_party/fatfs/LICENSE.txt
+    - native/third_party/libarchive/COPYING
+    - native/third_party/xz/COPYING
+    - native/third_party/xz/COPYING.0BSD
+    - native/third_party/argon2/LICENSE
+    - native/third_party/cjson/LICENSE
+    - native/third_party/mbedtls/LICENSE
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -151,6 +151,19 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     return null;
   }
 
+  /// Préférences d'interface seules, lues avant le premier rendu : thème et bienvenue justes dès la première image.
+  /// Un échec garde les valeurs par défaut ; [refresh] relit tout ensuite.
+  Future<void> loadUiPrefs() async {
+    try {
+      _uiPrefs.value = await api.getUiPrefs();
+    } on PlatformException {
+      // valeurs par défaut
+    }
+  }
+
+  /// Version de Portail et appareil, pour « À propos ».
+  Future<AppInfoMsg> appInfo() => api.getAppInfo();
+
   /// Chargement initial (Kotlin pousse ensuite chaque changement via [onStateChanged]).
   Future<void> refresh() async {
     try {

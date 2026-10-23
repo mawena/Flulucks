@@ -466,6 +466,12 @@ class FakeHostApi implements HostApi {
   @override
   Future<void> setUiPrefs(UiPrefsMsg prefs) async => uiPrefs = prefs;
 
+  /// Version et appareil montrés par « À propos ».
+  AppInfoMsg appInfo = AppInfoMsg(versionName: '1.4.0', versionCode: 11, androidRelease: '13', device: 'Pixel 4 XL');
+
+  @override
+  Future<AppInfoMsg> getAppInfo() async => appInfo;
+
   @override
   Future<List<FavoriteMsg>> listFavorites() async => favorites;
 
