@@ -342,7 +342,7 @@ dans le même commit que le travail.
 - [x] T10 — Barres du bas et écrans de la phase 10
 - [x] T11 — Accessibilité, grands écrans et tests dorés
 - [x] T12 — Captures et essais instrumentés sur le Pixel 4 XL
-- [ ] *(utilisateur)* T13 — Essais sur le Pixel
+- [x] *(utilisateur)* T13 — Essais sur le Pixel *(2026-10-23 : toute la fiche réussie selon l'utilisateur ; [fiche](../research/2026-10-23-essais-phase11/essais.md))*
 - [ ] T14 — Documentation
 - [ ] Relecture finale de toute la branche
 - [ ] Fusion `feature/interface` → `develop`
