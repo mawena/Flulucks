@@ -308,15 +308,24 @@ dans le même commit que le travail.
 - [x] Fusion `feature/compression` → `develop`
 - [x] Version `v1.2.0`
 
-### Phase 10 — Lecteurs intégrés et stockages distants
-- [ ] Plan de la phase 10 écrit
-      *(demande du 2026-10-20, J.1 ; déplacée en phase 9 puis en phase 10 le 2026-10-22)*
-- [ ] Visionneuse d'images (glisser d'une photo à l'autre, zoom)
-- [ ] Lecteur de musique (lecture en arrière-plan, file d'attente du dossier)
-- [ ] Éditeur de fichiers texte (ouvrir, modifier, enregistrer, UTF-8)
-- [ ] Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)
-- [ ] Dossiers distants par FTP, comme source du gestionnaire (parcourir, copier, déplacer, ouvrir)
-- [ ] Dossiers distants par SFTP
+### Phase 10 — Lecteurs intégrés et dossiers distants ([plan](2026-10-23-phase10-lecteurs-distants.md))
+- [x] Plan de la phase 10 écrit
+      *(demande du 2026-10-20, J.1 ; déplacée en phase 9 puis en phase 10 le 2026-10-22 ; spec § 18)*
+- [ ] T1 — Lecture d'images et de textes, enregistrement sûr des textes
+- [ ] T2 — « Ouvrir dans Portail » et éditeur de texte (UTF-8, BOM et fins de ligne gardés)
+- [ ] T3 — Visionneuse d'images (glisser d'une photo à l'autre, zoom)
+- [ ] T4 — Lecture à accès aléatoire et fournisseur de flux
+- [ ] T5 — Serveurs enregistrés et sources distantes (secrets chiffrés par le Keystore)
+- [ ] T6 — Dossiers distants dans le gestionnaire
+- [ ] T7 — Dossiers distants par FTP
+- [ ] T8 — Dossiers distants par SFTP (empreinte du serveur, clé privée)
+- [ ] T9 — Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)
+- [ ] T10 — Lecteur de musique (lecture en arrière-plan, file d'attente du dossier)
+- [ ] T11 — Essais instrumentés sur le Pixel
+- [ ] *(utilisateur)* T12 — Essais sur le Pixel
+- [ ] T13 — Documentation
+- [ ] Relecture finale de toute la branche
+- [ ] Fusion `feature/lecteurs-distants` → `develop`
 - [ ] Version `v1.3.0`
 
 ### Phase 11 — Vérification et réparation des disques
