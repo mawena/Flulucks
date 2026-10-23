@@ -103,7 +103,7 @@ void main() {
     await pumpSettings(tester, api);
     await tester.tap(find.text('Grille'));
     await tester.pump();
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Téléphone'));
     await tester.pumpAndSettle();

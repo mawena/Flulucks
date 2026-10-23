@@ -132,7 +132,7 @@ void main() {
     await tester.tap(find.text(Fr.trash));
     await tester.pumpAndSettle();
     expect(find.byType(TrashScreen), findsOneWidget);
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     // menu de l'explorateur, à la racine seulement
     await push(tester, ExplorerScreen(state: state, sourceId: 'phone'));
@@ -141,7 +141,7 @@ void main() {
     await tester.tap(find.text('Corbeille'));
     await tester.pumpAndSettle();
     expect(find.byType(TrashScreen), findsOneWidget);
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('DCIM'));
     await tester.pumpAndSettle();

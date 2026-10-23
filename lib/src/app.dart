@@ -36,7 +36,7 @@ class _FluLuksAppState extends State<FluLuksApp> {
         navigatorKey: _navigatorKey,
         child: child!,
       ),
-      localizationsDelegates: const [FrMaterialLocalizations.delegate],
+      localizationsDelegates: const [FrMaterialLocalizations.delegate, FrWidgetsLocalizations.delegate],
       // bienvenue tant qu'elle n'a pas été vue, puis l'accueil
       home: ValueListenableBuilder<UiPrefsMsg>(
         valueListenable: widget.state.uiPrefsListenable,

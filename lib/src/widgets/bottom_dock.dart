@@ -25,10 +25,15 @@ class BottomDock extends StatelessWidget {
     final hosted = DockHost.maybeOf(context) != null;
     return ListenableBuilder(
       listenable: state,
-      builder: (context, _) => DockSurface(children: [
-        if (pending != null && (state.clipboard != null || state.pendingExtract != null)) pending!,
-        if (!hosted && state.transfer != null) TransferBar(state: state),
-      ]),
+      builder: (context, _) {
+        final bars = [
+          if (pending != null && (state.clipboard != null || state.pendingExtract != null)) pending!,
+          if (!hosted && state.transfer != null) TransferBar(state: state),
+        ];
+        // vide : la place de la barre de navigation d'Android, que le Scaffold retire du corps de l'écran
+        if (bars.isEmpty) return SizedBox(height: MediaQuery.paddingOf(context).bottom);
+        return DockSurface(children: bars);
+      },
     );
   }
 }

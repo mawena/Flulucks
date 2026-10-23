@@ -86,7 +86,7 @@ void main() {
     expect(api.calls.where((c) => c.startsWith('spaceChildren')).length, 1);
 
     // retour : le niveau précédent, sans quitter l'écran
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     expect(find.text(Fr.percent(85)), findsOneWidget);
     expect(find.byType(SpaceScreen), findsOneWidget);

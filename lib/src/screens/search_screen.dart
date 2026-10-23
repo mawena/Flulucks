@@ -113,6 +113,7 @@ class _SearchScreenState extends State<SearchScreen> {
         onLongPress: (i) => showFoundEntrySheet(context, state, i),
         onMore: (i) => showFoundEntrySheet(context, state, i),
       ),
+      const SliverNavBarGap(),
     ]);
   }
 
@@ -144,9 +145,19 @@ class _SearchScreenState extends State<SearchScreen> {
               ChoiceChip(
                 label: const Text(Fr.searchAll),
                 selected: false,
-                onSelected: (_) => Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
-                  builder: (_) => GlobalSearchScreen(state: state, initialQuery: _text.text.trim()),
-                )),
+                onSelected: (_) {
+                  // recherche d'ici arrêtée tout de suite : annulée à la fermeture de l'écran, après la transition,
+                  // elle couperait la recherche globale, déjà lancée
+                  _timer?.cancel();
+                  _gen++;
+                  if (_running) {
+                    _running = false;
+                    state.api.cancelSearch();
+                  }
+                  Navigator.of(context).pushReplacement(MaterialPageRoute<void>(
+                    builder: (_) => GlobalSearchScreen(state: state, initialQuery: _text.text.trim()),
+                  ));
+                },
               ),
             ]),
           ),

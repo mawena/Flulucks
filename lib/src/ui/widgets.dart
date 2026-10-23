@@ -144,3 +144,17 @@ class AdaptiveBody extends StatelessWidget {
         child: ConstrainedBox(constraints: BoxConstraints(maxWidth: maxWidth), child: child),
       );
 }
+
+/// [padding] d'une liste, plus la barre de navigation d'Android en bas : l'application est dessinée bord à bord, et
+/// une liste aux marges explicites ne la compte pas d'elle-même (sa fin passerait sous une barre à trois boutons).
+EdgeInsets listPadding(BuildContext context, EdgeInsets padding) =>
+    padding.copyWith(bottom: padding.bottom + MediaQuery.paddingOf(context).bottom);
+
+/// Dernier élément d'une liste à slivers : la place de la barre de navigation d'Android (voir [listPadding]).
+class SliverNavBarGap extends StatelessWidget {
+  const SliverNavBarGap({super.key});
+
+  @override
+  Widget build(BuildContext context) =>
+      SliverToBoxAdapter(child: SizedBox(height: MediaQuery.paddingOf(context).bottom));
+}

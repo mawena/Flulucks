@@ -121,7 +121,7 @@ class _FormatScreenState extends State<FormatScreen> {
         body: AdaptiveBody(
           maxWidth: Layout.maxForm,
           child: ListView(
-            padding: const EdgeInsets.all(Space.l),
+            padding: listPadding(context, const EdgeInsets.all(Space.l)),
             children: [
               Text(widget.disk.name, style: theme.textTheme.titleMedium),
               Text(size, style: numeric(theme.textTheme.bodySmall!)),

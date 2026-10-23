@@ -76,10 +76,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('DCIM'), findsOneWidget); // fil d'Ariane : dossier ouvert
     expect(titles(tester), ['photo.jpg']);
-    await tester.pageBack(); // remonte d'un dossier
+    await tester.tap(find.byTooltip('Retour')); // remonte d'un dossier
     await tester.pumpAndSettle();
     expect(titles(tester), ['DCIM', 'a.jpg', 'b.txt']);
-    await tester.pageBack(); // puis l'accueil
+    await tester.tap(find.byTooltip('Retour')); // puis l'accueil
     await tester.pumpAndSettle();
     expect(find.byType(ExplorerScreen), findsNothing);
   });
@@ -373,7 +373,7 @@ void main() {
     await tester.pump();
     expect(find.text(Fr.transferDone(1)), findsOneWidget);
     await tester.pump(const Duration(seconds: 5)); // résultat vu
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     final nav = tester.state<NavigatorState>(find.byType(Navigator));
     nav.push(MaterialPageRoute<void>(builder: (_) => ExplorerScreen(state: state, sourceId: 'phone', path: '/DCIM')));

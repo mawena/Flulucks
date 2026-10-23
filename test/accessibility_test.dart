@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:fluluks/src/licenses.dart';
 import 'package:fluluks/src/screens/about_screen.dart';
 import 'package:fluluks/src/screens/explorer_screen.dart';
 import 'package:fluluks/src/screens/filter_screen.dart';
@@ -55,4 +57,44 @@ void main() {
       });
     }
   }
+
+  // relecture finale de la phase 11 : TalkBack lit Portail en français, textes de Material compris
+  group('noEnglishInSemantics', () {
+    const english = {
+      'Back', 'Close', 'Dismiss', 'Show menu', 'More', 'Search', 'Clear', 'Delete', 'Expand', 'Collapse', //
+      'Expanded', 'Collapsed', 'Not selected', 'Selected', 'Refresh', 'Dialog', 'Alert', 'Popup menu', 'Scrim',
+      'Bottom Sheet', 'Cut', 'Copy', 'Paste', 'Select all', 'Share', 'Look Up', 'Search Web', 'Scan text',
+    };
+    bool isEnglish(String s) => english.contains(s.trim()) || s.toLowerCase().contains('double tap');
+    for (final screen in screens) {
+      testWidgets(screen, (t) async {
+        final h = t.ensureSemantics();
+        await pumpScreen(t, screen);
+        final found = <String>[];
+        void visit(SemanticsNode n) {
+          final d = n.getSemanticsData();
+          for (final s in [d.label, d.hint, d.value, d.tooltip]) {
+            if (isEnglish(s)) found.add(s);
+          }
+          n.visitChildren((c) {
+            visit(c);
+            return true;
+          });
+        }
+
+        for (final v in RendererBinding.instance.renderViews) {
+          final root = v.owner?.semanticsOwner?.rootSemanticsNode;
+          if (root != null) visit(root);
+        }
+        expect(found, isEmpty);
+        h.dispose();
+      });
+    }
+  });
+
+  test('textToolbarInFrench', () {
+    const l = FrMaterialLocalizations();
+    expect([l.cutButtonLabel, l.copyButtonLabel, l.pasteButtonLabel, l.selectAllButtonLabel],
+        ['Couper', 'Copier', 'Coller', 'Tout sélectionner']);
+  });
 }

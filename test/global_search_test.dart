@@ -5,12 +5,13 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fluluks/src/app.dart';
 import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/screens/global_search_screen.dart';
+import 'package:fluluks/src/screens/image_viewer_screen.dart';
 import 'package:fluluks/src/screens/search_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
 import 'package:fluluks/src/strings_fr.dart';
 import 'package:fluluks/src/ui/states.dart';
 
-import 'explorer_screen_test.dart' show f, src;
+import 'explorer_screen_test.dart' show f, png, src;
 import 'fake_host_api.dart';
 
 SearchResultMsg res(List<EntryMsg> l, {bool truncated = false}) => SearchResultMsg(entries: l, truncated: truncated);
@@ -109,7 +110,7 @@ void main() {
     await pumpGlobal(tester, api);
     await tester.enterText(find.byType(TextField), 'a');
     await tester.pump(const Duration(milliseconds: 401));
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     expect(api.searchCancels, 1);
   });
@@ -141,6 +142,52 @@ void main() {
     expect(find.byType(SearchScreen), findsNothing);
     expect(tester.widget<TextField>(find.byType(TextField)).controller!.text, 'mer');
     expect(api.calls, containsAll(['search phone / mer', 'search v1 / mer']));
+  });
+
+  // relecture finale de la phase 11
+  testWidgets('closedStorageLeavesGlobalSearch', (tester) async {
+    final api = api0()
+      ..images['/DCIM/mer.jpg'] = png
+      ..searchBySource['phone'] = ((_) => res([f('/mer.txt')]))
+      ..searchBySource['v1'] = ((_) => res([f('/DCIM/mer.jpg')]));
+    final state = await pumpGlobal(tester, api);
+    await type(tester, 'mer');
+    await tester.tap(find.text('mer.jpg'));
+    await tester.pumpAndSettle();
+    expect(find.byType(ImageViewerScreen), findsOneWidget);
+    api.sources = [src('phone'), src('sd:1', kind: 'removable', label: 'Carte SD')]; // disque verrouillé
+    await state.refreshSources();
+    await tester.pumpAndSettle();
+    expect(find.byType(ImageViewerScreen), findsNothing); // plus rien du disque à l'écran
+    expect(find.byType(GlobalSearchScreen), findsOneWidget);
+    expect(find.text('Données · 1'), findsNothing);
+    expect(find.text('mer.jpg'), findsNothing);
+    expect(find.text('Téléphone · 1'), findsOneWidget);
+    expect(find.text(Fr.volumeClosed), findsOneWidget);
+  });
+
+  testWidgets('everywhereKeepsGlobalSearchRunning', (tester) async {
+    final gate = Completer<void>();
+    final api = api0()..searchGates['mer'] = gate;
+    final state = AppState(api);
+    await state.refresh();
+    await tester.pumpWidget(FluLuksApp(state: state));
+    tester.state<NavigatorState>(find.byType(Navigator)).push(
+        MaterialPageRoute<void>(builder: (_) => SearchScreen(state: state, sourceId: 'phone', path: '/DCIM')));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'mer');
+    await tester.pump(const Duration(milliseconds: 401)); // recherche locale en cours
+    await tester.tap(find.text(Fr.searchAll));
+    for (var i = 0; i < 10; i++) {
+      await tester.pump(const Duration(milliseconds: 100)); // transition finie : l'écran local est fermé
+    }
+    expect(find.byType(SearchScreen), findsNothing);
+    // la recherche locale est annulée avant que la globale commence, jamais après
+    final log = api.searchLog;
+    expect(log, contains('search phone / mer'));
+    expect(log.lastIndexOf('cancel'), lessThan(log.indexOf('search phone / mer')));
+    gate.complete();
+    await tester.pumpAndSettle();
   });
 
   testWidgets('emptyQueryShowsHint', (tester) async {

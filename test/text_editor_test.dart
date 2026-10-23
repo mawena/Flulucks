@@ -75,7 +75,7 @@ void main() {
     expect(find.text('ligne 1\nligne 2'), findsOneWidget);
     expect(api.calls, isNot(contains('openWith phone /notes.txt')));
     // un fichier sans lecteur de Portail s'ouvre dans une autre application
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('rapport.pdf'));
     await tester.pumpAndSettle();
@@ -120,14 +120,14 @@ void main() {
     await tester.enterText(find.byType(TextField), 'brouillon');
     await tester.pump();
     // Annuler : on reste dans l'éditeur
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     expect(find.text(Fr.unsavedBody), findsOneWidget);
     await tester.tap(find.text('Annuler'));
     await tester.pumpAndSettle();
     expect(find.byType(TextEditorScreen), findsOneWidget);
     // Ne pas enregistrer : on quitte sans écrire
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ne pas enregistrer'));
     await tester.pumpAndSettle();
@@ -137,7 +137,7 @@ void main() {
     await openNotes(tester);
     await tester.enterText(find.byType(TextField), 'gardé');
     await tester.pump();
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(TextButton, 'Enregistrer'));
     await tester.pumpAndSettle();
@@ -204,7 +204,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(TextEditorScreen), findsOneWidget);
     expect(find.text('lisez-moi'), findsOneWidget);
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.longPress(find.text('rapport.pdf'));
     await tester.pump();
@@ -230,7 +230,7 @@ void main() {
     expect(find.textContaining('Stockage fermé'), findsOneWidget);
     expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.save_rounded)).onPressed, isNull);
     // en partant, on peut abandonner le texte ; l'explorateur du stockage fermé part avec
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     expect(find.text('Enregistrer'), findsNothing); // plus d'enregistrement possible
     await tester.tap(find.text('Ne pas enregistrer'));

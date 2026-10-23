@@ -14,7 +14,8 @@ class HelpScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text(Fr.help)),
       body: AdaptiveBody(
-        child: ListView(padding: const EdgeInsets.symmetric(vertical: Space.s), children: [
+        child: ListView(
+            padding: listPadding(context, const EdgeInsets.symmetric(vertical: Space.s)), children: [
           for (final (question, answer) in Fr.helpEntries)
             ExpansionTile(
               title: Text(question, style: theme.textTheme.titleMedium),

@@ -184,6 +184,16 @@ void main() {
     expect(undone, 1);
   });
 
+  testWidgets('actionMessageGoesAway', (tester) async {
+    await launch<void>(tester, (c) async {
+      showMessage(c, Fr.movedToTrash(1), actionLabel: Fr.undo, onAction: () {});
+    });
+    expect(find.text(Fr.movedToTrash(1)), findsOneWidget);
+    await tester.pump(const Duration(seconds: 11));
+    await tester.pumpAndSettle();
+    expect(find.text(Fr.movedToTrash(1)), findsNothing); // ne suit pas l'utilisateur sur les autres écrans
+  });
+
   testWidgets('hapticsHonourPreference', (tester) async {
     final calls = <String?>[];
     tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async {

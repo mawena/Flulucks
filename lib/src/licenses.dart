@@ -35,8 +35,9 @@ Stream<LicenseEntry> _collect() async* {
   }
 }
 
-/// Textes de la page des licences de Material en français, sans la dépendance `flutter_localizations` ; le reste
-/// garde les textes par défaut (les infobulles de Portail passent par [Fr]).
+/// Textes de Material en français, sans la dépendance `flutter_localizations` : page des licences, infobulles
+/// (Retour, Fermer…), barre d'édition du texte et annonces de TalkBack (dialogues, volets dépliables). Les sélecteurs
+/// de date et d'heure, absents de Portail, gardent les textes par défaut.
 class FrMaterialLocalizations extends DefaultMaterialLocalizations {
   const FrMaterialLocalizations();
 
@@ -50,6 +51,166 @@ class FrMaterialLocalizations extends DefaultMaterialLocalizations {
 
   @override
   String get viewLicensesButtonLabel => Fr.viewLicenses;
+
+  @override
+  String aboutListTileTitle(String applicationName) => 'À propos de $applicationName';
+
+  // infobulles et boutons
+  @override
+  String get backButtonTooltip => 'Retour';
+  @override
+  String get closeButtonTooltip => 'Fermer';
+  @override
+  String get closeButtonLabel => 'Fermer';
+  @override
+  String get clearButtonTooltip => 'Effacer le texte';
+  @override
+  String get deleteButtonTooltip => 'Supprimer';
+  @override
+  String get moreButtonTooltip => 'Plus';
+  @override
+  String get showMenuTooltip => 'Afficher le menu';
+  @override
+  String get openAppDrawerTooltip => 'Ouvrir le menu de navigation';
+  @override
+  String get cancelButtonLabel => 'Annuler';
+  @override
+  String get continueButtonLabel => 'Continuer';
+  @override
+  String get saveButtonLabel => 'Enregistrer';
+  @override
+  String get okButtonLabel => 'OK';
+  @override
+  String get searchFieldLabel => 'Rechercher';
+  @override
+  String get nextPageTooltip => 'Page suivante';
+  @override
+  String get previousPageTooltip => 'Page précédente';
+
+  // barre d'édition du texte
+  @override
+  String get cutButtonLabel => 'Couper';
+  @override
+  String get copyButtonLabel => 'Copier';
+  @override
+  String get pasteButtonLabel => 'Coller';
+  @override
+  String get selectAllButtonLabel => 'Tout sélectionner';
+  @override
+  String get lookUpButtonLabel => 'Rechercher';
+  @override
+  String get searchWebButtonLabel => 'Rechercher sur le Web';
+  @override
+  String get shareButtonLabel => 'Partager';
+  @override
+  String get scanTextButtonLabel => 'Scanner du texte';
+
+  // annonces de TalkBack
+  @override
+  String get modalBarrierDismissLabel => 'Fermer';
+  @override
+  String get menuDismissLabel => 'Fermer le menu';
+  @override
+  String get dialogLabel => 'Boîte de dialogue';
+  @override
+  String get alertDialogLabel => 'Alerte';
+  @override
+  String get popupMenuLabel => 'Menu contextuel';
+  @override
+  String get menuBarMenuLabel => 'Menu de la barre de menu';
+  @override
+  String get drawerLabel => 'Menu de navigation';
+  @override
+  String get bottomSheetLabel => 'Feuille du bas';
+  @override
+  String get scrimLabel => 'Fond';
+  @override
+  String scrimOnTapHint(String modalRouteContentName) => 'Fermer $modalRouteContentName';
+  @override
+  String get refreshIndicatorSemanticLabel => 'Actualiser';
+  @override
+  String get selectedDateLabel => 'Sélectionné';
+  @override
+  String get expandedIconTapHint => 'Réduire';
+  @override
+  String get collapsedIconTapHint => 'Développer';
+  @override
+  String get expansionTileExpandedHint => 'appuyez deux fois pour réduire';
+  @override
+  String get expansionTileCollapsedHint => 'appuyez deux fois pour développer';
+  @override
+  String get expansionTileExpandedTapHint => 'Réduire';
+  @override
+  String get expansionTileCollapsedTapHint => 'Développer pour en savoir plus';
+  @override
+  String get expandedHint => 'Réduit';
+  @override
+  String get collapsedHint => 'Développé';
+  @override
+  String get reorderItemUp => 'Déplacer vers le haut';
+  @override
+  String get reorderItemDown => 'Déplacer vers le bas';
+  @override
+  String get reorderItemLeft => 'Déplacer vers la gauche';
+  @override
+  String get reorderItemRight => 'Déplacer vers la droite';
+  @override
+  String get reorderItemToEnd => 'Déplacer à la fin';
+  @override
+  String get reorderItemToStart => 'Déplacer au début';
+}
+
+/// Textes des widgets de base en français (barre d'édition du texte, cases radio pour TalkBack).
+class FrWidgetsLocalizations extends DefaultWidgetsLocalizations {
+  const FrWidgetsLocalizations();
+
+  static const LocalizationsDelegate<WidgetsLocalizations> delegate = _FrWidgetsDelegate();
+
+  @override
+  String get cutButtonLabel => 'Couper';
+  @override
+  String get copyButtonLabel => 'Copier';
+  @override
+  String get pasteButtonLabel => 'Coller';
+  @override
+  String get selectAllButtonLabel => 'Tout sélectionner';
+  @override
+  String get lookUpButtonLabel => 'Rechercher';
+  @override
+  String get searchWebButtonLabel => 'Rechercher sur le Web';
+  @override
+  String get shareButtonLabel => 'Partager';
+  @override
+  String get radioButtonUnselectedLabel => 'Non sélectionné';
+  @override
+  String get searchResultsFound => 'Résultats trouvés';
+  @override
+  String get noResultsFound => 'Aucun résultat';
+  @override
+  String get reorderItemUp => 'Déplacer vers le haut';
+  @override
+  String get reorderItemDown => 'Déplacer vers le bas';
+  @override
+  String get reorderItemLeft => 'Déplacer vers la gauche';
+  @override
+  String get reorderItemRight => 'Déplacer vers la droite';
+  @override
+  String get reorderItemToEnd => 'Déplacer à la fin';
+  @override
+  String get reorderItemToStart => 'Déplacer au début';
+}
+
+class _FrWidgetsDelegate extends LocalizationsDelegate<WidgetsLocalizations> {
+  const _FrWidgetsDelegate();
+
+  @override
+  bool isSupported(Locale locale) => true;
+
+  @override
+  Future<WidgetsLocalizations> load(Locale locale) => SynchronousFuture(const FrWidgetsLocalizations());
+
+  @override
+  bool shouldReload(_FrWidgetsDelegate old) => false;
 }
 
 class _FrMaterialDelegate extends LocalizationsDelegate<MaterialLocalizations> {

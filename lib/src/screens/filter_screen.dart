@@ -5,6 +5,7 @@ import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
 import '../ui/states.dart';
+import '../ui/widgets.dart';
 import '../widgets/entry_collection.dart';
 import '../widgets/found_entries.dart';
 import '../widgets/thumb.dart';
@@ -106,6 +107,7 @@ class _FilterScreenState extends State<FilterScreen> {
           onLongPress: (i) => showFoundEntrySheet(context, state, i),
           onMore: (i) => showFoundEntrySheet(context, state, i),
         ),
+        const SliverNavBarGap(),
       ],
     );
   }

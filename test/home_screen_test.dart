@@ -128,7 +128,7 @@ void main() {
     await menu(tester, Fr.sourceMenu('Téléphone'), Fr.trash);
     expect(find.byType(TrashScreen), findsOneWidget);
     expect(api.calls, contains('listTrash phone'));
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip(Fr.sourceMenu('Téléphone')));
     await tester.pumpAndSettle();
@@ -237,7 +237,7 @@ void main() {
     await tester.pump();
     expect(api.accessRequests, 1);
     api.allFilesAccess = true;
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
   });
 
@@ -298,7 +298,7 @@ void main() {
     await tester.pump();
     expect(api.readOnlyPreference, isTrue);
     expect(tester.widget<SwitchListTile>(sw).value, isTrue);
-    await tester.pageBack();
+    await tester.tap(find.byTooltip('Retour'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Ouvrir'));
     await tester.pump();

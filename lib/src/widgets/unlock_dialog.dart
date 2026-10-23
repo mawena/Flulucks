@@ -99,8 +99,11 @@ class _UnlockDialogState extends State<UnlockDialog> {
             TextField(
               controller: _controller,
               obscureText: _obscure,
+              // affichée, elle n'est plus un champ de mot de passe pour le clavier : ni suggestions, ni apprentissage
+              keyboardType: _obscure ? null : TextInputType.visiblePassword,
               autocorrect: false,
               enableSuggestions: false,
+              enableIMEPersonalizedLearning: false,
               enabled: !_busy,
               autofocus: true,
               decoration: InputDecoration(

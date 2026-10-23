@@ -423,16 +423,23 @@ class FakeHostApi implements HostApi {
   final searchGates = <String, Completer<void>>{};
   int searchCancels = 0;
 
+  /// Recherches et annulations, dans l'ordre (« search source chemin requête », « cancel »).
+  final searchLog = <String>[];
+
   @override
   Future<SearchResultMsg> search(String sourceId, String path, String query, bool showHidden) async {
     calls.add('search $sourceId $path $query');
+    searchLog.add('search $sourceId $path $query');
     final gate = searchGates[query];
     if (gate != null) await gate.future;
     return (searchBySource[sourceId] ?? searchResult)(query);
   }
 
   @override
-  Future<void> cancelSearch() async => searchCancels++;
+  Future<void> cancelSearch() async {
+    searchCancels++;
+    searchLog.add('cancel');
+  }
 
   /// Octets rendus par [thumbnail] selon le chemin (null : pas de vignette).
   final thumbs = <String, Uint8List>{};

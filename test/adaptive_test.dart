@@ -62,4 +62,31 @@ void main() {
       SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
     });
   });
+
+  // relecture finale de la phase 11 : application bord à bord, barre de navigation d'Android à trois boutons
+  group('noContentUnderNavigationBar', () {
+    const bar = 48.0;
+    for (final screen in screens) {
+      testWidgets(screen, (t) async {
+        t.view.padding = const FakeViewPadding(bottom: bar);
+        t.view.viewPadding = const FakeViewPadding(bottom: bar);
+        await pumpScreen(t, screen);
+        for (final s in t.stateList<ScrollableState>(find.byType(Scrollable))) {
+          final p = s.position;
+          if (p.axis == Axis.vertical && p.hasContentDimensions) p.jumpTo(p.maxScrollExtent); // tout en bas
+        }
+        await t.pumpAndSettle();
+        final size = t.view.physicalSize / t.view.devicePixelRatio;
+        final under = <String>[];
+        for (final e in [...find.byType(Text).evaluate(), ...find.byType(Icon).evaluate()]) {
+          final box = e.renderObject;
+          if (box is! RenderBox || !box.attached || !box.hasSize || box.size.isEmpty) continue;
+          final r = box.localToGlobal(Offset.zero) & box.size;
+          final onScreen = r.top < size.height && r.right > 0 && r.left < size.width;
+          if (onScreen && r.bottom > size.height - bar + 0.5) under.add('${e.widget} $r');
+        }
+        expect(under, isEmpty, reason: 'sous la barre de navigation');
+      });
+    }
+  });
 }

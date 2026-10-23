@@ -111,6 +111,17 @@ void main() {
     expect(tester.widget<TextField>(field).controller!.text, isEmpty);
   });
 
+  testWidgets('visiblePassphraseNotLearned', (tester) async {
+    await openDialog(tester);
+    await tester.tap(find.byTooltip(Fr.showPassphrase));
+    await tester.pump();
+    final tf = tester.widget<TextField>(field);
+    expect(tf.obscureText, isFalse);
+    expect(tf.enableIMEPersonalizedLearning, isFalse); // le clavier ne l'apprend pas
+    expect(tf.keyboardType, TextInputType.visiblePassword);
+    expect(tf.enableSuggestions, isFalse);
+  });
+
   testWidgets('readOnlyCheckboxSetsWritable', (tester) async {
     var api = await openDialog(tester);
     expect(tester.widget<CheckboxListTile>(find.byType(CheckboxListTile)).value, isFalse);

@@ -27,6 +27,8 @@ void showMessage(
     ..hideCurrentSnackBar()
     ..showSnackBar(SnackBar(
       behavior: SnackBarBehavior.floating,
+      // avec une action, Flutter le garderait jusqu'à un geste, même sur les écrans suivants
+      persist: false,
       content: Row(children: [
         ExcludeSemantics(child: Icon(icon, color: color)),
         const SizedBox(width: Space.m),

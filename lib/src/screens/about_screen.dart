@@ -32,7 +32,7 @@ class _AboutScreenState extends State<AboutScreen> {
           final info = snap.data; // absente si le pont échoue : la page reste utile sans la version
           return AdaptiveBody(
             maxWidth: Layout.maxForm,
-            child: ListView(padding: const EdgeInsets.all(Space.xl), children: [
+            child: ListView(padding: listPadding(context, const EdgeInsets.all(Space.xl)), children: [
               const Center(child: BrandMark(size: 72)),
               const SizedBox(height: Space.l),
               Text(Fr.title, style: theme.textTheme.headlineSmall, textAlign: TextAlign.center),

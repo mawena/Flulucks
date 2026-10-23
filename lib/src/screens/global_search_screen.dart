@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/feedback.dart';
 import '../ui/states.dart';
 import '../ui/tokens.dart';
 import '../ui/widgets.dart';
@@ -66,7 +67,22 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
   }
 
   void _onState() {
-    if (mounted) setState(() {}); // réglage d'affichage (liste ou grille)
+    if (!mounted) return;
+    // stockage disparu (verrouillage, éjection, débranchement) : plus rien de lui à l'écran, ni ses résultats ni une
+    // visionneuse ouverte depuis eux ; l'éditeur qui garde un texte non enregistré passe d'abord, comme dans
+    // l'explorateur
+    final open = {for (final s in state.sources) s.id};
+    final gone = {
+      for (final g in _groups)
+        if (!open.contains(g.source.id)) g.source.id,
+    };
+    if (gone.isNotEmpty && !state.editorHolding) {
+      _groups.removeWhere((g) => gone.contains(g.source.id));
+      if ([for (final id in gone) state.takeClosedNotice(id)].contains(true)) showMessage(context, Fr.volumeClosed);
+      final route = ModalRoute.of(context);
+      if (route != null && route.isActive && !route.isCurrent) Navigator.of(context).popUntil((r) => r == route);
+    }
+    setState(() {}); // et réglage d'affichage (liste ou grille)
   }
 
   @override
@@ -148,7 +164,10 @@ class _GlobalSearchScreenState extends State<GlobalSearchScreen> {
       if (_error != null) return ErrorState(key: const ValueKey('error'), message: _error!, onRetry: () => _search(_query));
       return const EmptyState(key: ValueKey('none'), icon: Icons.search_off_rounded, title: Fr.noResult);
     }
-    return CustomScrollView(key: const ValueKey('results'), slivers: [for (final g in _groups) ..._group(g)]);
+    return CustomScrollView(key: const ValueKey('results'), slivers: [
+      for (final g in _groups) ..._group(g),
+      const SliverNavBarGap(),
+    ]);
   }
 
   @override

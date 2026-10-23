@@ -169,7 +169,7 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
         maxWidth: Layout.maxForm,
         child: Form(
           key: _form,
-          child: ListView(padding: const EdgeInsets.all(Space.l), children: [
+          child: ListView(padding: listPadding(context, const EdgeInsets.all(Space.l)), children: [
             SegmentedButton<String>(
               segments: const [
                 ButtonSegment(value: 'sftp', label: Text('SFTP')),
