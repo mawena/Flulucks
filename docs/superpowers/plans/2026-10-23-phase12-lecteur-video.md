@@ -236,7 +236,7 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
     `fun cancel(): Outcome`. `dispatch` : l'activité passe l'événement au lecteur ; `cancelChildren` : elle lui envoie
     d'abord un `ACTION_CANCEL` (le geste lui est retiré).
 
-- [ ] **Step 1 : tests en échec** (`TimeTextTest`, puis la partie glissement de `SeekGesturesTest` ; densité 2,
+- [x] **Step 1 : tests en échec** (`TimeTextTest`, puis la partie glissement de `SeekGesturesTest` ; densité 2,
   seuil 16 px, largeur 1 000 px, lecture à 60 000 ms sur 600 000 ms)
 
 ```kotlin
@@ -248,13 +248,13 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
     assertTrue(g.down(100f, 500f, 0, 1000, false, pb).dispatch)
     val start = g.move(140f, 502f)                           // au-delà du seuil : le geste est pris
     assertFalse(start.dispatch); assertTrue(start.cancelChildren)
-    assertEquals(Preview(66_000, 6_000), start.effect)       // 40 px
+    assertEquals(Preview(63_000, 3_000), start.effect)       // 40 px = 20 dp = 3 s
     assertEquals(Preview(75_000, 15_000), g.move(300f, 510f).effect)
     val end = g.up(300f, 510f, 400)
     assertFalse(end.dispatch); assertEquals(DragEnd(75_000, 15_000), end.effect)
 }
 @Test fun dragSeeksOnlyOnRelease() // aucun effet DragEnd avant up, un seul après
-@Test fun dragLeftRewinds() // 100 → 0 px : Preview(45_000, -15_000)
+@Test fun dragLeftRewinds() // 300 → 100 px : Preview(45_000, -15_000)
 @Test fun dragClampsToDuration() // lecture à 595 000 : Preview(600_000, 5_000) ; à 2 000 vers la gauche : Preview(0, -2_000)
 @Test fun dragUnknownDurationOnlyClampsAtZero() // durationMs = -1 : +15 s depuis 60 000 → 75 000
 @Test fun verticalMoveIsNotADrag() // move(102, 600) : dispatch vrai, aucun effet ; up : dispatch vrai
@@ -263,20 +263,20 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
 @Test fun cancelEndsDragWithoutSeek() // pendant un glissement : cancel() → DragEnd(60_000, 0), dispatch vrai
 ```
 
-- [ ] **Step 2 :** lancer `*TimeTextTest` et `*SeekGesturesTest` → échec de compilation.
-- [ ] **Step 3 :** écrire `TimeText.kt` et la partie glissement de `SeekGestures.kt`. Automate : `IDLE`, `PASS`
+- [x] **Step 2 :** lancer `*TimeTextTest` et `*SeekGesturesTest` → échec de compilation.
+- [x] **Step 3 :** écrire `TimeText.kt` et la partie glissement de `SeekGestures.kt`. Automate : `IDLE`, `PASS`
   (geste laissé au lecteur : départ sur une commande, ou vidéo non navigable), `PRESSED` (toucher passé au lecteur,
   peut devenir un toucher ou un glissement), `HELD` (toucher retenu, T4), `DRAGGING`. Le glissement part de `PRESSED`
   ou `HELD` quand |dx| > seuil et |dx| > |dy| ; cible = `clamp(position + dx / density × msPerDp, durée)`, figée sur la
   position au `down`. `cancelChildren` seulement depuis `PRESSED`.
-- [ ] **Step 4 :** relancer → vert.
-- [ ] **Step 5 : activité.** `dispatchTouchEvent` : `ACTION_DOWN`, `MOVE`, `UP`, `CANCEL` vont à `SeekGestures`
+- [x] **Step 4 :** relancer → vert.
+- [x] **Step 5 : activité.** `dispatchTouchEvent` : `ACTION_DOWN`, `MOVE`, `UP`, `CANCEL` vont à `SeekGestures`
   (coordonnées de la fenêtre, largeur du `PlayerView`, `onControl` = point dans `controlRects()` de l'overlay ou, si
   les commandes sont visibles, dans `exo_bottom_bar`, `exo_progress` ou `exo_center_controls`) ; les autres actions
   passent telles quelles. `Preview` → `showInfo(TimeText.preview(…), null)` ; `DragEnd` → `hideInfo()` et
   `seekTo(target)` si l'écart n'est pas nul. `Playback` lu sur le lecteur (`currentPosition`, `duration` ou -1 si
   `C.TIME_UNSET`, `isCurrentMediaItemSeekable`) ; lecteur absent → non navigable.
-- [ ] **Step 6 :** suites vertes ; commit `feat(video): glisser pour avancer ou reculer, avec l'aperçu de la position`.
+- [x] **Step 6 :** suites vertes ; commit `feat(video): glisser pour avancer ou reculer, avec l'aperçu de la position`.
 
 ### Task 4 : toucher deux fois, cumulable
 

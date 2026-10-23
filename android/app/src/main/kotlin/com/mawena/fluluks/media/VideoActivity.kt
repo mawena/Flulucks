@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
+import android.view.MotionEvent
+import android.view.ViewConfiguration
 import android.view.WindowManager
 import android.widget.PopupMenu
 import android.widget.Toast
@@ -35,6 +37,7 @@ class VideoActivity : Activity() {
     private var mode: OrientationMode = OrientationMode.Auto
     private lateinit var overlay: VideoOverlay
     private lateinit var playerView: PlayerView
+    private lateinit var gestures: SeekGestures
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -47,6 +50,9 @@ class VideoActivity : Activity() {
             setShowPreviousButton(false)
         }
         playerView = view
+        val vc = ViewConfiguration.get(this)
+        gestures = SeekGestures(resources.displayMetrics.density, vc.scaledTouchSlop.toFloat(), vc.scaledDoubleTapSlop.toFloat(),
+            ViewConfiguration.getDoubleTapTimeout().toLong(), stepMs = SEEK_MS)
         overlay = VideoOverlay(this).apply {
             attach(view)
             setTitle(path.substringAfterLast('/'))
@@ -89,6 +95,54 @@ class VideoActivity : Activity() {
         player = p
         p.prepare()
         p.play()
+    }
+
+    /**
+     * Gestes comme VLC ([SeekGestures]) : chaque événement passe par l'automate avant le lecteur, qui ne reçoit que ce
+     * que l'automate lui laisse.
+     */
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (!::gestures.isInitialized) return super.dispatchTouchEvent(ev)
+        val o = when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN ->
+                gestures.down(ev.x, ev.y, ev.eventTime, playerView.width, onControl(ev.x, ev.y), playback())
+            MotionEvent.ACTION_MOVE -> gestures.move(ev.x, ev.y)
+            MotionEvent.ACTION_UP -> gestures.up(ev.x, ev.y, ev.eventTime)
+            MotionEvent.ACTION_CANCEL -> gestures.cancel()
+            else -> null
+        } ?: return super.dispatchTouchEvent(ev)
+        if (o.cancelChildren) {
+            val c = MotionEvent.obtain(ev).apply { action = MotionEvent.ACTION_CANCEL }
+            super.dispatchTouchEvent(c)
+            c.recycle()
+        }
+        o.effect?.let(::onGesture)
+        return if (o.dispatch) super.dispatchTouchEvent(ev) else true
+    }
+
+    /** Point sur une commande affichée : barre du haut, barre du bas, barre de progression, boutons du centre. */
+    private fun onControl(x: Float, y: Float): Boolean {
+        val ids = listOf(androidx.media3.ui.R.id.exo_bottom_bar, androidx.media3.ui.R.id.exo_progress,
+            androidx.media3.ui.R.id.exo_center_controls)
+        val rects = overlay.controlRects() + ids.mapNotNull { VideoOverlay.windowRect(playerView.findViewById(it)) }
+        return rects.any { it.contains(x.toInt(), y.toInt()) }
+    }
+
+    private fun playback(): SeekGestures.Playback {
+        val p = player ?: return SeekGestures.Playback(0, -1, false)
+        val d = p.duration
+        return SeekGestures.Playback(p.currentPosition, if (d == C.TIME_UNSET) -1 else d, p.isCurrentMediaItemSeekable)
+    }
+
+    private fun onGesture(e: SeekGestures.Effect) {
+        when (e) {
+            is SeekGestures.Effect.Preview -> overlay.showInfo(TimeText.preview(e.targetMs, e.deltaMs, playback().durationMs), null)
+            is SeekGestures.Effect.DragEnd -> {
+                overlay.hideInfo()
+                if (e.deltaMs != 0L) player?.seekTo(e.targetMs)
+            }
+            is SeekGestures.Effect.Jump -> Unit // tâche 4
+        }
     }
 
     /**
