@@ -358,8 +358,8 @@ dans le même commit que le travail.
 - [x] T6 — Essais instrumentés sur le Pixel
 - [x] *(utilisateur)* T7 — Essais sur le Pixel ([fiche](../research/2026-10-23-essais-phase12/essais.md)) *(2026-10-23 : toute la fiche réussie selon l'utilisateur, sur l'APK de la phase 12)*
 - [x] Relecture finale de toute la branche *(1 point important corrigé : pincement à deux doigts ; JVM 350 tests)*
-- [ ] Fusion `feature/lecteur-video` → `develop`
-- [ ] Version `v1.5.0`
+- [x] Fusion `feature/lecteur-video` → `develop`
+- [x] Version `v1.5.0`
 
 ### Phase 13 — Connexions SSH : terminal, clés, tunnels ([plan](2026-10-23-phase13-ssh.md))
 - [x] Plan de la phase 13 écrit *(demande du 2026-10-23 ; spec § 21)*
