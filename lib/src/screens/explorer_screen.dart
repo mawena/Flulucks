@@ -9,6 +9,7 @@ import '../widgets/clipboard_bar.dart';
 import '../widgets/properties_sheet.dart';
 import '../widgets/thumb.dart';
 import '../widgets/transfer_bar.dart';
+import 'batch_rename_screen.dart';
 import 'search_screen.dart';
 import 'space_screen.dart';
 import 'trash_screen.dart';
@@ -325,6 +326,21 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     state.clearClipboard(); // copie ou déplacement lancé : « Coller ici » disparaît
   }
 
+  /// Renommage par lot de la sélection, dans l'ordre affiché (la numérotation le suit).
+  Future<void> _batchRename() async {
+    final v = state.viewPrefs;
+    final paths = [
+      for (final e in sortEntries(_entries, v.sort, v.ascending))
+        if (_selected.contains(e.path)) e.path,
+    ];
+    final done = await Navigator.of(context).push<bool>(MaterialPageRoute(
+      builder: (_) => BatchRenameScreen(state: state, sourceId: widget.sourceId, paths: paths),
+    ));
+    if (done != true || !mounted) return;
+    setState(_selected.clear);
+    await _load(quiet: true);
+  }
+
   /// Propriétés de l'élément sélectionné (la sélection est quittée).
   Future<void> _properties() {
     final path = _selected.single;
@@ -378,12 +394,12 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           PopupMenuButton<String>(
             tooltip: Fr.moreActions,
             onSelected: (a) => switch (a) {
-              'rename' => _rename(),
+              'rename' => _selected.length == 1 ? _rename() : _batchRename(),
               'compress' => _compress(),
               _ => _properties(),
             },
             itemBuilder: (_) => [
-              PopupMenuItem(value: 'rename', enabled: !_readOnly && _selected.length == 1, child: const Text(Fr.rename)),
+              PopupMenuItem(value: 'rename', enabled: !_readOnly, child: const Text(Fr.rename)),
               PopupMenuItem(value: 'compress', enabled: !_readOnly, child: const Text(Fr.compress)),
               PopupMenuItem(value: 'properties', enabled: _selected.length == 1, child: const Text(Fr.properties)),
             ],

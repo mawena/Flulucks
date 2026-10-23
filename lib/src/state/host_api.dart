@@ -41,6 +41,8 @@ abstract class HostApi {
   Future<FolderSizeMsg> folderSize(String sourceId, String path);
   Future<String?> sha256(String sourceId, String path);
   Future<void> cancelHash();
+  Future<List<RenamePreviewMsg>> previewRename(String sourceId, List<String> paths, RenameRuleMsg rule);
+  Future<void> applyRename(String sourceId, List<String> paths, RenameRuleMsg rule);
   Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx);
   Future<ViewPrefsMsg> getViewPrefs();
   Future<void> setViewPrefs(ViewPrefsMsg prefs);
@@ -138,6 +140,12 @@ class PigeonHostApi implements HostApi {
   Future<String?> sha256(String sourceId, String path) => _api.sha256(sourceId, path);
   @override
   Future<void> cancelHash() => _api.cancelHash();
+  @override
+  Future<List<RenamePreviewMsg>> previewRename(String sourceId, List<String> paths, RenameRuleMsg rule) =>
+      _api.previewRename(sourceId, paths, rule);
+  @override
+  Future<void> applyRename(String sourceId, List<String> paths, RenameRuleMsg rule) =>
+      _api.applyRename(sourceId, paths, rule);
   @override
   Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx) => _api.thumbnail(sourceId, path, sizePx);
   @override

@@ -83,6 +83,15 @@ class Fr {
   static const hashCancelled = 'Calcul annulé';
   static const copyHash = "Copier l'empreinte";
   static const hashCopied = 'Empreinte copiée';
+  static const modeNumber = 'Numéroter';
+  static const modeReplace = 'Remplacer';
+  static const modePhotoDate = 'Date de prise de vue';
+  static const baseName = 'Nom de base';
+  static const startNumber = 'Premier numéro';
+  static const findLabel = 'Rechercher';
+  static const replaceWith = 'Remplacer par';
+  static const caseSensitive = 'Respecter la casse';
+  static const photoDateHelp = 'Date de prise de vue des photos (EXIF), sinon date de modification ; extension gardée';
   static const extractHere = 'Extraire ici';
   static const extractTo = 'Extraire vers…';
   static const share = 'Partager';
@@ -138,6 +147,7 @@ class Fr {
   static String folderSize(int bytes, int files, int dirs, {bool truncated = false}) =>
       '${truncated ? 'Au moins ' : ''}${humanSize(bytes)} — $files fichier(s), $dirs dossier(s)';
   static String ownerLine(int uid, int gid) => 'uid $uid, gid $gid';
+  static String batchRenameTitle(int n) => 'Renommer $n éléments';
   static String typeName(String type) => switch (type) {
         'dir' => 'Dossier',
         'file' => 'Fichier',

@@ -347,12 +347,12 @@ gid?, fs`), `folderSize(sourceId, path) → FolderSizeMsg` (annulable), `sha256(
 `caseSensitive`) ; `BatchRename.preview(src, paths, rule): List<RenamePreview>` (`path, newName,
 conflict: String?`) ; `BatchRename.apply(src, paths, rule)` ; Pigeon `previewRename`, `applyRename`.
 
-- [ ] **Step 1 : tests** : `numberingKeepsExtension`, `replaceCaseInsensitive`, `photoDateFromExif`
+- [x] **Step 1 : tests** : `numberingKeepsExtension`, `replaceCaseInsensitive`, `photoDateFromExif`
   (JPEG de test avec `DateTimeOriginal`), `photoDateFallsBackToMtime`, `conflictWithExistingRefusedBeforeAnyRename`,
   `duplicatesInBatchFlagged`, `swapNamesWorks` (a→b, b→a, en deux temps par des noms temporaires),
   `invalidNameForFatRefused` ; Flutter `previewThenApply`.
-- [ ] **Step 2 → 4 :** FAIL, implémenter, verts.
-- [ ] **Step 5 :** commit `feat(gestionnaire): renommage par lot`.
+- [x] **Step 2 → 4 :** FAIL, implémenter, verts.
+- [x] **Step 5 :** commit `feat(gestionnaire): renommage par lot`.
 
 ### Task 11 : filtres rapides de l'accueil
 

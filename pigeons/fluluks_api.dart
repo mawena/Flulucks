@@ -191,6 +191,33 @@ class DetailsMsg {
   String fs;
 }
 
+/// Règle de renommage par lot : `mode` `number` (`base`, `start`), `replace` (`find`, `replace`, `caseSensitive`)
+/// ou `photoDate`.
+class RenameRuleMsg {
+  RenameRuleMsg({
+    required this.mode,
+    required this.base,
+    required this.start,
+    required this.find,
+    required this.replace,
+    required this.caseSensitive,
+  });
+  String mode;
+  String base;
+  int start;
+  String find;
+  String replace;
+  bool caseSensitive;
+}
+
+/// Nouveau nom d'un élément du lot ; `conflict` : raison du refus (null si permis).
+class RenamePreviewMsg {
+  RenamePreviewMsg({required this.path, required this.newName, this.conflict});
+  String path;
+  String newName;
+  String? conflict;
+}
+
 /// Taille d'un dossier et de son contenu ; `truncated` si le calcul s'est arrêté avant la fin.
 class FolderSizeMsg {
   FolderSizeMsg({required this.size, required this.files, required this.dirs, required this.truncated});
@@ -329,6 +356,12 @@ abstract class FluLuksHostApi {
   @async
   String? sha256(String sourceId, String path);
   void cancelHash();
+
+  /// Renommage par lot : aperçu, puis tout ou rien (refusé si un nom est en conflit).
+  @async
+  List<RenamePreviewMsg> previewRename(String sourceId, List<String> paths, RenameRuleMsg rule);
+  @async
+  void applyRename(String sourceId, List<String> paths, RenameRuleMsg rule);
   @async
   Uint8List? thumbnail(String sourceId, String path, int sizePx);
   ViewPrefsMsg getViewPrefs();

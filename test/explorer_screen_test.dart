@@ -218,7 +218,8 @@ void main() {
     await tester.pump();
     await tester.tap(find.byTooltip("Plus d'actions"));
     await tester.pumpAndSettle();
-    expect(tester.widget<PopupMenuItem<String>>(find.widgetWithText(PopupMenuItem<String>, 'Renommer')).enabled, isFalse);
+    // plusieurs éléments : renommage par lot (test/batch_rename_test.dart)
+    expect(tester.widget<PopupMenuItem<String>>(find.widgetWithText(PopupMenuItem<String>, 'Renommer')).enabled, isTrue);
   });
 
   testWidgets('shareDisabledForFolder', (tester) async {

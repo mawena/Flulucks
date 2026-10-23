@@ -10,12 +10,14 @@ import android.provider.DocumentsContract
 import com.mawena.fluluks.engine.EngineError
 import com.mawena.fluluks.engine.FileType
 import com.mawena.fluluks.files.Archives
+import com.mawena.fluluks.files.BatchRename
 import com.mawena.fluluks.files.Details
 import com.mawena.fluluks.files.DiskSource
 import com.mawena.fluluks.files.Entry
 import com.mawena.fluluks.files.FileDetails
 import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.FilesException
+import com.mawena.fluluks.files.RenameRule
 import com.mawena.fluluks.files.Search
 import com.mawena.fluluks.files.SharedPrefStore
 import com.mawena.fluluks.files.Sources
@@ -350,6 +352,16 @@ class HostApiImpl(
 
     override fun cancelHash() = FileDetails.cancel()
 
+    override fun previewRename(sourceId: String, paths: List<String>, rule: RenameRuleMsg, callback: (Result<List<RenamePreviewMsg>>) -> Unit) =
+        io(callback) {
+            Files.guard("renameDocument") {
+                BatchRename.preview(Files.source(sourceId), paths, renameRule(rule)).map { RenamePreviewMsg(it.path, it.newName, it.conflict) }
+            }
+        }
+
+    override fun applyRename(sourceId: String, paths: List<String>, rule: RenameRuleMsg, callback: (Result<Unit>) -> Unit) =
+        io(callback) { Files.guard("renameDocument") { BatchRename.apply(Files.source(sourceId), paths, renameRule(rule)) } }
+
     override fun cancelSearch() = Search.cancel()
 
     override fun thumbnail(sourceId: String, path: String, sizePx: Long, callback: (Result<ByteArray?>) -> Unit) =
@@ -454,6 +466,10 @@ class HostApiImpl(
             FileType.SYMLINK -> "link"
             FileType.OTHER -> "other"
         }
+
+        private fun renameRule(r: RenameRuleMsg) = RenameRule(
+            mode = r.mode, base = r.base, start = r.start.toInt(), find = r.find, replace = r.replace, caseSensitive = r.caseSensitive,
+        )
 
         private fun detailsMsg(d: Details) = DetailsMsg(
             name = d.name, path = d.path, type = typeName(d.type), size = d.size, mtime = d.mtime, mode = d.mode?.toLong(),

@@ -757,6 +757,134 @@ class DetailsMsg {
   }
 }
 
+/// Règle de renommage par lot : `mode` `number` (`base`, `start`), `replace` (`find`, `replace`, `caseSensitive`)
+/// ou `photoDate`.
+class RenameRuleMsg {
+  RenameRuleMsg({
+    required this.mode,
+    required this.base,
+    required this.start,
+    required this.find,
+    required this.replace,
+    required this.caseSensitive,
+  });
+
+  String mode;
+
+  String base;
+
+  int start;
+
+  String find;
+
+  String replace;
+
+  bool caseSensitive;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      mode,
+      base,
+      start,
+      find,
+      replace,
+      caseSensitive,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static RenameRuleMsg decode(Object result) {
+    result as List<Object?>;
+    return RenameRuleMsg(
+      mode: result[0]! as String,
+      base: result[1]! as String,
+      start: result[2]! as int,
+      find: result[3]! as String,
+      replace: result[4]! as String,
+      caseSensitive: result[5]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! RenameRuleMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(mode, other.mode) && _deepEquals(base, other.base) && _deepEquals(start, other.start) && _deepEquals(find, other.find) && _deepEquals(replace, other.replace) && _deepEquals(caseSensitive, other.caseSensitive);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'RenameRuleMsg(mode: $mode, base: $base, start: $start, find: $find, replace: $replace, caseSensitive: $caseSensitive)';
+  }
+}
+
+/// Nouveau nom d'un élément du lot ; `conflict` : raison du refus (null si permis).
+class RenamePreviewMsg {
+  RenamePreviewMsg({
+    required this.path,
+    required this.newName,
+    this.conflict,
+  });
+
+  String path;
+
+  String newName;
+
+  String? conflict;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      path,
+      newName,
+      conflict,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static RenamePreviewMsg decode(Object result) {
+    result as List<Object?>;
+    return RenamePreviewMsg(
+      path: result[0]! as String,
+      newName: result[1]! as String,
+      conflict: result[2] as String?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! RenamePreviewMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(path, other.path) && _deepEquals(newName, other.newName) && _deepEquals(conflict, other.conflict);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'RenamePreviewMsg(path: $path, newName: $newName, conflict: $conflict)';
+  }
+}
+
 /// Taille d'un dossier et de son contenu ; `truncated` si le calcul s'est arrêté avant la fin.
 class FolderSizeMsg {
   FolderSizeMsg({
@@ -1171,23 +1299,29 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is DetailsMsg) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is FolderSizeMsg) {
+    }    else if (value is RenameRuleMsg) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    }    else if (value is SpaceItemMsg) {
+    }    else if (value is RenamePreviewMsg) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    }    else if (value is SpaceReportMsg) {
+    }    else if (value is FolderSizeMsg) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    }    else if (value is SearchResultMsg) {
+    }    else if (value is SpaceItemMsg) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
-    }    else if (value is ViewPrefsMsg) {
+    }    else if (value is SpaceReportMsg) {
       buffer.putUint8(141);
       writeValue(buffer, value.encode());
-    }    else if (value is FavoriteMsg) {
+    }    else if (value is SearchResultMsg) {
       buffer.putUint8(142);
+      writeValue(buffer, value.encode());
+    }    else if (value is ViewPrefsMsg) {
+      buffer.putUint8(143);
+      writeValue(buffer, value.encode());
+    }    else if (value is FavoriteMsg) {
+      buffer.putUint8(144);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -1214,16 +1348,20 @@ class _PigeonCodec extends StandardMessageCodec {
       case 136:
         return DetailsMsg.decode(readValue(buffer)!);
       case 137:
-        return FolderSizeMsg.decode(readValue(buffer)!);
+        return RenameRuleMsg.decode(readValue(buffer)!);
       case 138:
-        return SpaceItemMsg.decode(readValue(buffer)!);
+        return RenamePreviewMsg.decode(readValue(buffer)!);
       case 139:
-        return SpaceReportMsg.decode(readValue(buffer)!);
+        return FolderSizeMsg.decode(readValue(buffer)!);
       case 140:
-        return SearchResultMsg.decode(readValue(buffer)!);
+        return SpaceItemMsg.decode(readValue(buffer)!);
       case 141:
-        return ViewPrefsMsg.decode(readValue(buffer)!);
+        return SpaceReportMsg.decode(readValue(buffer)!);
       case 142:
+        return SearchResultMsg.decode(readValue(buffer)!);
+      case 143:
+        return ViewPrefsMsg.decode(readValue(buffer)!);
+      case 144:
         return FavoriteMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1925,6 +2063,44 @@ class FluLuksHostApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Renommage par lot : aperçu, puis tout ou rien (refusé si un nom est en conflit).
+  Future<List<RenamePreviewMsg>> previewRename(String sourceId, List<String> paths, RenameRuleMsg rule) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.previewRename$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, paths, rule]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<RenamePreviewMsg>();
+  }
+
+  Future<void> applyRename(String sourceId, List<String> paths, RenameRuleMsg rule) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.applyRename$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, paths, rule]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(

@@ -296,7 +296,7 @@ dans le même commit que le travail.
 - [x] T7 — Corbeille sur le téléphone et sur les disques (récupérable 30 jours)
 - [x] T8 — Analyse de l'espace (dossiers et plus gros fichiers)
 - [x] T9 — Propriétés d'un fichier, avec empreinte SHA-256
-- [ ] T10 — Renommage par lot
+- [x] T10 — Renommage par lot
 - [ ] T11 — Filtres rapides sur l'accueil (photos, vidéos, musique, documents, archives, récents)
 - [ ] *(utilisateur)* T12 — Essais sur le Pixel
 - [ ] T13 — Documentation

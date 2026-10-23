@@ -211,6 +211,19 @@ class FakeHostApi implements HostApi {
   @override
   Future<void> cancelHash() async => hashCancels++;
 
+  /// Aperçu du renommage par lot.
+  List<RenamePreviewMsg> Function(List<String> paths, RenameRuleMsg rule)? renamer;
+
+  @override
+  Future<List<RenamePreviewMsg>> previewRename(String sourceId, List<String> paths, RenameRuleMsg rule) async {
+    calls.add('previewRename $sourceId ${paths.join(',')} ${rule.mode}');
+    return renamer!(paths, rule);
+  }
+
+  @override
+  Future<void> applyRename(String sourceId, List<String> paths, RenameRuleMsg rule) async =>
+      calls.add('applyRename $sourceId ${paths.join(',')} ${rule.mode} ${rule.base} ${rule.start}');
+
   /// Corbeille de chaque stockage.
   final trash = <String, List<TrashItemMsg>>{};
 
