@@ -34,6 +34,7 @@ class VideoOverlay(private val context: Context) {
         ellipsize = TextUtils.TruncateAt.MIDDLE
         setPadding(dp(16), 0, dp(8), 0)
     }
+    val tracksButton = button(com.mawena.fluluks.R.drawable.video_ic_tracks, TrackMenu.TITLE)
     val rotateButton = button(com.mawena.fluluks.R.drawable.video_ic_rotate, VideoOrientation.ROTATE)
     val lockButton = button(com.mawena.fluluks.R.drawable.video_ic_lock_open, VideoOrientation.lockDescription(OrientationMode.Auto))
     private val info = bubble(20f)
@@ -41,6 +42,7 @@ class VideoOverlay(private val context: Context) {
 
     init {
         bar.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+        bar.addView(tracksButton)
         bar.addView(rotateButton)
         bar.addView(lockButton)
         // barre sous les barres système et l'encoche, quelle que soit l'orientation

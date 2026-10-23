@@ -7,6 +7,7 @@ import android.content.res.Configuration
 import android.net.Uri
 import android.os.Bundle
 import android.view.WindowManager
+import android.widget.PopupMenu
 import android.widget.Toast
 import androidx.annotation.OptIn
 import androidx.media3.common.C
@@ -41,7 +42,7 @@ class VideoActivity : Activity() {
         val path = intent.getStringExtra(EXTRA_PATH) ?: return finish()
         requestedOrientation = VideoOrientation.requested(mode)
         val view = PlayerView(this).apply {
-            setShowSubtitleButton(true)
+            setShowSubtitleButton(false) // remplacé par le bouton Pistes
             setShowNextButton(false)
             setShowPreviousButton(false)
         }
@@ -53,6 +54,7 @@ class VideoActivity : Activity() {
                 setMode(VideoOrientation.rotate(mode, resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE))
             }
             lockButton.setOnClickListener { setMode(VideoOrientation.toggleLock(mode)) }
+            tracksButton.setOnClickListener { showTracks(it) }
         }
         view.setControllerVisibilityListener(PlayerView.ControllerVisibilityListener { v ->
             overlay.setBarVisible(v == android.view.View.VISIBLE)
@@ -87,6 +89,32 @@ class VideoActivity : Activity() {
         player = p
         p.prepare()
         p.play()
+    }
+
+    /**
+     * Menu « Pistes » : sous-menus Audio et Sous-titres, un choix coché par sous-menu. Le choix s'applique sur
+     * l'instantané des pistes qui a servi à construire le menu.
+     */
+    private fun showTracks(anchor: android.view.View) {
+        val p = player ?: return
+        val tracks = p.currentTracks
+        val infos = PlayerTracks.infos(tracks)
+        val menu = PopupMenu(this, anchor)
+        fun section(name: String, group: Int, kind: TrackKind, choices: List<TrackChoice>, empty: String?) {
+            val sub = menu.menu.addSubMenu(name)
+            if (choices.isEmpty() && empty != null) sub.add(empty).isEnabled = false
+            choices.forEachIndexed { i, c ->
+                sub.add(group, i, i, c.title).setChecked(c.checked).setOnMenuItemClickListener {
+                    PlayerTracks.apply(p, tracks, c, kind)
+                    true
+                }
+            }
+            sub.setGroupCheckable(group, true, true)
+        }
+        section(TrackMenu.AUDIO, 1, TrackKind.AUDIO, TrackMenu.audio(infos), TrackMenu.NO_AUDIO)
+        section(TrackMenu.TEXT, 2, TrackKind.TEXT, TrackMenu.text(infos), null)
+        menu.show()
+        playerView.showController()
     }
 
     /** Nouveau mode d'orientation : demandé à Android, montré par le cadenas et une bulle brève. */
@@ -137,7 +165,7 @@ class VideoActivity : Activity() {
                 MediaItem.SubtitleConfiguration.Builder(Uri.parse(s.dataUri))
                     .setMimeType(MimeTypes.APPLICATION_SUBRIP)
                     .setLanguage(s.language)
-                    .setLabel(s.language ?: s.path.substringAfterLast('/'))
+                    .setLabel(s.path.substringAfterLast('/'))
                     .setSelectionFlags(if (i == 0) C.SELECTION_FLAG_DEFAULT else 0)
                     .build()
             }).build()

@@ -155,7 +155,7 @@ AndroidX Test (instrumenté). **Aucune nouvelle dépendance.**
   - `object PlayerTracks` : `fun infos(tracks: Tracks): List<TrackInfo>` (pistes audio et texte **prises en charge**
     seulement), `fun apply(player: Player, tracks: Tracks, choice: TrackChoice, kind: TrackKind)`.
 
-- [ ] **Step 1 : tests en échec** (`TrackMenuTest`)
+- [x] **Step 1 : tests en échec** (`TrackMenuTest`)
 
 ```kotlin
 private fun audio(g: Int, lang: String?, label: String? = null, ch: Int = 2, sel: Boolean = false) =
@@ -193,25 +193,25 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
 @Test fun offIsCheckedWhenNoTextSelected() = assertTrue(text(listOf(text(0, "fr", null))).first().checked)
 ```
 
-- [ ] **Step 2 :** lancer `*TrackMenuTest` → échec de compilation.
-- [ ] **Step 3 :** écrire `TrackMenu.kt`. Règles du titre : parties = nom de la langue
+- [x] **Step 2 :** lancer `*TrackMenuTest` → échec de compilation.
+- [x] **Step 3 :** écrire `TrackMenu.kt`. Règles du titre : parties = nom de la langue
   (`Locale.forLanguageTag(code).getDisplayName(Locale.FRENCH)`, première lettre en capitale ; `und` ou vide → rien ;
   nom inconnu → le code tel quel), libellé (s'il n'est ni vide, ni égal au nom de la langue ou au code, casse ignorée),
   canaux pour l'audio (1 « Mono », 2 « Stéréo », 6 « 5.1 », 8 « 7.1 », autre > 0 « N canaux ») ; jointes par
   « · » ; aucune partie → « Piste N ». Titres en double suffixés de « (N) », N = rang dans la liste.
-- [ ] **Step 4 :** relancer → vert.
-- [ ] **Step 5 : `PlayerTracks`.** `infos` : groupes `C.TRACK_TYPE_AUDIO` et `C.TRACK_TYPE_TEXT`, pistes
+- [x] **Step 4 :** relancer → vert.
+- [x] **Step 5 : `PlayerTracks`.** `infos` : groupes `C.TRACK_TYPE_AUDIO` et `C.TRACK_TYPE_TEXT`, pistes
   `isTrackSupported(i)`, `Format.language`, `Format.label`, `Format.channelCount` (`Format.NO_VALUE` → -1),
   `isTrackSelected(i)`. `apply` : piste → `setTrackTypeDisabled(kind, false)` +
   `setOverrideForType(TrackSelectionOverride(groups[group].mediaTrackGroup, index))` ; `track` nul (texte) →
   `clearOverridesOfType(C.TRACK_TYPE_TEXT)` + `setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)`.
-- [ ] **Step 6 : vues.** Icône `video_ic_tracks` (copie d'`exo_ic_audiotrack` de Media3, Apache-2.0). Bouton Pistes
+- [x] **Step 6 : vues.** Icône `video_ic_tracks` (copie d'`exo_ic_audiotrack` de Media3, Apache-2.0). Bouton Pistes
   dans la barre du haut (avant Tourner). Toucher → `PopupMenu` ancré au bouton : sous-menus « Audio » et
   « Sous-titres », éléments à cocher exclusifs (`setGroupCheckable(…, true, true)`), « Aucune piste audio » désactivé
   si la liste est vide ; le choix appelle `PlayerTracks.apply` sur l'instantané `currentTracks` qui a servi au menu.
   `PlayerView.setShowSubtitleButton(false)` : le bouton Pistes le remplace. `newPlayer` : libellé d'un `.srt` = nom
   du fichier (`film.fr.srt`), langue inchangée.
-- [ ] **Step 7 :** suites vertes ; commit `feat(video): choix des pistes audio et des sous-titres`.
+- [x] **Step 7 :** suites vertes ; commit `feat(video): choix des pistes audio et des sous-titres`.
 
 ### Task 3 : glisser pour avancer ou reculer
 
