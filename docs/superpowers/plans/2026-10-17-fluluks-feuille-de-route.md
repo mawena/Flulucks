@@ -313,7 +313,7 @@ dans le même commit que le travail.
       *(demande du 2026-10-20, J.1 ; déplacée en phase 9 puis en phase 10 le 2026-10-22 ; spec § 18)*
 - [x] T1 — Lecture d'images et de textes, enregistrement sûr des textes
 - [x] T2 — « Ouvrir dans Portail » et éditeur de texte (UTF-8, BOM et fins de ligne gardés)
-- [ ] T3 — Visionneuse d'images (glisser d'une photo à l'autre, zoom)
+- [x] T3 — Visionneuse d'images (glisser d'une photo à l'autre, zoom)
 - [ ] T4 — Lecture à accès aléatoire et fournisseur de flux
 - [ ] T5 — Serveurs enregistrés et sources distantes (secrets chiffrés par le Keystore)
 - [ ] T6 — Dossiers distants dans le gestionnaire

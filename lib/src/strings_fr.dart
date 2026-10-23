@@ -163,6 +163,7 @@ class Fr {
   }
 
   static String readOnlyText(String reason) => 'Lecture seule : $reason';
+  static String imagePosition(int i, int n) => '$i / $n';
   static String toExtract(String name) => '« $name » à extraire';
   static String trashSummary(int n, int bytes) => '$n élément(s), ${humanSize(bytes)}';
   static String emptyTrashBody(int n) => 'Les $n élément(s) seront supprimés définitivement.';

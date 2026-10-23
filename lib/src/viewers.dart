@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'bridge/fluluks_api.g.dart';
+import 'screens/image_viewer_screen.dart';
 import 'screens/text_editor_screen.dart';
 import 'state/app_state.dart';
 
@@ -15,7 +16,7 @@ const _text = {
 };
 
 /// Lecteurs déjà présents dans Portail ; les autres types s'ouvrent encore dans une autre application.
-const _available = {'text'};
+const _available = {'image', 'text'};
 
 /// Lecteur de Portail pour [name] : `image`, `audio`, `video`, `text`, ou null (autre application). « .gitignore »
 /// compte comme l'extension « gitignore ».
@@ -38,6 +39,11 @@ bool opensInPortail(AppState state, String name) =>
 /// l'ordre affiché (visionneuse, file d'attente de la musique).
 Future<void> openViewer(BuildContext context, AppState state, String sourceId, EntryMsg e, List<EntryMsg> folder) async {
   switch (viewerFor(e.name)) {
+    case 'image':
+      final images = folder.where((x) => x.type == 'file' && viewerFor(x.name) == 'image').toList();
+      final i = images.indexWhere((x) => x.path == e.path);
+      await Navigator.of(context).push(MaterialPageRoute<void>(
+          builder: (_) => ImageViewerScreen(state: state, sourceId: sourceId, images: images, initialIndex: i < 0 ? 0 : i)));
     case 'text':
       await openTextEditor(context, state, sourceId, e);
     default:

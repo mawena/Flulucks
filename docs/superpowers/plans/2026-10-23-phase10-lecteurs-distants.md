@@ -176,18 +176,18 @@ sourceId, path, name)`.
 **Interfaces :** Consumes : `readImage` (T1), `openViewer` (T2). Produces : `ImageViewerScreen(state, sourceId,
 images: List<EntryMsg>, initialIndex)`.
 
-- [ ] **Step 1 : tests** (`image_viewer_test`) :
+- [x] **Step 1 : tests** (`image_viewer_test`) :
   - `opensAtTappedImage` : seules les images du dossier, dans l'ordre affiché ; titre « nom » et « 3 / 5 » ;
   - `swipeShowsNext` et chargement limité à l'image courante et à ses voisines (appels `readImage` comptés) ;
   - `doubleTapZooms` puis le glissement entre images est bloqué tant que l'image est agrandie ;
   - `readErrorShownOnPage` (message de l'erreur, les autres pages restent lisibles) ;
   - actions **Partager**, **Ouvrir avec…**, **Propriétés** sur l'image courante.
-- [ ] **Step 2 :** Run `flutter test test/image_viewer_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter : `PageView` + `InteractiveViewer` (échelle 1 à 8, double toucher ×2,5 au point
+- [x] **Step 2 :** Run `flutter test test/image_viewer_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter : `PageView` + `InteractiveViewer` (échelle 1 à 8, double toucher ×2,5 au point
   touché), fond noir, barre masquée d'un toucher ; `Image.memory` décodé à au plus deux fois la largeur de l'écran
   (4096 px au plus) ; cache des octets de 3 images.
-- [ ] **Step 4 :** tests verts ; suites Flutter et analyse vertes.
-- [ ] **Step 5 :** commit `feat(lecteurs): visionneuse d'images`.
+- [x] **Step 4 :** tests verts ; suites Flutter et analyse vertes.
+- [x] **Step 5 :** commit `feat(lecteurs): visionneuse d'images`.
 
 ### Task 4 : accès aléatoire et fournisseur de flux
 
