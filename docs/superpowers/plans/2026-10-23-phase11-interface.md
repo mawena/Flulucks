@@ -697,7 +697,7 @@ tests suivent le nom réel, sans changer de comportement.
   - avertissement FTP en `StatusBanner` `warning` ;
   - empreinte SSH en police à chasse fixe, avec un bouton Copier.
 
-- [ ] **Step 1 : tests** (`phase10_screens_test`) :
+- [x] **Step 1 : tests** (`phase10_screens_test`) :
   - `dockOrder` (presse-papiers au-dessus du lecteur, lecteur au-dessus de la copie) ;
   - `dockHiddenWhenIdle` ;
   - `editorStatusLine` (BOM et CRLF ; LF) ;
@@ -707,10 +707,10 @@ tests suivent le nom réel, sans changer de comportement.
   - `nowPlayingSliderSemantics` ;
   - `serverFormValidation` (port 0, port 70000 et adresse vide refusés) ;
   - `ftpWarningBanner`.
-- [ ] **Step 2 :** Run `flutter test test/phase10_screens_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter (Kotlin : icône et couleur de la notification, thème de `VideoActivity`).
-- [ ] **Step 4 :** tests verts ; suites JVM et Flutter vertes.
-- [ ] **Step 5 :** commit `feat(interface): barres du bas unifiées et écrans des lecteurs alignés`.
+- [x] **Step 2 :** Run `flutter test test/phase10_screens_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter (Kotlin : icône et couleur de la notification, thème de `VideoActivity`).
+- [x] **Step 4 :** tests verts ; suites JVM et Flutter vertes.
+- [x] **Step 5 :** commit `feat(interface): barres du bas unifiées et écrans des lecteurs alignés`.
 
 ### Task 11 : accessibilité, grands écrans et tests dorés
 

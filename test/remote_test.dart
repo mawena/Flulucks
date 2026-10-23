@@ -172,6 +172,8 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('ssh-ed25519 SHA256:abc'), findsOneWidget);
     await tester.scrollUntilVisible(find.text("Oublier l'empreinte"), 200, scrollable: formScroll);
+    await tester.ensureVisible(find.text("Oublier l'empreinte")); // la liste s'arrête dès qu'il est construit, parfois sous le bord
+    await tester.pumpAndSettle();
     await tester.tap(find.text("Oublier l'empreinte"));
     await tester.pumpAndSettle();
     expect(api.calls, contains('forgetHostKey s1'));
@@ -228,6 +230,8 @@ void main() {
     expect(find.text('ssh-ed25519 SHA256:clé'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Phrase de la clé'), findsOneWidget);
     await tester.scrollUntilVisible(find.text('Retirer la clé'), 200, scrollable: formScroll);
+    await tester.ensureVisible(find.text('Retirer la clé')); // la liste s'arrête dès qu'il est construit, parfois sous le bord
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Retirer la clé'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('forgetPrivateKey s1'));

@@ -8,8 +8,9 @@ import '../strings_fr.dart';
 import '../ui/feedback.dart';
 import '../ui/tokens.dart';
 
-/// Barre de l'opération en cours (copie, déplacement, compression, extraction) : progression et Annuler ; à la fin, le résultat pendant 4 s, une seule fois
-/// pour toute l'application (accueil et explorateurs).
+/// Barre de l'opération en cours (copie, déplacement, compression, extraction) : progression et Annuler ; à la fin,
+/// le résultat pendant 4 s. Une seule pour toute l'application : le cadre (`PlayerFrame`) la pose dans le dock du
+/// bas, sous tous les écrans.
 class TransferBar extends StatefulWidget {
   const TransferBar({super.key, required this.state});
 
@@ -62,34 +63,28 @@ class _TransferBarState extends State<TransferBar> {
         } else {
           text = t.error ?? Fr.transferDoneRate(t.fileIndex, t.doneBytes, t.elapsedMs);
         }
-        return Material(
-          color: theme.colorScheme.surfaceContainerHigh,
-          child: SafeArea(
-            top: false,
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(Space.l, Space.s, Space.s, Space.s),
-              child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Row(children: [
-                  if (icon != null) ...[
-                    ExcludeSemantics(
-                      child: Icon(icon, color: t.error != null ? theme.colorScheme.error : theme.colorScheme.primary),
-                    ),
-                    const SizedBox(width: Space.m),
-                  ],
-                  Expanded(
-                    child: Text(
-                      text,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: numeric(theme.textTheme.bodyMedium!),
-                    ),
-                  ),
-                  if (!t.finished) TextButton(onPressed: widget.state.cancelTransfer, child: const Text(Fr.cancel)),
-                ]),
-                if (!t.finished) LinearProgressIndicator(value: t.totalBytes > 0 ? pct / 100 : null),
-              ]),
-            ),
-          ),
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(Space.l, Space.s, Space.s, Space.s),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              if (icon != null) ...[
+                ExcludeSemantics(
+                  child: Icon(icon, color: t.error != null ? theme.colorScheme.error : theme.colorScheme.primary),
+                ),
+                const SizedBox(width: Space.m),
+              ],
+              Expanded(
+                child: Text(
+                  text,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: numeric(theme.textTheme.bodyMedium!),
+                ),
+              ),
+              if (!t.finished) TextButton(onPressed: widget.state.cancelTransfer, child: const Text(Fr.cancel)),
+            ]),
+            if (!t.finished) LinearProgressIndicator(value: t.totalBytes > 0 ? pct / 100 : null),
+          ]),
         );
       },
     );

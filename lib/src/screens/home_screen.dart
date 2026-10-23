@@ -5,12 +5,12 @@ import '../strings_fr.dart';
 import '../ui/states.dart';
 import '../ui/tokens.dart';
 import '../ui/widgets.dart';
+import '../widgets/bottom_dock.dart';
 import '../widgets/brand_mark.dart';
 import '../widgets/disk_card.dart';
 import '../widgets/server_tile.dart';
 import '../widgets/shortcut_grid.dart';
 import '../widgets/source_tile.dart';
-import '../widgets/transfer_bar.dart';
 import 'explorer_screen.dart';
 import 'filter_screen.dart';
 import 'server_form_screen.dart';
@@ -55,7 +55,7 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      bottomNavigationBar: TransferBar(state: state), // copie en cours ou interrompue, même hors de l'explorateur
+      bottomNavigationBar: BottomDock(state: state), // copie en cours ou interrompue, même hors de l'explorateur
       body: ListenableBuilder(
         listenable: state,
         builder: (context, _) {

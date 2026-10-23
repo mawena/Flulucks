@@ -228,7 +228,7 @@ void main() {
     expect(find.byType(TextEditorScreen), findsOneWidget); // pas fermé
     expect(find.text('texte précieux'), findsOneWidget);
     expect(find.textContaining('Stockage fermé'), findsOneWidget);
-    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.save)).onPressed, isNull);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.save_rounded)).onPressed, isNull);
     // en partant, on peut abandonner le texte ; l'explorateur du stockage fermé part avec
     await tester.pageBack();
     await tester.pumpAndSettle();
