@@ -36,9 +36,15 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
   débranche les écouteurs. Une barre réduite reste en bas de tous les écrans ; l'écran **Lecture en cours** donne la
   position, le curseur, précédent, suivant, et le recul et l'avance de 10 s. Si le stockage disparaît (éjection,
   disque arraché, serveur déconnecté), la lecture s'arrête : « Lecture arrêtée : stockage fermé ».
-- **Vidéo** (MP4, M4V, MKV, WebM, MOV, 3GP, AVI) : plein écran, en paysage selon le capteur, recul et avance de
-  10 s ; l'écran reste allumé pendant la lecture. Les sous-titres `film.srt` et `film.<langue>.srt` posés à côté
-  de la vidéo sont proposés (UTF-8 ou Windows-1252 ; le premier est actif).
+- **Vidéo** (MP4, M4V, MKV, WebM, MOV, 3GP, AVI) : plein écran, **en portrait par défaut** ; le lecteur suit la
+  rotation du téléphone seulement quand la rotation automatique d'Android est activée. En haut, **Pistes** choisit
+  la piste audio et les sous-titres (ou les coupe), **Tourner** passe du portrait au paysage et inversement, et le
+  **cadenas** fige l'orientation (le rouvrir rend la rotation automatique). Comme dans VLC, **glisser**
+  horizontalement avance ou recule (la position visée s'affiche pendant le geste, la lecture y saute au lever du
+  doigt), et **toucher deux fois** la moitié gauche ou droite recule ou avance de 10 s, 10 s de plus à chaque
+  toucher rapproché. Les boutons reculent et avancent aussi de 10 s ; l'écran reste allumé pendant la lecture. Les
+  sous-titres `film.srt` et `film.<langue>.srt` posés à côté de la vidéo sont proposés (UTF-8 ou Windows-1252 ; le
+  premier est actif). *(Orientation, pistes et gestes : 1.5.0.)*
 - **Textes** (TXT, Markdown, JSON, XML, CSV, journaux, fichiers de configuration, code…) : éditeur pour les fichiers
   UTF-8 de 2 Mio au plus. Le BOM et les fins de ligne Windows sont gardés. L'enregistrement écrit un fichier
   temporaire qui remplace ensuite l'original, jamais d'original à moitié écrit ; si le fichier a changé depuis son
@@ -469,6 +475,7 @@ l'être sous GPL, avec ses sources. FatFs est sous une licence de type BSD à un
 GPL, comme libarchive (BSD à deux clauses) et liblzma (0BSD). Depuis la phase 10, l'application embarque aussi
 AndroidX Media3 1.11.1 et Apache Commons Net 3.13.0 (Apache-2.0), JSch 2.28.8 de mwiede (BSD) et Bouncy Castle
 1.86 (licence MIT), toutes compatibles avec la GPL ; Apache FtpServer 1.2.1 et Apache MINA SSHD 2.20.0 (Apache-2.0)
-ne servent qu'aux tests. Les licences des bibliothèques natives sont dans
+ne servent qu'aux tests. Les icônes du lecteur vidéo (phase 12) viennent d'AOSP et de Media3 (Apache-2.0). Les
+licences des bibliothèques natives sont dans
 `native/third_party/` (`ntfs-3g/COPYING`, `fatfs/LICENSE.txt`, `libarchive/COPYING`, `xz/COPYING`…) ; leurs correctifs sont décrits dans
 [native/third_party/PATCHES.md](native/third_party/PATCHES.md).

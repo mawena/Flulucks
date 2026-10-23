@@ -322,7 +322,7 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
 
 ### Task 5 : documentation
 
-- [ ] README : la ligne **Vidéo** des lecteurs intégrés décrit le portrait, la rotation selon Android, Tourner, le
+- [x] README : la ligne **Vidéo** des lecteurs intégrés décrit le portrait, la rotation selon Android, Tourner, le
   cadenas, les pistes et les gestes ; tableau de la feuille de route déjà à jour (phase 12 en v1.5.0). Fiche d'essais
   `docs/superpowers/research/2026-10-23-essais-phase12/essais.md` (T7). Commit `docs: lecteur vidéo de la phase 12`.
 
