@@ -67,7 +67,7 @@ endif()
 add_library(fluluks STATIC ${FL_SOURCES})
 target_include_directories(fluluks PUBLIC include PRIVATE src)
 target_compile_options(fluluks PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 fl_fatfs fl_mkntfs fl_ntfs3g Threads::Threads)
+target_link_libraries(fluluks PUBLIC fl_mbedcrypto fl_argon2 fl_cjson fl_lwext4 fl_fatfs fl_mkntfs fl_ntfs3g fl_libarchive Threads::Threads)
 if(ANDROID)
   target_link_libraries(fluluks PUBLIC log) # fl_ext4_policy_log (logcat)
 endif()
@@ -159,6 +159,19 @@ if(FL_TESTS)
   fl_add_test(test_format)
   target_link_libraries(test_format PRIVATE fl_testsupport)
   set_tests_properties(test_format PROPERTIES TIMEOUT 900)
+
+  # Archives (phase 9) : archives de test à part (tools/fixtures/make_archive_fixtures.sh), sans régénérer
+  # les images de disque. fl_add_arc_test(nom) : fl_add_test, plus FL_ARC_FIXTURES et la fixture fxa.
+  add_test(NAME generate_archive_fixtures
+           COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/../tools/fixtures/make_archive_fixtures.sh
+                   ${CMAKE_BINARY_DIR}/fixtures-archives)
+  set_tests_properties(generate_archive_fixtures PROPERTIES FIXTURES_SETUP fxa)
+  function(fl_add_arc_test name)
+    fl_add_test(${name} ${ARGN})
+    set_property(TEST ${name} APPEND PROPERTY ENVIRONMENT "FL_ARC_FIXTURES=${CMAKE_BINARY_DIR}/fixtures-archives")
+    set_property(TEST ${name} APPEND PROPERTY FIXTURES_REQUIRED fxa)
+  endfunction()
+  fl_add_arc_test(test_arc_fumee)
   fl_add_test(test_cache)
   fl_add_test(test_crc32c)
   add_test(NAME test_crc32c_debit COMMAND test_crc32c debit)
