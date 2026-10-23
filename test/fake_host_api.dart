@@ -180,6 +180,17 @@ class FakeHostApi implements HostApi {
   @override
   Future<void> cancelTransfer() async => transferCancels++;
 
+  final compresses = <(String, List<String>, String, String)>[];
+  final extracts = <(String, String, String, String, bool)>[];
+
+  @override
+  Future<void> startCompress(String srcId, List<String> paths, String dstDir, String name) async =>
+      compresses.add((srcId, paths, dstDir, name));
+
+  @override
+  Future<void> startExtract(String srcId, String archive, String dstId, String dstDir, bool intoNewFolder) async =>
+      extracts.add((srcId, archive, dstId, dstDir, intoNewFolder));
+
   /// Réponse de [search] selon la requête ; un completer dans [searchGates] la retarde.
   SearchResultMsg Function(String query) searchResult = (_) => SearchResultMsg(entries: [], truncated: false);
   final searchGates = <String, Completer<void>>{};

@@ -533,7 +533,9 @@ data class TransferMsg (
   val cancelled: Boolean,
   val error: String? = null,
   /** Durée de l'opération en millisecondes (débit affiché à la fin). */
-  val elapsedMs: Long
+  val elapsedMs: Long,
+  /** `copy`, `move`, `compress` ou `extract`. */
+  val kind: String
 )
  {
   companion object {
@@ -548,7 +550,8 @@ data class TransferMsg (
       val cancelled = pigeonVar_list[7] as Boolean
       val error = pigeonVar_list[8] as String?
       val elapsedMs = pigeonVar_list[9] as Long
-      return TransferMsg(move, currentName, fileIndex, fileCount, doneBytes, totalBytes, finished, cancelled, error, elapsedMs)
+      val kind = pigeonVar_list[10] as String
+      return TransferMsg(move, currentName, fileIndex, fileCount, doneBytes, totalBytes, finished, cancelled, error, elapsedMs, kind)
     }
   }
   fun toList(): List<Any?> {
@@ -563,6 +566,7 @@ data class TransferMsg (
       cancelled,
       error,
       elapsedMs,
+      kind,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -573,7 +577,7 @@ data class TransferMsg (
       return true
     }
     val other = other as TransferMsg
-    return FluLuksApiPigeonUtils.deepEquals(this.move, other.move) && FluLuksApiPigeonUtils.deepEquals(this.currentName, other.currentName) && FluLuksApiPigeonUtils.deepEquals(this.fileIndex, other.fileIndex) && FluLuksApiPigeonUtils.deepEquals(this.fileCount, other.fileCount) && FluLuksApiPigeonUtils.deepEquals(this.doneBytes, other.doneBytes) && FluLuksApiPigeonUtils.deepEquals(this.totalBytes, other.totalBytes) && FluLuksApiPigeonUtils.deepEquals(this.finished, other.finished) && FluLuksApiPigeonUtils.deepEquals(this.cancelled, other.cancelled) && FluLuksApiPigeonUtils.deepEquals(this.error, other.error) && FluLuksApiPigeonUtils.deepEquals(this.elapsedMs, other.elapsedMs)
+    return FluLuksApiPigeonUtils.deepEquals(this.move, other.move) && FluLuksApiPigeonUtils.deepEquals(this.currentName, other.currentName) && FluLuksApiPigeonUtils.deepEquals(this.fileIndex, other.fileIndex) && FluLuksApiPigeonUtils.deepEquals(this.fileCount, other.fileCount) && FluLuksApiPigeonUtils.deepEquals(this.doneBytes, other.doneBytes) && FluLuksApiPigeonUtils.deepEquals(this.totalBytes, other.totalBytes) && FluLuksApiPigeonUtils.deepEquals(this.finished, other.finished) && FluLuksApiPigeonUtils.deepEquals(this.cancelled, other.cancelled) && FluLuksApiPigeonUtils.deepEquals(this.error, other.error) && FluLuksApiPigeonUtils.deepEquals(this.elapsedMs, other.elapsedMs) && FluLuksApiPigeonUtils.deepEquals(this.kind, other.kind)
   }
 
   override fun hashCode(): Int {
@@ -588,10 +592,11 @@ data class TransferMsg (
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.cancelled)
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.error)
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.elapsedMs)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.kind)
     return result
   }
   override fun toString(): String {
-    return "TransferMsg(move=$move, currentName=$currentName, fileIndex=$fileIndex, fileCount=$fileCount, doneBytes=$doneBytes, totalBytes=$totalBytes, finished=$finished, cancelled=$cancelled, error=$error, elapsedMs=$elapsedMs)"
+    return "TransferMsg(move=$move, currentName=$currentName, fileIndex=$fileIndex, fileCount=$fileCount, doneBytes=$doneBytes, totalBytes=$totalBytes, finished=$finished, cancelled=$cancelled, error=$error, elapsedMs=$elapsedMs, kind=$kind)"
   }
 }
 
@@ -864,6 +869,10 @@ interface FluLuksHostApi {
   fun openWith(sourceId: String, path: String, callback: (Result<Unit>) -> Unit)
   fun share(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit)
   fun startTransfer(srcId: String, paths: List<String>, dstId: String, dstDir: String, move: Boolean)
+  /** Compresse `paths` dans un ZIP `name` sous `dstDir` (même stockage) ; même créneau que les copies. */
+  fun startCompress(srcId: String, paths: List<String>, dstDir: String, name: String)
+  /** Extrait `archive` sous `dstDir` de `dstId`, dans un dossier au nom de l'archive si `intoNewFolder`. */
+  fun startExtract(srcId: String, archive: String, dstId: String, dstDir: String, intoNewFolder: Boolean)
   fun cancelTransfer()
   fun search(sourceId: String, path: String, query: String, showHidden: Boolean, callback: (Result<SearchResultMsg>) -> Unit)
   fun cancelSearch()
@@ -1264,6 +1273,49 @@ interface FluLuksHostApi {
             val moveArg = args[4] as Boolean
             val wrapped: List<Any?> = try {
               api.startTransfer(srcIdArg, pathsArg, dstIdArg, dstDirArg, moveArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.startCompress$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val srcIdArg = args[0] as String
+            val pathsArg = args[1] as List<String>
+            val dstDirArg = args[2] as String
+            val nameArg = args[3] as String
+            val wrapped: List<Any?> = try {
+              api.startCompress(srcIdArg, pathsArg, dstDirArg, nameArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.startExtract$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val srcIdArg = args[0] as String
+            val archiveArg = args[1] as String
+            val dstIdArg = args[2] as String
+            val dstDirArg = args[3] as String
+            val intoNewFolderArg = args[4] as Boolean
+            val wrapped: List<Any?> = try {
+              api.startExtract(srcIdArg, archiveArg, dstIdArg, dstDirArg, intoNewFolderArg)
               listOf(null)
             } catch (exception: Throwable) {
               FluLuksApiPigeonUtils.wrapError(exception)

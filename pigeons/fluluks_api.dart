@@ -116,6 +116,7 @@ class EntryMsg {
 /// Avancement d'une copie ou d'un déplacement ; `error` peut accompagner `finished`.
 class TransferMsg {
   TransferMsg({
+    required this.kind,
     required this.move,
     required this.currentName,
     required this.fileIndex,
@@ -139,6 +140,9 @@ class TransferMsg {
 
   /// Durée de l'opération en millisecondes (débit affiché à la fin).
   int elapsedMs;
+
+  /// `copy`, `move`, `compress` ou `extract`.
+  String kind;
 }
 
 /// Résultats d'une recherche ; `truncated` au-delà de 500.
@@ -201,6 +205,12 @@ abstract class FluLuksHostApi {
   @async
   void share(String sourceId, List<String> paths);
   void startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
+
+  /// Compresse `paths` dans un ZIP `name` sous `dstDir` (même stockage) ; même créneau que les copies.
+  void startCompress(String srcId, List<String> paths, String dstDir, String name);
+
+  /// Extrait `archive` sous `dstDir` de `dstId`, dans un dossier au nom de l'archive si `intoNewFolder`.
+  void startExtract(String srcId, String archive, String dstId, String dstDir, bool intoNewFolder);
   void cancelTransfer();
   @async
   SearchResultMsg search(String sourceId, String path, String query, bool showHidden);

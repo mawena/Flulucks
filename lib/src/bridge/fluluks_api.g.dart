@@ -508,6 +508,7 @@ class TransferMsg {
     required this.cancelled,
     this.error,
     required this.elapsedMs,
+    required this.kind,
   });
 
   bool move;
@@ -531,6 +532,9 @@ class TransferMsg {
   /// Durée de l'opération en millisecondes (débit affiché à la fin).
   int elapsedMs;
 
+  /// `copy`, `move`, `compress` ou `extract`.
+  String kind;
+
   List<Object?> _toList() {
     return <Object?>[
       move,
@@ -543,6 +547,7 @@ class TransferMsg {
       cancelled,
       error,
       elapsedMs,
+      kind,
     ];
   }
 
@@ -562,6 +567,7 @@ class TransferMsg {
       cancelled: result[7]! as bool,
       error: result[8] as String?,
       elapsedMs: result[9]! as int,
+      kind: result[10]! as String,
     );
   }
 
@@ -574,7 +580,7 @@ class TransferMsg {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(move, other.move) && _deepEquals(currentName, other.currentName) && _deepEquals(fileIndex, other.fileIndex) && _deepEquals(fileCount, other.fileCount) && _deepEquals(doneBytes, other.doneBytes) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(finished, other.finished) && _deepEquals(cancelled, other.cancelled) && _deepEquals(error, other.error) && _deepEquals(elapsedMs, other.elapsedMs);
+    return _deepEquals(move, other.move) && _deepEquals(currentName, other.currentName) && _deepEquals(fileIndex, other.fileIndex) && _deepEquals(fileCount, other.fileCount) && _deepEquals(doneBytes, other.doneBytes) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(finished, other.finished) && _deepEquals(cancelled, other.cancelled) && _deepEquals(error, other.error) && _deepEquals(elapsedMs, other.elapsedMs) && _deepEquals(kind, other.kind);
   }
 
   @override
@@ -583,7 +589,7 @@ class TransferMsg {
 
   @override
   String toString() {
-    return 'TransferMsg(move: $move, currentName: $currentName, fileIndex: $fileIndex, fileCount: $fileCount, doneBytes: $doneBytes, totalBytes: $totalBytes, finished: $finished, cancelled: $cancelled, error: $error, elapsedMs: $elapsedMs)';
+    return 'TransferMsg(move: $move, currentName: $currentName, fileIndex: $fileIndex, fileCount: $fileCount, doneBytes: $doneBytes, totalBytes: $totalBytes, finished: $finished, cancelled: $cancelled, error: $error, elapsedMs: $elapsedMs, kind: $kind)';
   }
 }
 
@@ -1220,6 +1226,44 @@ class FluLuksHostApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[srcId, paths, dstId, dstDir, move]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Compresse `paths` dans un ZIP `name` sous `dstDir` (même stockage) ; même créneau que les copies.
+  Future<void> startCompress(String srcId, List<String> paths, String dstDir, String name) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.startCompress$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[srcId, paths, dstDir, name]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Extrait `archive` sous `dstDir` de `dstId`, dans un dossier au nom de l'archive si `intoNewFolder`.
+  Future<void> startExtract(String srcId, String archive, String dstId, String dstDir, bool intoNewFolder) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.startExtract$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[srcId, archive, dstId, dstDir, intoNewFolder]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(

@@ -9,6 +9,7 @@ import android.os.storage.StorageVolume
 import android.provider.DocumentsContract
 import com.mawena.fluluks.engine.EngineError
 import com.mawena.fluluks.engine.FileType
+import com.mawena.fluluks.files.Archives
 import com.mawena.fluluks.files.DiskSource
 import com.mawena.fluluks.files.Entry
 import com.mawena.fluluks.files.Files
@@ -267,6 +268,14 @@ class HostApiImpl(
         Transfers.start(srcId, paths, dstId, dstDir, move)
     }
 
+    override fun startCompress(srcId: String, paths: List<String>, dstDir: String, name: String) = guarded {
+        Archives.startCompress(srcId, paths, dstDir, name)
+    }
+
+    override fun startExtract(srcId: String, archive: String, dstId: String, dstDir: String, intoNewFolder: Boolean) = guarded {
+        Archives.startExtract(srcId, archive, dstId, dstDir, intoNewFolder)
+    }
+
     override fun cancelTransfer() = Transfers.cancel()
 
     override fun search(sourceId: String, path: String, query: String, showHidden: Boolean, callback: (Result<SearchResultMsg>) -> Unit) =
@@ -384,7 +393,7 @@ class HostApiImpl(
         internal fun transferMsg(t: TransferState) = TransferMsg(
             move = t.move, currentName = t.currentName, fileIndex = t.fileIndex.toLong(), fileCount = t.fileCount.toLong(),
             doneBytes = t.doneBytes, totalBytes = t.totalBytes, finished = t.finished, cancelled = t.cancelled, error = t.error,
-            elapsedMs = t.elapsedMs,
+            elapsedMs = t.elapsedMs, kind = t.kind,
         )
 
         private fun volumeMsg(v: VolumeState) = VolumeMsg(

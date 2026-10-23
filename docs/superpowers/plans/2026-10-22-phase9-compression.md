@@ -272,15 +272,15 @@ int fl_arcw_close(fl_arc_writer *w, bool commit);  /* commit faux : abandon, rie
 String dstDir, String name)` ; `void startExtract(String srcId, String archive, String dstId, String dstDir,
 bool intoNewFolder)`.
 
-- [ ] **Step 1 : tests Flutter** : `compressAskNameThenStarts` (nom proposé, `.zip` ajouté) ;
+- [x] **Step 1 : tests Flutter** : `compressAskNameThenStarts` (nom proposé, `.zip` ajouté) ;
   `tapArchiveShowsExtractSheet` (« Extraire ici », « Extraire vers… », « Ouvrir avec ») ;
   `extractToPicksDestinationWithClipboardBar` (la barre propose « Extraire ici » dans un autre dossier) ;
   `transferBarShowsKind` (« Compression : … », « Extraction : … »).
-- [ ] **Step 2 :** Run `flutter test test/archives_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter (action « Compresser » dans la barre de sélection, feuille d'actions au tap
+- [x] **Step 2 :** Run `flutter test test/archives_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter (action « Compresser » dans la barre de sélection, feuille d'actions au tap
   d'une archive, extraction en attente portée par `AppState` comme le presse-papiers).
-- [ ] **Step 4 :** tests verts ; `flutter analyze` propre ; JVM verte.
-- [ ] **Step 5 :** commit `feat(archives): compresser et extraire depuis l'explorateur`.
+- [x] **Step 4 :** tests verts ; `flutter analyze` propre ; JVM verte.
+- [x] **Step 5 :** commit `feat(archives): compresser et extraire depuis l'explorateur`.
 
 ### Task 7 : corbeille
 
