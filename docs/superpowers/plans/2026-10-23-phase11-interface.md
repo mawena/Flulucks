@@ -798,7 +798,7 @@ touché : l'application tourne sur le faux pont.
   T12, mention de la phase 11 dans le tableau ; feuille de route cochée. Commit `docs: interface complète et
   professionnelle`.
 - [x] Relecture finale de toute la branche.
-- [ ] Fusion `feature/interface` → `develop`, puis `release/1.4.0` (pubspec `1.4.0+11`), `main`, et étiquette signée
+- [x] Fusion `feature/interface` → `develop`, puis `release/1.4.0` (pubspec `1.4.0+11`), `main`, et étiquette signée
   `v1.4.0`. Pas de push sans l'accord de l'utilisateur.
 
 ---

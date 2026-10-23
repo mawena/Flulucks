@@ -345,8 +345,8 @@ dans le même commit que le travail.
 - [x] *(utilisateur)* T13 — Essais sur le Pixel *(2026-10-23 : toute la fiche réussie selon l'utilisateur ; [fiche](../research/2026-10-23-essais-phase11/essais.md))*
 - [x] T14 — Documentation *(README : section « Interface » et trois captures du Pixel)*
 - [x] Relecture finale de toute la branche *(6 points importants corrigés, chacun avec son test ; 430 tests Flutter)*
-- [ ] Fusion `feature/interface` → `develop`
-- [ ] Version `v1.4.0`
+- [x] Fusion `feature/interface` → `develop`
+- [x] Version `v1.4.0`
 
 ### Phase 12 — Lecteur vidéo : orientation, pistes et gestes ([plan](2026-10-23-phase12-lecteur-video.md))
 - [x] Plan de la phase 12 écrit *(demande du 2026-10-23 ; spec § 20)*
