@@ -21,7 +21,11 @@ abstract class HostApi {
   Future<List<EntryMsg>> listDir(String sourceId, String path, bool showHidden);
   Future<String> createFolder(String sourceId, String parent, String name);
   Future<String> rename(String sourceId, String path, String newName);
-  Future<void> deleteEntries(String sourceId, List<String> paths);
+  Future<void> deleteEntries(String sourceId, List<String> paths, bool permanent);
+  Future<List<TrashItemMsg>> listTrash(String sourceId);
+  Future<void> restoreTrash(String sourceId, List<String> ids);
+  Future<void> purgeTrash(String sourceId, List<String> ids);
+  Future<void> emptyTrash(String sourceId);
   Future<void> openWith(String sourceId, String path);
   Future<void> share(String sourceId, List<String> paths);
   Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
@@ -83,7 +87,16 @@ class PigeonHostApi implements HostApi {
   @override
   Future<String> rename(String sourceId, String path, String newName) => _api.rename(sourceId, path, newName);
   @override
-  Future<void> deleteEntries(String sourceId, List<String> paths) => _api.deleteEntries(sourceId, paths);
+  Future<void> deleteEntries(String sourceId, List<String> paths, bool permanent) =>
+      _api.deleteEntries(sourceId, paths, permanent);
+  @override
+  Future<List<TrashItemMsg>> listTrash(String sourceId) => _api.listTrash(sourceId);
+  @override
+  Future<void> restoreTrash(String sourceId, List<String> ids) => _api.restoreTrash(sourceId, ids);
+  @override
+  Future<void> purgeTrash(String sourceId, List<String> ids) => _api.purgeTrash(sourceId, ids);
+  @override
+  Future<void> emptyTrash(String sourceId) => _api.emptyTrash(sourceId);
   @override
   Future<void> openWith(String sourceId, String path) => _api.openWith(sourceId, path);
   @override

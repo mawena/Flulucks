@@ -19,6 +19,7 @@ import com.mawena.fluluks.files.SharedPrefStore
 import com.mawena.fluluks.files.Sources
 import com.mawena.fluluks.files.Thumbnails
 import com.mawena.fluluks.files.TransferState
+import com.mawena.fluluks.files.Trash
 import com.mawena.fluluks.files.Transfers
 import com.mawena.fluluks.files.ViewPrefs
 import com.mawena.fluluks.files.ViewSettings
@@ -232,8 +233,27 @@ class HostApiImpl(
     override fun rename(sourceId: String, path: String, newName: String, callback: (Result<String>) -> Unit) =
         io(callback) { Files.rename(sourceId, path, newName) }
 
-    override fun deleteEntries(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit) =
-        io(callback) { Files.delete(sourceId, paths) }
+    override fun deleteEntries(sourceId: String, paths: List<String>, permanent: Boolean, callback: (Result<Unit>) -> Unit) =
+        io(callback) { Files.delete(sourceId, paths, permanent) }
+
+    /** Corbeille : les éléments de plus de 30 jours sont purgés à l'ouverture. */
+    override fun listTrash(sourceId: String, callback: (Result<List<TrashItemMsg>>) -> Unit) =
+        io(callback) {
+            Files.guard("queryChildDocuments") {
+                val src = Files.source(sourceId)
+                Trash.purgeExpired(src)
+                Trash.list(src).map { TrashItemMsg(it.id, it.name, it.originalPath, it.deletedAtMs, it.size, it.isDir) }
+            }
+        }
+
+    override fun restoreTrash(sourceId: String, ids: List<String>, callback: (Result<Unit>) -> Unit) =
+        io(callback) { Files.guard("moveDocument") { Trash.restore(Files.source(sourceId), ids) } }
+
+    override fun purgeTrash(sourceId: String, ids: List<String>, callback: (Result<Unit>) -> Unit) =
+        io(callback) { Files.guard("deleteDocument") { Trash.purge(Files.source(sourceId), ids) } }
+
+    override fun emptyTrash(sourceId: String, callback: (Result<Unit>) -> Unit) =
+        io(callback) { Files.guard("deleteDocument") { Trash.empty(Files.source(sourceId)) } }
 
     override fun openWith(sourceId: String, path: String, callback: (Result<Unit>) -> Unit) =
         startPrepared(callback) {

@@ -7,6 +7,7 @@ import '../widgets/source_tile.dart';
 import '../widgets/transfer_bar.dart';
 import 'explorer_screen.dart';
 import 'settings_screen.dart';
+import 'trash_screen.dart';
 
 /// Accueil : stockages du téléphone, disques USB et favoris.
 class HomeScreen extends StatelessWidget {
@@ -63,6 +64,7 @@ class HomeScreen extends StatelessWidget {
                   SourceTile(
                     source: s,
                     onTap: state.allFilesAccess ? () => openExplorer(context, state, s.id) : null,
+                    onTrash: state.allFilesAccess ? () => openTrash(context, state, s.id) : null,
                   ),
               ],
               _Section(Fr.usbDisks),

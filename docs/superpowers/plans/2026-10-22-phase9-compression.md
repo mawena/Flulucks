@@ -294,17 +294,17 @@ Pigeon : `deleteEntries(sourceId, paths, permanent: bool)`, `listTrash(sourceId)
 (`id, name, originalPath, deletedAt, size, isDir`), `restoreTrash(sourceId, ids)`, `purgeTrash(sourceId,
 ids)`, `emptyTrash(sourceId)`.
 
-- [ ] **Step 1 : tests JVM** (`LocalSource` sur un dossier temporaire) : `deleteMovesToTrash`,
+- [x] **Step 1 : tests JVM** (`LocalSource` sur un dossier temporaire) : `deleteMovesToTrash`,
   `trashInfoFormat` (`[Trash Info]`, `Path=` encodé en URL, `DeletionDate=AAAA-MM-JJTHH:MM:SS`),
   `restoreRecreatesParent`, `restoreUniqueName`, `purgeExpiredAfter30Days`, `deleteInsideTrashIsPermanent`,
   `readOnlySourceRefused`, `trashHiddenFromSearch`, `sameNameTwiceKeepsBoth`. Flutter :
   `deleteDialogOffersPermanent`, `trashScreenRestoreAndEmpty`.
-- [ ] **Step 2 :** Run → FAIL.
-- [ ] **Step 3 :** implémenter ; déplacer dans la corbeille = `move` dans la même source (sans copie) ;
+- [x] **Step 2 :** Run → FAIL.
+- [x] **Step 3 :** implémenter ; déplacer dans la corbeille = `move` dans la même source (sans copie) ;
   la taille de la corbeille s'affiche dans son écran ; accès par le menu de l'explorateur (racine) et
   depuis la carte du stockage.
-- [ ] **Step 4 :** tests verts.
-- [ ] **Step 5 :** commit `feat(corbeille): suppression récupérable 30 jours`.
+- [x] **Step 4 :** tests verts.
+- [x] **Step 5 :** commit `feat(corbeille): suppression récupérable 30 jours`.
 
 ### Task 8 : analyse de l'espace
 

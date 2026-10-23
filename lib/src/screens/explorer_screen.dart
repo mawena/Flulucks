@@ -9,6 +9,7 @@ import '../widgets/clipboard_bar.dart';
 import '../widgets/thumb.dart';
 import '../widgets/transfer_bar.dart';
 import 'search_screen.dart';
+import 'trash_screen.dart';
 
 /// Ouvre l'explorateur sur [sourceId] (à la racine, ou sur [path]).
 Future<void> openExplorer(BuildContext context, AppState state, String sourceId, {String path = '/'}) =>
@@ -285,22 +286,25 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     });
   }
 
+  /// Supprimer : à la corbeille du stockage, ou définitivement au choix ; dans la corbeille, toujours définitif.
   Future<void> _delete() async {
     final paths = _selected.toList();
-    final ok = await showDialog<bool>(
+    final inTrash = isInTrash(_path);
+    final permanent = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(paths.length == 1 ? Fr.deleteOne(nameOf(paths.single)) : Fr.deleteMany(paths.length)),
-        content: const Text(Fr.deleteBody),
+        content: Text(inTrash ? Fr.deleteBody : Fr.deleteToTrashBody),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(Fr.cancel)),
-          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(Fr.delete)),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text(Fr.cancel)),
+          if (!inTrash) TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(Fr.deletePermanently)),
+          FilledButton(onPressed: () => Navigator.pop(ctx, inTrash), child: const Text(Fr.delete)),
         ],
       ),
     );
-    if (ok != true) return;
+    if (permanent == null) return;
     await _run(() async {
-      await state.api.deleteEntries(widget.sourceId, paths);
+      await state.api.deleteEntries(widget.sourceId, paths, permanent);
       setState(_selected.clear);
       await _load(quiet: true);
     });
@@ -399,6 +403,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             'asc' => _setPrefs(ascending: true),
             'desc' => _setPrefs(ascending: false),
             'grid' => _setPrefs(grid: !v.grid),
+            'trash' => openTrash(context, state, widget.sourceId),
             _ => _setPrefs(showHidden: !v.showHidden),
           },
           itemBuilder: (_) => [
@@ -411,6 +416,10 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             const PopupMenuDivider(),
             PopupMenuItem(value: 'grid', child: Text(v.grid ? Fr.list : Fr.grid)),
             CheckedPopupMenuItem(value: 'hidden', checked: v.showHidden, child: const Text(Fr.showHidden)),
+            if (_path == '/') ...[
+              const PopupMenuDivider(),
+              const PopupMenuItem(value: 'trash', child: Text(Fr.trash)),
+            ],
           ],
         ),
       ],

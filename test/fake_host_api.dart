@@ -160,9 +160,37 @@ class FakeHostApi implements HostApi {
     return '${path.substring(0, path.lastIndexOf('/'))}/$newName';
   }
 
+  /// « delete … » : définitif ; « trash … » : mis à la corbeille.
   @override
-  Future<void> deleteEntries(String sourceId, List<String> paths) async =>
-      calls.add('delete $sourceId ${paths.join(',')}');
+  Future<void> deleteEntries(String sourceId, List<String> paths, bool permanent) async =>
+      calls.add('${permanent ? 'delete' : 'trash'} $sourceId ${paths.join(',')}');
+
+  /// Corbeille de chaque stockage.
+  final trash = <String, List<TrashItemMsg>>{};
+
+  @override
+  Future<List<TrashItemMsg>> listTrash(String sourceId) async {
+    calls.add('listTrash $sourceId');
+    return List.of(trash[sourceId] ?? const <TrashItemMsg>[]);
+  }
+
+  @override
+  Future<void> restoreTrash(String sourceId, List<String> ids) async {
+    calls.add('restoreTrash $sourceId ${ids.join(',')}');
+    trash[sourceId]?.removeWhere((t) => ids.contains(t.id));
+  }
+
+  @override
+  Future<void> purgeTrash(String sourceId, List<String> ids) async {
+    calls.add('purgeTrash $sourceId ${ids.join(',')}');
+    trash[sourceId]?.removeWhere((t) => ids.contains(t.id));
+  }
+
+  @override
+  Future<void> emptyTrash(String sourceId) async {
+    calls.add('emptyTrash $sourceId');
+    trash[sourceId]?.clear();
+  }
 
   @override
   Future<void> openWith(String sourceId, String path) async => calls.add('openWith $sourceId $path');

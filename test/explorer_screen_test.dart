@@ -186,10 +186,10 @@ void main() {
     await tester.tap(find.byTooltip('Supprimer'));
     await tester.pumpAndSettle();
     expect(find.text('Supprimer « b.txt » ?'), findsOneWidget);
-    expect(find.text('La suppression est définitive.'), findsOneWidget);
+    expect(find.text('Les éléments restent 30 jours dans la corbeille de ce stockage.'), findsOneWidget);
     await tester.tap(find.text('Annuler'));
     await tester.pumpAndSettle();
-    expect(api.calls.where((c) => c.startsWith('delete')), isEmpty);
+    expect(api.calls.where((c) => c.startsWith('delete') || c.startsWith('trash')), isEmpty);
     await tester.tap(find.text('a.jpg'));
     await tester.pump();
     await tester.tap(find.byTooltip('Supprimer'));
@@ -197,7 +197,7 @@ void main() {
     expect(find.text('Supprimer 2 éléments ?'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Supprimer'));
     await tester.pumpAndSettle();
-    expect(api.calls.where((c) => c.startsWith('delete')).single, anyOf('delete phone /b.txt,/a.jpg', 'delete phone /a.jpg,/b.txt'));
+    expect(api.calls.where((c) => c.startsWith('trash')).single, anyOf('trash phone /b.txt,/a.jpg', 'trash phone /a.jpg,/b.txt'));
   });
 
   testWidgets('renameDialog', (tester) async {

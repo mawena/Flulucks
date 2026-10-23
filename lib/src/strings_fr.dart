@@ -54,6 +54,15 @@ class Fr {
   static const compress = 'Compresser';
   static const archiveName = "Nom de l'archive";
   static const archiveDefault = 'Archive';
+  static const trash = 'Corbeille';
+  static const trashEmpty = 'La corbeille est vide';
+  static const emptyTrash = 'Vider la corbeille';
+  static const emptyTrashTitle = 'Vider la corbeille ?';
+  static const emptyAction = 'Vider';
+  static const restore = 'Restaurer';
+  static const deletePermanently = 'Supprimer définitivement';
+  static const deleteToTrashBody = 'Les éléments restent 30 jours dans la corbeille de ce stockage.';
+  static const trashNote = 'Les éléments supprimés depuis plus de 30 jours sont effacés.';
   static const extractHere = 'Extraire ici';
   static const extractTo = 'Extraire vers…';
   static const share = 'Partager';
@@ -100,6 +109,9 @@ class Fr {
   }
 
   static String toExtract(String name) => '« $name » à extraire';
+  static String trashSummary(int n, int bytes) => '$n élément(s), ${humanSize(bytes)}';
+  static String emptyTrashBody(int n) => 'Les $n élément(s) seront supprimés définitivement.';
+  static String actionsOf(String name) => 'Actions de $name';
   static String transferDone(int n) => 'Terminé : $n fichier(s)';
 
   /// « Terminé : 3 fichier(s), 34 Mo/s » ; sans débit sous 1 s ou sous 1 Mo (chiffre sans intérêt).

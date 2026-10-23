@@ -593,6 +593,78 @@ class TransferMsg {
   }
 }
 
+/// Élément de la corbeille d'un stockage : `id` est son nom dans la corbeille, `name` et `originalPath` disent
+/// d'où il vient ; `deletedAt` en millisecondes (0 si inconnue).
+class TrashItemMsg {
+  TrashItemMsg({
+    required this.id,
+    required this.name,
+    required this.originalPath,
+    required this.deletedAt,
+    required this.size,
+    required this.isDir,
+  });
+
+  String id;
+
+  String name;
+
+  String originalPath;
+
+  int deletedAt;
+
+  int size;
+
+  bool isDir;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      id,
+      name,
+      originalPath,
+      deletedAt,
+      size,
+      isDir,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static TrashItemMsg decode(Object result) {
+    result as List<Object?>;
+    return TrashItemMsg(
+      id: result[0]! as String,
+      name: result[1]! as String,
+      originalPath: result[2]! as String,
+      deletedAt: result[3]! as int,
+      size: result[4]! as int,
+      isDir: result[5]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! TrashItemMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(id, other.id) && _deepEquals(name, other.name) && _deepEquals(originalPath, other.originalPath) && _deepEquals(deletedAt, other.deletedAt) && _deepEquals(size, other.size) && _deepEquals(isDir, other.isDir);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'TrashItemMsg(id: $id, name: $name, originalPath: $originalPath, deletedAt: $deletedAt, size: $size, isDir: $isDir)';
+  }
+}
+
 /// Résultats d'une recherche ; `truncated` au-delà de 500.
 class SearchResultMsg {
   SearchResultMsg({
@@ -792,14 +864,17 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is TransferMsg) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is SearchResultMsg) {
+    }    else if (value is TrashItemMsg) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is ViewPrefsMsg) {
+    }    else if (value is SearchResultMsg) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is FavoriteMsg) {
+    }    else if (value is ViewPrefsMsg) {
       buffer.putUint8(137);
+      writeValue(buffer, value.encode());
+    }    else if (value is FavoriteMsg) {
+      buffer.putUint8(138);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -822,10 +897,12 @@ class _PigeonCodec extends StandardMessageCodec {
       case 134:
         return TransferMsg.decode(readValue(buffer)!);
       case 135:
-        return SearchResultMsg.decode(readValue(buffer)!);
+        return TrashItemMsg.decode(readValue(buffer)!);
       case 136:
-        return ViewPrefsMsg.decode(readValue(buffer)!);
+        return SearchResultMsg.decode(readValue(buffer)!);
       case 137:
+        return ViewPrefsMsg.decode(readValue(buffer)!);
+      case 138:
         return FavoriteMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1164,14 +1241,88 @@ class FluLuksHostApi {
     return pigeonVar_replyValue! as String;
   }
 
-  Future<void> deleteEntries(String sourceId, List<String> paths) async {
+  /// `permanent` faux : à la corbeille du stockage (définitif pour ce qui y est déjà).
+  Future<void> deleteEntries(String sourceId, List<String> paths, bool permanent) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.deleteEntries$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, paths]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, paths, permanent]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<List<TrashItemMsg>> listTrash(String sourceId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.listTrash$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<TrashItemMsg>();
+  }
+
+  Future<void> restoreTrash(String sourceId, List<String> ids) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.restoreTrash$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, ids]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> purgeTrash(String sourceId, List<String> ids) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.purgeTrash$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, ids]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> emptyTrash(String sourceId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.emptyTrash$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(

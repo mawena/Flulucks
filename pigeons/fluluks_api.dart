@@ -145,6 +145,25 @@ class TransferMsg {
   String kind;
 }
 
+/// Élément de la corbeille d'un stockage : `id` est son nom dans la corbeille, `name` et `originalPath` disent
+/// d'où il vient ; `deletedAt` en millisecondes (0 si inconnue).
+class TrashItemMsg {
+  TrashItemMsg({
+    required this.id,
+    required this.name,
+    required this.originalPath,
+    required this.deletedAt,
+    required this.size,
+    required this.isDir,
+  });
+  String id;
+  String name;
+  String originalPath;
+  int deletedAt;
+  int size;
+  bool isDir;
+}
+
 /// Résultats d'une recherche ; `truncated` au-delà de 500.
 class SearchResultMsg {
   SearchResultMsg({required this.entries, required this.truncated});
@@ -198,8 +217,17 @@ abstract class FluLuksHostApi {
   String createFolder(String sourceId, String parent, String name);
   @async
   String rename(String sourceId, String path, String newName);
+  /// `permanent` faux : à la corbeille du stockage (définitif pour ce qui y est déjà).
   @async
-  void deleteEntries(String sourceId, List<String> paths);
+  void deleteEntries(String sourceId, List<String> paths, bool permanent);
+  @async
+  List<TrashItemMsg> listTrash(String sourceId);
+  @async
+  void restoreTrash(String sourceId, List<String> ids);
+  @async
+  void purgeTrash(String sourceId, List<String> ids);
+  @async
+  void emptyTrash(String sourceId);
   @async
   void openWith(String sourceId, String path);
   @async
