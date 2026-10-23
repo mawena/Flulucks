@@ -211,6 +211,78 @@ class FakeHostApi implements HostApi {
   @override
   Future<void> cancelHash() async => hashCancels++;
 
+  /// Serveurs distants ; enregistrements reçus (fiche, mot de passe décodé) ; réponse de connectServer (défaut :
+  /// la source distante) et mots de passe reçus ; rappel de trustHostKey.
+  List<RemoteServerMsg> servers = [];
+  final savedServers = <(RemoteServerMsg, String?)>[];
+  SourceMsg Function(String id, Uint8List? password)? connect;
+  final connectPasswords = <String?>[];
+  void Function(String id, String fingerprint)? onTrust;
+
+  @override
+  Future<List<RemoteServerMsg>> listServers() async => List.of(servers);
+
+  @override
+  Future<RemoteServerMsg> saveServer(RemoteServerMsg server, Uint8List? password, Uint8List? keyPassphrase) async {
+    savedServers.add((server, password == null ? null : utf8.decode(List<int>.of(password))));
+    final saved = RemoteServerMsg(
+      id: server.id.isEmpty ? 'nouveau' : server.id,
+      protocol: server.protocol,
+      name: server.name.isEmpty ? server.host : server.name,
+      host: server.host,
+      port: server.port,
+      user: server.user,
+      startPath: server.startPath,
+      remember: server.remember,
+      hostKey: server.hostKey,
+      keyInfo: server.keyInfo,
+      hasPassword: server.remember && password != null,
+      connected: false,
+    );
+    servers = [...servers.where((s) => s.id != saved.id), saved];
+    return saved;
+  }
+
+  @override
+  Future<void> deleteServer(String serverId) async {
+    calls.add('deleteServer $serverId');
+    servers = servers.where((s) => s.id != serverId).toList();
+  }
+
+  @override
+  Future<SourceMsg> connectServer(String serverId, Uint8List? password) async {
+    connectPasswords.add(password == null ? null : utf8.decode(List<int>.of(password)));
+    final s = connect?.call(serverId, password) ??
+        SourceMsg(
+          id: 'remote:$serverId',
+          stableKey: 'remote:$serverId',
+          kind: 'remote',
+          label: serverId,
+          totalBytes: -1,
+          freeBytes: -1,
+          readOnly: false,
+          roReason: '',
+          encrypted: false,
+        );
+    if (!sources.any((x) => x.id == s.id)) sources = [...sources, s];
+    return s;
+  }
+
+  @override
+  Future<void> disconnectServer(String serverId) async {
+    calls.add('disconnectServer $serverId');
+    sources = sources.where((s) => s.id != 'remote:$serverId').toList();
+  }
+
+  @override
+  Future<void> trustHostKey(String serverId, String fingerprint) async {
+    calls.add('trustHostKey $serverId $fingerprint');
+    onTrust?.call(serverId, fingerprint);
+  }
+
+  @override
+  Future<void> forgetHostKey(String serverId) async => calls.add('forgetHostKey $serverId');
+
   /// Lecteurs : octets des images et textes par chemin ; une erreur par chemin (message) ; réponse de writeText
   /// (défaut : enregistré, mtime + 1) ; enregistrements reçus (chemin, texte, bom, crlf, mtime, taille, force).
   final images = <String, Uint8List>{};

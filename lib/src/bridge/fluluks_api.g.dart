@@ -1345,6 +1345,109 @@ class SearchResultMsg {
   }
 }
 
+/// Serveur distant enregistré (phase 10) : `protocol` `ftp` ou `sftp` ; `remember` : mot de passe mémorisé (scellé
+/// par le Keystore) ; `hostKey` : clé SFTP acceptée ; `keyInfo` : clé privée importée ; `hasPassword` : un mot de
+/// passe est mémorisé ; `connected` : connexion ouverte (source `remote:<id>`).
+class RemoteServerMsg {
+  RemoteServerMsg({
+    required this.id,
+    required this.protocol,
+    required this.name,
+    required this.host,
+    required this.port,
+    required this.user,
+    required this.startPath,
+    required this.remember,
+    this.hostKey,
+    this.keyInfo,
+    required this.hasPassword,
+    required this.connected,
+  });
+
+  String id;
+
+  String protocol;
+
+  String name;
+
+  String host;
+
+  int port;
+
+  String user;
+
+  String startPath;
+
+  bool remember;
+
+  String? hostKey;
+
+  String? keyInfo;
+
+  bool hasPassword;
+
+  bool connected;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      id,
+      protocol,
+      name,
+      host,
+      port,
+      user,
+      startPath,
+      remember,
+      hostKey,
+      keyInfo,
+      hasPassword,
+      connected,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static RemoteServerMsg decode(Object result) {
+    result as List<Object?>;
+    return RemoteServerMsg(
+      id: result[0]! as String,
+      protocol: result[1]! as String,
+      name: result[2]! as String,
+      host: result[3]! as String,
+      port: result[4]! as int,
+      user: result[5]! as String,
+      startPath: result[6]! as String,
+      remember: result[7]! as bool,
+      hostKey: result[8] as String?,
+      keyInfo: result[9] as String?,
+      hasPassword: result[10]! as bool,
+      connected: result[11]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! RemoteServerMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(id, other.id) && _deepEquals(protocol, other.protocol) && _deepEquals(name, other.name) && _deepEquals(host, other.host) && _deepEquals(port, other.port) && _deepEquals(user, other.user) && _deepEquals(startPath, other.startPath) && _deepEquals(remember, other.remember) && _deepEquals(hostKey, other.hostKey) && _deepEquals(keyInfo, other.keyInfo) && _deepEquals(hasPassword, other.hasPassword) && _deepEquals(connected, other.connected);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'RemoteServerMsg(id: $id, protocol: $protocol, name: $name, host: $host, port: $port, user: $user, startPath: $startPath, remember: $remember, hostKey: $hostKey, keyInfo: $keyInfo, hasPassword: $hasPassword, connected: $connected)';
+  }
+}
+
 /// Préférences d'affichage ; `sort` : `name`, `size` ou `date` ; `builtInViewers` : ouvrir images, musique, vidéos et
 /// textes dans les lecteurs de Portail (sinon dans une autre application).
 class ViewPrefsMsg {
@@ -1532,11 +1635,14 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is SearchResultMsg) {
       buffer.putUint8(145);
       writeValue(buffer, value.encode());
-    }    else if (value is ViewPrefsMsg) {
+    }    else if (value is RemoteServerMsg) {
       buffer.putUint8(146);
       writeValue(buffer, value.encode());
-    }    else if (value is FavoriteMsg) {
+    }    else if (value is ViewPrefsMsg) {
       buffer.putUint8(147);
+      writeValue(buffer, value.encode());
+    }    else if (value is FavoriteMsg) {
+      buffer.putUint8(148);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -1581,8 +1687,10 @@ class _PigeonCodec extends StandardMessageCodec {
       case 145:
         return SearchResultMsg.decode(readValue(buffer)!);
       case 146:
-        return ViewPrefsMsg.decode(readValue(buffer)!);
+        return RemoteServerMsg.decode(readValue(buffer)!);
       case 147:
+        return ViewPrefsMsg.decode(readValue(buffer)!);
+      case 148:
         return FavoriteMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -2297,6 +2405,138 @@ class FluLuksHostApi {
   /// Lecteurs (phase 10) : octets d'une image (64 Mio au plus, HEIC converti en JPEG) ; texte UTF-8 de l'éditeur
   /// (2 Mio au plus), enregistré par un fichier temporaire, refusé (`changed`) s'il a changé depuis son ouverture,
   /// sauf `force`.
+  /// Dossiers distants (phase 10). `saveServer` : identifiant vide pour un nouveau serveur ; mots de passe null :
+  /// ceux mémorisés sont gardés. `connectServer` échoue avec le code `auth` (mot de passe requis ou refusé ; détails :
+  /// vrai s'il manquait), `hostkey-unknown` (détails : l'empreinte à montrer) ou `hostkey-changed`.
+  Future<List<RemoteServerMsg>> listServers() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.listServers$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<RemoteServerMsg>();
+  }
+
+  Future<RemoteServerMsg> saveServer(RemoteServerMsg server, Uint8List? password, Uint8List? keyPassphrase) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.saveServer$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[server, password, keyPassphrase]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as RemoteServerMsg;
+  }
+
+  Future<void> deleteServer(String serverId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.deleteServer$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[serverId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<SourceMsg> connectServer(String serverId, Uint8List? password) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.connectServer$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[serverId, password]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as SourceMsg;
+  }
+
+  Future<void> disconnectServer(String serverId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.disconnectServer$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[serverId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> trustHostKey(String serverId, String fingerprint) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.trustHostKey$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[serverId, fingerprint]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> forgetHostKey(String serverId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.forgetHostKey$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[serverId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
   Future<Uint8List> readImage(String sourceId, String path) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.readImage$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(

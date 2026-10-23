@@ -16,6 +16,7 @@ import com.mawena.fluluks.files.DiskSource
 import com.mawena.fluluks.files.Entry
 import com.mawena.fluluks.files.FileContent
 import com.mawena.fluluks.files.FileDetails
+import com.mawena.fluluks.files.FileSource
 import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.FilesException
 import com.mawena.fluluks.files.QuickFilters
@@ -31,6 +32,11 @@ import com.mawena.fluluks.files.Trash
 import com.mawena.fluluks.files.Transfers
 import com.mawena.fluluks.files.ViewPrefs
 import com.mawena.fluluks.files.ViewSettings
+import com.mawena.fluluks.remote.AuthFailed
+import com.mawena.fluluks.remote.HostKeyChanged
+import com.mawena.fluluks.remote.HostKeyUnknown
+import com.mawena.fluluks.remote.Remotes
+import com.mawena.fluluks.remote.ServerConfig
 import com.mawena.fluluks.volumes.AutoLock
 import com.mawena.fluluks.volumes.DiskState
 import com.mawena.fluluks.volumes.FormatOptions
@@ -213,24 +219,81 @@ class HostApiImpl(
      */
     override fun listSources(): List<SourceMsg> = guardedValue {
         val vols = VolumeManager.volumes.value.associateBy { it.id }
-        Sources.list().map { src ->
-            val v = vols[src.id]
-            if (src is DiskSource && v != null) {
-                SourceMsg(
-                    id = v.id, stableKey = if (v.partUuid.isBlank()) "disk:${v.diskId}#${v.partIndex}" else "disk:${v.partUuid}",
-                    kind = "disk", label = v.title, totalBytes = v.totalBytes, freeBytes = v.freeBytes,
-                    readOnly = v.readOnly, roReason = v.roReason, encrypted = v.encrypted,
+        Sources.list().map { src -> sourceMsg(src, vols[src.id]) }
+    }
+
+    private fun sourceMsg(src: FileSource, v: VolumeState?): SourceMsg =
+        if (src is DiskSource && v != null) {
+            SourceMsg(
+                id = v.id, stableKey = if (v.partUuid.isBlank()) "disk:${v.diskId}#${v.partIndex}" else "disk:${v.partUuid}",
+                kind = "disk", label = v.title, totalBytes = v.totalBytes, freeBytes = v.freeBytes,
+                readOnly = v.readOnly, roReason = v.roReason, encrypted = v.encrypted,
+            )
+        } else {
+            val (free, total) = src.space()
+            val ro = src.readOnlyReason
+            SourceMsg(
+                id = src.id, stableKey = src.stableKey, kind = Sources.kind(src), label = src.label,
+                totalBytes = total, freeBytes = free, readOnly = ro != null, roReason = ro ?: "", encrypted = false,
+            )
+        }
+
+    private fun serverMsg(c: ServerConfig) = RemoteServerMsg(
+        id = c.id, protocol = c.protocol, name = c.name, host = c.host, port = c.port.toLong(), user = c.user,
+        startPath = c.startPath, remember = c.remember, hostKey = c.hostKey, keyInfo = c.keyInfo,
+        hasPassword = Remotes.servers().secrets(c.id)?.let { s -> (s.password != null).also { s.wipe() } } ?: false,
+        connected = Remotes.isConnected(c.id),
+    )
+
+    override fun listServers(): List<RemoteServerMsg> = guardedValue { Remotes.servers().list().map(::serverMsg) }
+
+    override fun saveServer(server: RemoteServerMsg, password: ByteArray?, keyPassphrase: ByteArray?): RemoteServerMsg =
+        guardedValue {
+            try {
+                // fiche modifiée : la connexion ouverte avec l'ancienne est fermée
+                if (server.id.isNotEmpty()) Remotes.disconnect(server.id)
+                val c = ServerConfig(
+                    server.id, server.protocol, server.name, server.host, server.port.toInt(), server.user, server.startPath,
+                    server.remember, Remotes.servers().get(server.id)?.hostKey, Remotes.servers().get(server.id)?.keyInfo,
                 )
-            } else {
-                val (free, total) = src.space()
-                val ro = src.readOnlyReason
-                SourceMsg(
-                    id = src.id, stableKey = src.stableKey, kind = Sources.kind(src), label = src.label,
-                    totalBytes = total, freeBytes = free, readOnly = ro != null, roReason = ro ?: "", encrypted = false,
-                )
+                serverMsg(Remotes.servers().save(c, password, keyPassphrase))
+            } catch (e: IllegalArgumentException) {
+                throw FilesException(EngineError.FL_EINVAL, e.message ?: "Fiche invalide")
+            } finally {
+                password?.fill(0)
+                keyPassphrase?.fill(0)
             }
         }
+
+    override fun deleteServer(serverId: String) = guardedValue {
+        Remotes.disconnect(serverId)
+        Remotes.servers().delete(serverId)
     }
+
+    override fun connectServer(serverId: String, password: ByteArray?, callback: (Result<SourceMsg>) -> Unit) =
+        io(callback) {
+            try {
+                sourceMsg(Remotes.connect(serverId, password), null)
+            } catch (e: HostKeyUnknown) {
+                throw FlutterError("hostkey-unknown", e.message, e.fingerprint)
+            } catch (e: HostKeyChanged) {
+                throw FlutterError("hostkey-changed", e.message, null)
+            } catch (e: AuthFailed) {
+                throw FlutterError("auth", e.message, e.missing)
+            } catch (e: FlutterError) {
+                throw e
+            } catch (e: Exception) {
+                throw Files.toFilesException(e, "openDocument")
+            } finally {
+                password?.fill(0)
+            }
+        }
+
+    override fun disconnectServer(serverId: String) = guardedValue { Remotes.disconnect(serverId) }
+
+    override fun trustHostKey(serverId: String, fingerprint: String) = guardedValue { Remotes.trustHostKey(serverId, fingerprint) }
+
+    override fun forgetHostKey(serverId: String) = guardedValue { Remotes.forgetHostKey(serverId) }
 
     override fun getAutoLockMinutes(): Long = AutoLock.readPref(context).toLong()
 

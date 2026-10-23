@@ -250,7 +250,7 @@ Pigeon : `RemoteServerMsg`, `listServers`, `saveServer(msg, password?, keyPassph
 `@async connectServer(serverId, password?)` → `SourceMsg` (erreurs : code `hostkey-unknown` avec l'empreinte,
 `hostkey-changed`, `auth`), `disconnectServer`, `trustHostKey(serverId, fingerprint)`, `forgetHostKey(serverId)`.
 
-- [ ] **Step 1 : tests** :
+- [x] **Step 1 : tests** :
   - `RemoteServersTest` : `serversRoundTrip` ; `passwordNotStoredByDefault` ; `secretsSealedOnDisk` (le fichier ne
     contient pas le mot de passe en clair ; ouverture par la boîte simulée) ; `deleteServerRemovesSecrets` ;
   - `RemoteSourceTest` : `hostileServerNamesSkipped` (`..`, `.`, `a/b`, NUL, vide) ; opérations de `FileSource`
@@ -261,12 +261,12 @@ Pigeon : `RemoteServerMsg`, `listServers`, `saveServer(msg, password?, keyPassph
     non mémorisé, dialogue d'empreinte à la première connexion puis `trustHostKey` et nouvel essai, clé changée →
     message sans bouton de confiance ;
   - `SecretBoxInstrumentedTest` (Pixel, T11) : sceller puis ouvrir ; données altérées refusées.
-- [ ] **Step 2 :** Run les tests JVM et Flutter ci-dessus → FAIL.
-- [ ] **Step 3 :** implémenter ; fichiers `files/remote-servers.json` et `files/remote-secrets/<id>` écrits par
+- [x] **Step 2 :** Run les tests JVM et Flutter ci-dessus → FAIL.
+- [x] **Step 3 :** implémenter ; fichiers `files/remote-servers.json` et `files/remote-secrets/<id>` écrits par
   fichier temporaire puis renommage ; secrets en mémoire remis à zéro à la déconnexion ; `Sources.list()` ajoute
   `Remotes.connected()`.
-- [ ] **Step 4 :** tests verts ; suites JVM, Flutter et analyse vertes.
-- [ ] **Step 5 :** commit `feat(distant): serveurs enregistrés et sources distantes`.
+- [x] **Step 4 :** tests verts ; suites JVM, Flutter et analyse vertes.
+- [x] **Step 5 :** commit `feat(distant): serveurs enregistrés et sources distantes`.
 
 ### Task 6 : dossiers distants dans le gestionnaire
 

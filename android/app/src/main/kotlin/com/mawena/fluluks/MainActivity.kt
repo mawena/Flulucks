@@ -7,6 +7,7 @@ import android.hardware.usb.UsbManager
 import android.os.Build
 import android.os.Bundle
 import com.mawena.fluluks.files.Sources
+import com.mawena.fluluks.remote.Remotes
 import com.mawena.fluluks.volumes.VolumeManager
 import com.mawena.fluluks.bridge.HostApiImpl
 import io.flutter.embedding.android.FlutterActivity
@@ -31,6 +32,7 @@ class MainActivity : FlutterActivity() {
         super.onCreate(savedInstanceState)
         VolumeManager.init(this)
         Sources.init(this)
+        Remotes.init(this)
         handleUsbIntent(intent)
         requestNotificationPermission()
     }

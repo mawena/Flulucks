@@ -22,6 +22,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   bool _ejecting = false;
   String? _ejectError;
   List<SourceMsg> _sources = const [];
+  List<RemoteServerMsg> _servers = const [];
   bool _allFilesAccess = false;
   TransferMsg? _transfer;
   int? _formatProgress;
@@ -38,6 +39,9 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
 
   /// Stockages du gestionnaire de fichiers : téléphone, cartes SD, volumes ouverts.
   List<SourceMsg> get sources => _sources;
+
+  /// Serveurs distants enregistrés (phase 10).
+  List<RemoteServerMsg> get servers => _servers;
 
   /// Tri, grille et fichiers cachés (persistés côté Kotlin).
   ViewPrefsMsg get viewPrefs => _viewPrefs;
@@ -148,10 +152,42 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
       _allFilesAccess = await api.hasAllFilesAccess();
       _viewPrefs = await api.getViewPrefs();
       _favorites = await api.listFavorites();
+      _servers = await api.listServers();
       notifyListeners();
     } on PlatformException catch (e) {
       _fail(e);
     }
+  }
+
+  /// Connecte un serveur distant (erreurs `auth`, `hostkey-unknown`, `hostkey-changed` rendues telles quelles) ;
+  /// rend sa source.
+  Future<SourceMsg> connectServer(String id, Uint8List? password) async {
+    final s = await api.connectServer(id, password);
+    await refreshSources();
+    return s;
+  }
+
+  Future<void> disconnectServer(String id) async {
+    await api.disconnectServer(id);
+    await refreshSources();
+  }
+
+  Future<RemoteServerMsg> saveServer(RemoteServerMsg s, Uint8List? password) async {
+    final saved = await api.saveServer(s, password, null);
+    await refreshSources();
+    return saved;
+  }
+
+  Future<void> deleteServer(String id) async {
+    await api.deleteServer(id);
+    await refreshSources();
+  }
+
+  Future<void> trustHostKey(String id, String fingerprint) => api.trustHostKey(id, fingerprint);
+
+  Future<void> forgetHostKey(String id) async {
+    await api.forgetHostKey(id);
+    await refreshSources();
   }
 
   @override
@@ -181,6 +217,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
       }
       _allFilesAccess = await api.hasAllFilesAccess();
       _favorites = await api.listFavorites();
+      _servers = await api.listServers();
       notifyListeners();
     } on PlatformException catch (e) {
       _fail(e);

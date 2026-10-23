@@ -1250,6 +1250,93 @@ data class SearchResultMsg (
 }
 
 /**
+ * Serveur distant enregistré (phase 10) : `protocol` `ftp` ou `sftp` ; `remember` : mot de passe mémorisé (scellé
+ * par le Keystore) ; `hostKey` : clé SFTP acceptée ; `keyInfo` : clé privée importée ; `hasPassword` : un mot de
+ * passe est mémorisé ; `connected` : connexion ouverte (source `remote:<id>`).
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class RemoteServerMsg (
+  val id: String,
+  val protocol: String,
+  val name: String,
+  val host: String,
+  val port: Long,
+  val user: String,
+  val startPath: String,
+  val remember: Boolean,
+  val hostKey: String? = null,
+  val keyInfo: String? = null,
+  val hasPassword: Boolean,
+  val connected: Boolean
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): RemoteServerMsg {
+      val id = pigeonVar_list[0] as String
+      val protocol = pigeonVar_list[1] as String
+      val name = pigeonVar_list[2] as String
+      val host = pigeonVar_list[3] as String
+      val port = pigeonVar_list[4] as Long
+      val user = pigeonVar_list[5] as String
+      val startPath = pigeonVar_list[6] as String
+      val remember = pigeonVar_list[7] as Boolean
+      val hostKey = pigeonVar_list[8] as String?
+      val keyInfo = pigeonVar_list[9] as String?
+      val hasPassword = pigeonVar_list[10] as Boolean
+      val connected = pigeonVar_list[11] as Boolean
+      return RemoteServerMsg(id, protocol, name, host, port, user, startPath, remember, hostKey, keyInfo, hasPassword, connected)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      id,
+      protocol,
+      name,
+      host,
+      port,
+      user,
+      startPath,
+      remember,
+      hostKey,
+      keyInfo,
+      hasPassword,
+      connected,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as RemoteServerMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.id, other.id) && FluLuksApiPigeonUtils.deepEquals(this.protocol, other.protocol) && FluLuksApiPigeonUtils.deepEquals(this.name, other.name) && FluLuksApiPigeonUtils.deepEquals(this.host, other.host) && FluLuksApiPigeonUtils.deepEquals(this.port, other.port) && FluLuksApiPigeonUtils.deepEquals(this.user, other.user) && FluLuksApiPigeonUtils.deepEquals(this.startPath, other.startPath) && FluLuksApiPigeonUtils.deepEquals(this.remember, other.remember) && FluLuksApiPigeonUtils.deepEquals(this.hostKey, other.hostKey) && FluLuksApiPigeonUtils.deepEquals(this.keyInfo, other.keyInfo) && FluLuksApiPigeonUtils.deepEquals(this.hasPassword, other.hasPassword) && FluLuksApiPigeonUtils.deepEquals(this.connected, other.connected)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.id)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.protocol)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.name)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.host)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.port)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.user)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.startPath)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.remember)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.hostKey)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.keyInfo)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.hasPassword)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.connected)
+    return result
+  }
+  override fun toString(): String {
+    return "RemoteServerMsg(id=$id, protocol=$protocol, name=$name, host=$host, port=$port, user=$user, startPath=$startPath, remember=$remember, hostKey=$hostKey, keyInfo=$keyInfo, hasPassword=$hasPassword, connected=$connected)"
+  }
+}
+
+/**
  * Préférences d'affichage ; `sort` : `name`, `size` ou `date` ; `builtInViewers` : ouvrir images, musique, vidéos et
  * textes dans les lecteurs de Portail (sinon dans une autre application).
  *
@@ -1449,10 +1536,15 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
       }
       146.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ViewPrefsMsg.fromList(it)
+          RemoteServerMsg.fromList(it)
         }
       }
       147.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          ViewPrefsMsg.fromList(it)
+        }
+      }
+      148.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           FavoriteMsg.fromList(it)
         }
@@ -1530,12 +1622,16 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
         stream.write(145)
         writeValue(stream, value.toList())
       }
-      is ViewPrefsMsg -> {
+      is RemoteServerMsg -> {
         stream.write(146)
         writeValue(stream, value.toList())
       }
-      is FavoriteMsg -> {
+      is ViewPrefsMsg -> {
         stream.write(147)
+        writeValue(stream, value.toList())
+      }
+      is FavoriteMsg -> {
+        stream.write(148)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1596,7 +1692,17 @@ interface FluLuksHostApi {
    * Lecteurs (phase 10) : octets d'une image (64 Mio au plus, HEIC converti en JPEG) ; texte UTF-8 de l'éditeur
    * (2 Mio au plus), enregistré par un fichier temporaire, refusé (`changed`) s'il a changé depuis son ouverture,
    * sauf `force`.
+   * Dossiers distants (phase 10). `saveServer` : identifiant vide pour un nouveau serveur ; mots de passe null :
+   * ceux mémorisés sont gardés. `connectServer` échoue avec le code `auth` (mot de passe requis ou refusé ; détails :
+   * vrai s'il manquait), `hostkey-unknown` (détails : l'empreinte à montrer) ou `hostkey-changed`.
    */
+  fun listServers(): List<RemoteServerMsg>
+  fun saveServer(server: RemoteServerMsg, password: ByteArray?, keyPassphrase: ByteArray?): RemoteServerMsg
+  fun deleteServer(serverId: String)
+  fun connectServer(serverId: String, password: ByteArray?, callback: (Result<SourceMsg>) -> Unit)
+  fun disconnectServer(serverId: String)
+  fun trustHostKey(serverId: String, fingerprint: String)
+  fun forgetHostKey(serverId: String)
   fun readImage(sourceId: String, path: String, callback: (Result<ByteArray>) -> Unit)
   fun readText(sourceId: String, path: String, callback: (Result<TextFileMsg>) -> Unit)
   fun writeText(sourceId: String, path: String, text: String, bom: Boolean, crlf: Boolean, expectedMtime: Long, expectedSize: Long, force: Boolean, callback: (Result<TextSaveMsg>) -> Unit)
@@ -2317,6 +2423,134 @@ interface FluLuksHostApi {
           channel.setMessageHandler { _, reply ->
             val wrapped: List<Any?> = try {
               api.cancelHash()
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.listServers$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.listServers())
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.saveServer$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val serverArg = args[0] as RemoteServerMsg
+            val passwordArg = args[1] as ByteArray?
+            val keyPassphraseArg = args[2] as ByteArray?
+            val wrapped: List<Any?> = try {
+              listOf(api.saveServer(serverArg, passwordArg, keyPassphraseArg))
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.deleteServer$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val serverIdArg = args[0] as String
+            val wrapped: List<Any?> = try {
+              api.deleteServer(serverIdArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.connectServer$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val serverIdArg = args[0] as String
+            val passwordArg = args[1] as ByteArray?
+            api.connectServer(serverIdArg, passwordArg) { result: Result<SourceMsg> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.disconnectServer$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val serverIdArg = args[0] as String
+            val wrapped: List<Any?> = try {
+              api.disconnectServer(serverIdArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.trustHostKey$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val serverIdArg = args[0] as String
+            val fingerprintArg = args[1] as String
+            val wrapped: List<Any?> = try {
+              api.trustHostKey(serverIdArg, fingerprintArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.forgetHostKey$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val serverIdArg = args[0] as String
+            val wrapped: List<Any?> = try {
+              api.forgetHostKey(serverIdArg)
               listOf(null)
             } catch (exception: Throwable) {
               FluLuksApiPigeonUtils.wrapError(exception)

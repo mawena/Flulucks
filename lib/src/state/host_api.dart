@@ -41,6 +41,13 @@ abstract class HostApi {
   Future<FolderSizeMsg> folderSize(String sourceId, String path);
   Future<String?> sha256(String sourceId, String path);
   Future<void> cancelHash();
+  Future<List<RemoteServerMsg>> listServers();
+  Future<RemoteServerMsg> saveServer(RemoteServerMsg server, Uint8List? password, Uint8List? keyPassphrase);
+  Future<void> deleteServer(String serverId);
+  Future<SourceMsg> connectServer(String serverId, Uint8List? password);
+  Future<void> disconnectServer(String serverId);
+  Future<void> trustHostKey(String serverId, String fingerprint);
+  Future<void> forgetHostKey(String serverId);
   Future<Uint8List> readImage(String sourceId, String path);
   Future<TextFileMsg> readText(String sourceId, String path);
   Future<TextSaveMsg> writeText(String sourceId, String path, String text, bool bom, bool crlf, int expectedMtime,
@@ -145,6 +152,21 @@ class PigeonHostApi implements HostApi {
   Future<String?> sha256(String sourceId, String path) => _api.sha256(sourceId, path);
   @override
   Future<void> cancelHash() => _api.cancelHash();
+  @override
+  Future<List<RemoteServerMsg>> listServers() => _api.listServers();
+  @override
+  Future<RemoteServerMsg> saveServer(RemoteServerMsg server, Uint8List? password, Uint8List? keyPassphrase) =>
+      _api.saveServer(server, password, keyPassphrase);
+  @override
+  Future<void> deleteServer(String serverId) => _api.deleteServer(serverId);
+  @override
+  Future<SourceMsg> connectServer(String serverId, Uint8List? password) => _api.connectServer(serverId, password);
+  @override
+  Future<void> disconnectServer(String serverId) => _api.disconnectServer(serverId);
+  @override
+  Future<void> trustHostKey(String serverId, String fingerprint) => _api.trustHostKey(serverId, fingerprint);
+  @override
+  Future<void> forgetHostKey(String serverId) => _api.forgetHostKey(serverId);
   @override
   Future<Uint8List> readImage(String sourceId, String path) => _api.readImage(sourceId, path);
   @override

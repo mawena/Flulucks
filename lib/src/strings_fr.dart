@@ -119,6 +119,32 @@ class Fr {
   static const textChangedTitle = 'Fichier modifié entre-temps';
   static const textChangedBody = 'Le fichier a été modifié depuis son ouverture. Le remplacer par votre version ?';
   static const replace = 'Remplacer';
+
+  // Dossiers distants (phase 10)
+  static const remoteFolders = 'Dossiers distants';
+  static const addServer = 'Ajouter un serveur';
+  static const editServer = 'Modifier';
+  static const disconnect = 'Déconnecter';
+  static const serverForm = 'Serveur distant';
+  static const serverName = 'Nom';
+  static const serverHost = 'Adresse';
+  static const serverPort = 'Port';
+  static const serverUser = 'Utilisateur';
+  static const serverUserHelpFtp = 'Vide : connexion anonyme';
+  static const password = 'Mot de passe';
+  static const passwordKeep = 'Laisser vide pour garder le mot de passe mémorisé';
+  static const rememberPassword = 'Mémoriser le mot de passe';
+  static const rememberHelp = 'Chiffré par le téléphone ; sinon demandé à chaque connexion';
+  static const startFolder = 'Dossier de départ';
+  static const ftpClear = "FTP n'est pas chiffré : le mot de passe et les fichiers circulent en clair sur le réseau.";
+  static const hostKey = 'Empreinte du serveur acceptée';
+  static const forgetHostKey = "Oublier l'empreinte";
+  static const deleteServer = 'Supprimer le serveur';
+  static const connect = 'Se connecter';
+  static const wrongPassword = 'Mot de passe refusé';
+  static const trustTitle = 'Serveur inconnu';
+  static const trust = 'Faire confiance';
+  static const hostKeyChangedTitle = 'Clé du serveur changée';
   static const emptyFolder = 'Dossier vide';
   static const protectedFolder = 'Dossier protégé par Android';
   static const volumeClosed = 'Le disque a été fermé';
@@ -163,6 +189,12 @@ class Fr {
   }
 
   static String readOnlyText(String reason) => 'Lecture seule : $reason';
+  static String serverLine(String protocol, String user, String host, int port, bool connected) =>
+      '${protocol.toUpperCase()} · ${user.isEmpty ? '' : '$user@'}$host:$port${connected ? ' · connecté' : ''}';
+  static String passwordFor(String name) => 'Mot de passe de $name';
+  static String trustBody(String fingerprint) =>
+      "Première connexion à ce serveur. Vérifiez que son empreinte est bien celle-ci avant de lui faire confiance :\n\n$fingerprint";
+  static String deleteServerBody(String name) => 'Le serveur « $name » et ses secrets mémorisés seront supprimés.';
   static String imagePosition(int i, int n) => '$i / $n';
   static String toExtract(String name) => '« $name » à extraire';
   static String trashSummary(int n, int bytes) => '$n élément(s), ${humanSize(bytes)}';

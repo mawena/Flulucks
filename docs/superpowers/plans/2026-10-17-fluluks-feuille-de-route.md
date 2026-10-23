@@ -315,7 +315,7 @@ dans le même commit que le travail.
 - [x] T2 — « Ouvrir dans Portail » et éditeur de texte (UTF-8, BOM et fins de ligne gardés)
 - [x] T3 — Visionneuse d'images (glisser d'une photo à l'autre, zoom)
 - [x] T4 — Lecture à accès aléatoire et fournisseur de flux
-- [ ] T5 — Serveurs enregistrés et sources distantes (secrets chiffrés par le Keystore)
+- [x] T5 — Serveurs enregistrés et sources distantes (secrets chiffrés par le Keystore)
 - [ ] T6 — Dossiers distants dans le gestionnaire
 - [ ] T7 — Dossiers distants par FTP
 - [ ] T8 — Dossiers distants par SFTP (empreinte du serveur, clé privée)

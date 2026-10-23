@@ -11,6 +11,8 @@ import android.os.Environment
 import android.os.storage.StorageManager
 import android.provider.Settings
 import androidx.core.content.ContextCompat
+import com.mawena.fluluks.remote.RemoteSource
+import com.mawena.fluluks.remote.Remotes
 import com.mawena.fluluks.volumes.VolumeManager
 import java.lang.ref.WeakReference
 
@@ -74,6 +76,7 @@ object Sources {
             }
         }
         for (v in VolumeManager.volumes.value) out += DiskSource(v.id)
+        out += Remotes.connected()
         return out
     }
 
@@ -81,11 +84,12 @@ object Sources {
 
     /**
      * Type affiché : `phone`, `removable` (stockage amovible monté par Android : carte SD ou clé USB, Android
-     * ne dit pas lequel) ou `disk`.
+     * ne dit pas lequel), `disk` ou `remote` (serveur FTP ou SFTP).
      */
     fun kind(s: FileSource): String = when {
         s.id == PHONE -> "phone"
         s is LocalSource -> "removable"
+        s is RemoteSource -> "remote"
         else -> "disk"
     }
 }

@@ -306,6 +306,38 @@ class SearchResultMsg {
   bool truncated;
 }
 
+/// Serveur distant enregistré (phase 10) : `protocol` `ftp` ou `sftp` ; `remember` : mot de passe mémorisé (scellé
+/// par le Keystore) ; `hostKey` : clé SFTP acceptée ; `keyInfo` : clé privée importée ; `hasPassword` : un mot de
+/// passe est mémorisé ; `connected` : connexion ouverte (source `remote:<id>`).
+class RemoteServerMsg {
+  RemoteServerMsg({
+    required this.id,
+    required this.protocol,
+    required this.name,
+    required this.host,
+    required this.port,
+    required this.user,
+    required this.startPath,
+    required this.remember,
+    this.hostKey,
+    this.keyInfo,
+    required this.hasPassword,
+    required this.connected,
+  });
+  String id;
+  String protocol;
+  String name;
+  String host;
+  int port;
+  String user;
+  String startPath;
+  bool remember;
+  String? hostKey;
+  String? keyInfo;
+  bool hasPassword;
+  bool connected;
+}
+
 /// Préférences d'affichage ; `sort` : `name`, `size` ou `date` ; `builtInViewers` : ouvrir images, musique, vidéos et
 /// textes dans les lecteurs de Portail (sinon dans une autre application).
 class ViewPrefsMsg {
@@ -407,6 +439,18 @@ abstract class FluLuksHostApi {
   /// Lecteurs (phase 10) : octets d'une image (64 Mio au plus, HEIC converti en JPEG) ; texte UTF-8 de l'éditeur
   /// (2 Mio au plus), enregistré par un fichier temporaire, refusé (`changed`) s'il a changé depuis son ouverture,
   /// sauf `force`.
+  /// Dossiers distants (phase 10). `saveServer` : identifiant vide pour un nouveau serveur ; mots de passe null :
+  /// ceux mémorisés sont gardés. `connectServer` échoue avec le code `auth` (mot de passe requis ou refusé ; détails :
+  /// vrai s'il manquait), `hostkey-unknown` (détails : l'empreinte à montrer) ou `hostkey-changed`.
+  List<RemoteServerMsg> listServers();
+  RemoteServerMsg saveServer(RemoteServerMsg server, Uint8List? password, Uint8List? keyPassphrase);
+  void deleteServer(String serverId);
+  @async
+  SourceMsg connectServer(String serverId, Uint8List? password);
+  void disconnectServer(String serverId);
+  void trustHostKey(String serverId, String fingerprint);
+  void forgetHostKey(String serverId);
+
   @async
   Uint8List readImage(String sourceId, String path);
   @async
