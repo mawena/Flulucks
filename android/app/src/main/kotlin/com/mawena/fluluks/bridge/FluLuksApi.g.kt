@@ -663,6 +663,133 @@ data class TrashItemMsg (
 }
 
 /**
+ * Élément d'un dossier analysé (taille totale pour un dossier).
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class SpaceItemMsg (
+  val name: String,
+  val path: String,
+  val isDir: Boolean,
+  val size: Long,
+  val fileCount: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): SpaceItemMsg {
+      val name = pigeonVar_list[0] as String
+      val path = pigeonVar_list[1] as String
+      val isDir = pigeonVar_list[2] as Boolean
+      val size = pigeonVar_list[3] as Long
+      val fileCount = pigeonVar_list[4] as Long
+      return SpaceItemMsg(name, path, isDir, size, fileCount)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      name,
+      path,
+      isDir,
+      size,
+      fileCount,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as SpaceItemMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.name, other.name) && FluLuksApiPigeonUtils.deepEquals(this.path, other.path) && FluLuksApiPigeonUtils.deepEquals(this.isDir, other.isDir) && FluLuksApiPigeonUtils.deepEquals(this.size, other.size) && FluLuksApiPigeonUtils.deepEquals(this.fileCount, other.fileCount)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.name)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.path)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.isDir)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.size)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.fileCount)
+    return result
+  }
+  override fun toString(): String {
+    return "SpaceItemMsg(name=$name, path=$path, isDir=$isDir, size=$size, fileCount=$fileCount)"
+  }
+}
+
+/**
+ * Occupation d'un dossier : enfants du plus gros au plus petit (200 au plus, le reste résumé par `otherCount` et
+ * `otherBytes`), plus gros fichiers sous lui ; `truncated` si l'analyse s'est arrêtée avant la fin.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class SpaceReportMsg (
+  val path: String,
+  val totalBytes: Long,
+  val fileCount: Long,
+  val children: List<SpaceItemMsg>,
+  val biggest: List<EntryMsg>,
+  val truncated: Boolean,
+  val otherCount: Long,
+  val otherBytes: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): SpaceReportMsg {
+      val path = pigeonVar_list[0] as String
+      val totalBytes = pigeonVar_list[1] as Long
+      val fileCount = pigeonVar_list[2] as Long
+      val children = pigeonVar_list[3] as List<SpaceItemMsg>
+      val biggest = pigeonVar_list[4] as List<EntryMsg>
+      val truncated = pigeonVar_list[5] as Boolean
+      val otherCount = pigeonVar_list[6] as Long
+      val otherBytes = pigeonVar_list[7] as Long
+      return SpaceReportMsg(path, totalBytes, fileCount, children, biggest, truncated, otherCount, otherBytes)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      path,
+      totalBytes,
+      fileCount,
+      children,
+      biggest,
+      truncated,
+      otherCount,
+      otherBytes,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as SpaceReportMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.path, other.path) && FluLuksApiPigeonUtils.deepEquals(this.totalBytes, other.totalBytes) && FluLuksApiPigeonUtils.deepEquals(this.fileCount, other.fileCount) && FluLuksApiPigeonUtils.deepEquals(this.children, other.children) && FluLuksApiPigeonUtils.deepEquals(this.biggest, other.biggest) && FluLuksApiPigeonUtils.deepEquals(this.truncated, other.truncated) && FluLuksApiPigeonUtils.deepEquals(this.otherCount, other.otherCount) && FluLuksApiPigeonUtils.deepEquals(this.otherBytes, other.otherBytes)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.path)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.totalBytes)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.fileCount)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.children)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.biggest)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.truncated)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.otherCount)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.otherBytes)
+    return result
+  }
+  override fun toString(): String {
+    return "SpaceReportMsg(path=$path, totalBytes=$totalBytes, fileCount=$fileCount, children=$children, biggest=$biggest, truncated=$truncated, otherCount=$otherCount, otherBytes=$otherBytes)"
+  }
+}
+
+/**
  * Résultats d'une recherche ; `truncated` au-delà de 500.
  *
  * Generated class from Pigeon that represents data sent in messages.
@@ -852,15 +979,25 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          SearchResultMsg.fromList(it)
+          SpaceItemMsg.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ViewPrefsMsg.fromList(it)
+          SpaceReportMsg.fromList(it)
         }
       }
       138.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          SearchResultMsg.fromList(it)
+        }
+      }
+      139.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          ViewPrefsMsg.fromList(it)
+        }
+      }
+      140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           FavoriteMsg.fromList(it)
         }
@@ -898,16 +1035,24 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is SearchResultMsg -> {
+      is SpaceItemMsg -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is ViewPrefsMsg -> {
+      is SpaceReportMsg -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is FavoriteMsg -> {
+      is SearchResultMsg -> {
         stream.write(138)
+        writeValue(stream, value.toList())
+      }
+      is ViewPrefsMsg -> {
+        stream.write(139)
+        writeValue(stream, value.toList())
+      }
+      is FavoriteMsg -> {
+        stream.write(140)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -952,6 +1097,10 @@ interface FluLuksHostApi {
   fun cancelTransfer()
   fun search(sourceId: String, path: String, query: String, showHidden: Boolean, callback: (Result<SearchResultMsg>) -> Unit)
   fun cancelSearch()
+  /** Analyse de l'espace sous `path` (une à la fois) ; `spaceChildren` relit un dossier de la dernière analyse. */
+  fun analyzeSpace(sourceId: String, path: String, callback: (Result<SpaceReportMsg>) -> Unit)
+  fun spaceChildren(sourceId: String, path: String, callback: (Result<SpaceReportMsg>) -> Unit)
+  fun cancelAnalysis()
   fun thumbnail(sourceId: String, path: String, sizePx: Long, callback: (Result<ByteArray?>) -> Unit)
   fun getViewPrefs(): ViewPrefsMsg
   fun setViewPrefs(prefs: ViewPrefsMsg)
@@ -1527,6 +1676,64 @@ interface FluLuksHostApi {
           channel.setMessageHandler { _, reply ->
             val wrapped: List<Any?> = try {
               api.cancelSearch()
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.analyzeSpace$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathArg = args[1] as String
+            api.analyzeSpace(sourceIdArg, pathArg) { result: Result<SpaceReportMsg> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.spaceChildren$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathArg = args[1] as String
+            api.spaceChildren(sourceIdArg, pathArg) { result: Result<SpaceReportMsg> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelAnalysis$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              api.cancelAnalysis()
               listOf(null)
             } catch (exception: Throwable) {
               FluLuksApiPigeonUtils.wrapError(exception)

@@ -63,6 +63,11 @@ class Fr {
   static const deletePermanently = 'Supprimer définitivement';
   static const deleteToTrashBody = 'Les éléments restent 30 jours dans la corbeille de ce stockage.';
   static const trashNote = 'Les éléments supprimés depuis plus de 30 jours sont effacés.';
+  static const spaceAnalysis = "Analyse de l'espace";
+  static const spaceFolders = 'Dossiers';
+  static const biggestFiles = 'Plus gros fichiers';
+  static const analyzing = 'Analyse en cours…';
+  static const spaceTruncated = "Analyse incomplète : arrêtée, ou trop d'éléments";
   static const extractHere = 'Extraire ici';
   static const extractTo = 'Extraire vers…';
   static const share = 'Partager';
@@ -112,6 +117,9 @@ class Fr {
   static String trashSummary(int n, int bytes) => '$n élément(s), ${humanSize(bytes)}';
   static String emptyTrashBody(int n) => 'Les $n élément(s) seront supprimés définitivement.';
   static String actionsOf(String name) => 'Actions de $name';
+  static String spaceTotal(int bytes, int files) => '${humanSize(bytes)} — $files fichier(s)';
+  static String spaceOthers(int n) => '… et $n autre(s) élément(s)';
+  static String percent(int p) => '$p %';
   static String transferDone(int n) => 'Terminé : $n fichier(s)';
 
   /// « Terminé : 3 fichier(s), 34 Mo/s » ; sans débit sous 1 s ou sous 1 Mo (chiffre sans intérêt).

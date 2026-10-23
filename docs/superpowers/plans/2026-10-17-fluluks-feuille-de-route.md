@@ -294,7 +294,7 @@ dans le même commit que le travail.
 - [x] T5 — Compresser et extraire d'un stockage à l'autre, avec progression et annulation
 - [x] T6 — Compresser et extraire depuis l'explorateur
 - [x] T7 — Corbeille sur le téléphone et sur les disques (récupérable 30 jours)
-- [ ] T8 — Analyse de l'espace (dossiers et plus gros fichiers)
+- [x] T8 — Analyse de l'espace (dossiers et plus gros fichiers)
 - [ ] T9 — Propriétés d'un fichier, avec empreinte SHA-256
 - [ ] T10 — Renommage par lot
 - [ ] T11 — Filtres rapides sur l'accueil (photos, vidéos, musique, documents, archives, récents)

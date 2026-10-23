@@ -34,6 +34,9 @@ abstract class HostApi {
   Future<void> cancelTransfer();
   Future<SearchResultMsg> search(String sourceId, String path, String query, bool showHidden);
   Future<void> cancelSearch();
+  Future<SpaceReportMsg> analyzeSpace(String sourceId, String path);
+  Future<SpaceReportMsg> spaceChildren(String sourceId, String path);
+  Future<void> cancelAnalysis();
   Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx);
   Future<ViewPrefsMsg> getViewPrefs();
   Future<void> setViewPrefs(ViewPrefsMsg prefs);
@@ -117,6 +120,12 @@ class PigeonHostApi implements HostApi {
       _api.search(sourceId, path, query, showHidden);
   @override
   Future<void> cancelSearch() => _api.cancelSearch();
+  @override
+  Future<SpaceReportMsg> analyzeSpace(String sourceId, String path) => _api.analyzeSpace(sourceId, path);
+  @override
+  Future<SpaceReportMsg> spaceChildren(String sourceId, String path) => _api.spaceChildren(sourceId, path);
+  @override
+  Future<void> cancelAnalysis() => _api.cancelAnalysis();
   @override
   Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx) => _api.thumbnail(sourceId, path, sizePx);
   @override

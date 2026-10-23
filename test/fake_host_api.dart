@@ -165,6 +165,25 @@ class FakeHostApi implements HostApi {
   Future<void> deleteEntries(String sourceId, List<String> paths, bool permanent) async =>
       calls.add('${permanent ? 'delete' : 'trash'} $sourceId ${paths.join(',')}');
 
+  /// Analyses de l'espace par dossier ; [spaceFuture] remplace la réponse de analyzeSpace (analyse en cours).
+  final space = <String, SpaceReportMsg>{};
+  Future<SpaceReportMsg>? spaceFuture;
+
+  @override
+  Future<SpaceReportMsg> analyzeSpace(String sourceId, String path) async {
+    calls.add('analyzeSpace $sourceId $path');
+    return spaceFuture ?? space[path]!;
+  }
+
+  @override
+  Future<SpaceReportMsg> spaceChildren(String sourceId, String path) async {
+    calls.add('spaceChildren $sourceId $path');
+    return space[path]!;
+  }
+
+  @override
+  Future<void> cancelAnalysis() async => calls.add('cancelAnalysis');
+
   /// Corbeille de chaque stockage.
   final trash = <String, List<TrashItemMsg>>{};
 

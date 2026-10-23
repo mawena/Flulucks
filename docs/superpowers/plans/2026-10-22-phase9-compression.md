@@ -316,10 +316,10 @@ résultat gardé en mémoire pour descendre dans les dossiers sans relire) ; Pig
 path) → SpaceReportMsg` (`path, totalBytes, fileCount, children: List<SpaceItemMsg>, biggest:
 List<EntryMsg>, truncated`), `spaceChildren(sourceId, path)`, `cancelAnalysis()`.
 
-- [ ] **Step 1 : tests** : `sizesSumUp`, `biggestFilesTop100`, `drillDownUsesCache`, `unreadableDirSkipped`,
+- [x] **Step 1 : tests** : `sizesSumUp`, `biggestFilesTop100`, `drillDownUsesCache`, `unreadableDirSkipped`,
   `cancelStops` ; Flutter `spaceScreenShowsBarsAndDrillsDown`.
-- [ ] **Step 2 → 4 :** FAIL, implémenter (barres proportionnelles, pourcentage), verts.
-- [ ] **Step 5 :** commit `feat(gestionnaire): analyse de l'espace`.
+- [x] **Step 2 → 4 :** FAIL, implémenter (barres proportionnelles, pourcentage), verts.
+- [x] **Step 5 :** commit `feat(gestionnaire): analyse de l'espace`.
 
 ### Task 9 : propriétés et SHA-256
 

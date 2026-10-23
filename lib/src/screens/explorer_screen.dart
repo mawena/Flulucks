@@ -9,6 +9,7 @@ import '../widgets/clipboard_bar.dart';
 import '../widgets/thumb.dart';
 import '../widgets/transfer_bar.dart';
 import 'search_screen.dart';
+import 'space_screen.dart';
 import 'trash_screen.dart';
 
 /// Ouvre l'explorateur sur [sourceId] (à la racine, ou sur [path]).
@@ -404,6 +405,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             'desc' => _setPrefs(ascending: false),
             'grid' => _setPrefs(grid: !v.grid),
             'trash' => openTrash(context, state, widget.sourceId),
+            'space' => openSpace(context, state, widget.sourceId),
             _ => _setPrefs(showHidden: !v.showHidden),
           },
           itemBuilder: (_) => [
@@ -419,6 +421,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             if (_path == '/') ...[
               const PopupMenuDivider(),
               const PopupMenuItem(value: 'trash', child: Text(Fr.trash)),
+              const PopupMenuItem(value: 'space', child: Text(Fr.spaceAnalysis)),
             ],
           ],
         ),

@@ -164,6 +164,39 @@ class TrashItemMsg {
   bool isDir;
 }
 
+/// Élément d'un dossier analysé (taille totale pour un dossier).
+class SpaceItemMsg {
+  SpaceItemMsg({required this.name, required this.path, required this.isDir, required this.size, required this.fileCount});
+  String name;
+  String path;
+  bool isDir;
+  int size;
+  int fileCount;
+}
+
+/// Occupation d'un dossier : enfants du plus gros au plus petit (200 au plus, le reste résumé par `otherCount` et
+/// `otherBytes`), plus gros fichiers sous lui ; `truncated` si l'analyse s'est arrêtée avant la fin.
+class SpaceReportMsg {
+  SpaceReportMsg({
+    required this.path,
+    required this.totalBytes,
+    required this.fileCount,
+    required this.children,
+    required this.biggest,
+    required this.truncated,
+    required this.otherCount,
+    required this.otherBytes,
+  });
+  String path;
+  int totalBytes;
+  int fileCount;
+  List<SpaceItemMsg> children;
+  List<EntryMsg> biggest;
+  bool truncated;
+  int otherCount;
+  int otherBytes;
+}
+
 /// Résultats d'une recherche ; `truncated` au-delà de 500.
 class SearchResultMsg {
   SearchResultMsg({required this.entries, required this.truncated});
@@ -243,6 +276,13 @@ abstract class FluLuksHostApi {
   @async
   SearchResultMsg search(String sourceId, String path, String query, bool showHidden);
   void cancelSearch();
+
+  /// Analyse de l'espace sous `path` (une à la fois) ; `spaceChildren` relit un dossier de la dernière analyse.
+  @async
+  SpaceReportMsg analyzeSpace(String sourceId, String path);
+  @async
+  SpaceReportMsg spaceChildren(String sourceId, String path);
+  void cancelAnalysis();
   @async
   Uint8List? thumbnail(String sourceId, String path, int sizePx);
   ViewPrefsMsg getViewPrefs();

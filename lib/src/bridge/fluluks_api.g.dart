@@ -665,6 +665,154 @@ class TrashItemMsg {
   }
 }
 
+/// Élément d'un dossier analysé (taille totale pour un dossier).
+class SpaceItemMsg {
+  SpaceItemMsg({
+    required this.name,
+    required this.path,
+    required this.isDir,
+    required this.size,
+    required this.fileCount,
+  });
+
+  String name;
+
+  String path;
+
+  bool isDir;
+
+  int size;
+
+  int fileCount;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      name,
+      path,
+      isDir,
+      size,
+      fileCount,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static SpaceItemMsg decode(Object result) {
+    result as List<Object?>;
+    return SpaceItemMsg(
+      name: result[0]! as String,
+      path: result[1]! as String,
+      isDir: result[2]! as bool,
+      size: result[3]! as int,
+      fileCount: result[4]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! SpaceItemMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(name, other.name) && _deepEquals(path, other.path) && _deepEquals(isDir, other.isDir) && _deepEquals(size, other.size) && _deepEquals(fileCount, other.fileCount);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'SpaceItemMsg(name: $name, path: $path, isDir: $isDir, size: $size, fileCount: $fileCount)';
+  }
+}
+
+/// Occupation d'un dossier : enfants du plus gros au plus petit (200 au plus, le reste résumé par `otherCount` et
+/// `otherBytes`), plus gros fichiers sous lui ; `truncated` si l'analyse s'est arrêtée avant la fin.
+class SpaceReportMsg {
+  SpaceReportMsg({
+    required this.path,
+    required this.totalBytes,
+    required this.fileCount,
+    required this.children,
+    required this.biggest,
+    required this.truncated,
+    required this.otherCount,
+    required this.otherBytes,
+  });
+
+  String path;
+
+  int totalBytes;
+
+  int fileCount;
+
+  List<SpaceItemMsg> children;
+
+  List<EntryMsg> biggest;
+
+  bool truncated;
+
+  int otherCount;
+
+  int otherBytes;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      path,
+      totalBytes,
+      fileCount,
+      children,
+      biggest,
+      truncated,
+      otherCount,
+      otherBytes,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static SpaceReportMsg decode(Object result) {
+    result as List<Object?>;
+    return SpaceReportMsg(
+      path: result[0]! as String,
+      totalBytes: result[1]! as int,
+      fileCount: result[2]! as int,
+      children: (result[3]! as List<Object?>).cast<SpaceItemMsg>(),
+      biggest: (result[4]! as List<Object?>).cast<EntryMsg>(),
+      truncated: result[5]! as bool,
+      otherCount: result[6]! as int,
+      otherBytes: result[7]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! SpaceReportMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(path, other.path) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(fileCount, other.fileCount) && _deepEquals(children, other.children) && _deepEquals(biggest, other.biggest) && _deepEquals(truncated, other.truncated) && _deepEquals(otherCount, other.otherCount) && _deepEquals(otherBytes, other.otherBytes);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'SpaceReportMsg(path: $path, totalBytes: $totalBytes, fileCount: $fileCount, children: $children, biggest: $biggest, truncated: $truncated, otherCount: $otherCount, otherBytes: $otherBytes)';
+  }
+}
+
 /// Résultats d'une recherche ; `truncated` au-delà de 500.
 class SearchResultMsg {
   SearchResultMsg({
@@ -867,14 +1015,20 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is TrashItemMsg) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is SearchResultMsg) {
+    }    else if (value is SpaceItemMsg) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is ViewPrefsMsg) {
+    }    else if (value is SpaceReportMsg) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    }    else if (value is FavoriteMsg) {
+    }    else if (value is SearchResultMsg) {
       buffer.putUint8(138);
+      writeValue(buffer, value.encode());
+    }    else if (value is ViewPrefsMsg) {
+      buffer.putUint8(139);
+      writeValue(buffer, value.encode());
+    }    else if (value is FavoriteMsg) {
+      buffer.putUint8(140);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -899,10 +1053,14 @@ class _PigeonCodec extends StandardMessageCodec {
       case 135:
         return TrashItemMsg.decode(readValue(buffer)!);
       case 136:
-        return SearchResultMsg.decode(readValue(buffer)!);
+        return SpaceItemMsg.decode(readValue(buffer)!);
       case 137:
-        return ViewPrefsMsg.decode(readValue(buffer)!);
+        return SpaceReportMsg.decode(readValue(buffer)!);
       case 138:
+        return SearchResultMsg.decode(readValue(buffer)!);
+      case 139:
+        return ViewPrefsMsg.decode(readValue(buffer)!);
+      case 140:
         return FavoriteMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1464,6 +1622,63 @@ class FluLuksHostApi {
 
   Future<void> cancelSearch() async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelSearch$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Analyse de l'espace sous `path` (une à la fois) ; `spaceChildren` relit un dossier de la dernière analyse.
+  Future<SpaceReportMsg> analyzeSpace(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.analyzeSpace$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as SpaceReportMsg;
+  }
+
+  Future<SpaceReportMsg> spaceChildren(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.spaceChildren$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as SpaceReportMsg;
+  }
+
+  Future<void> cancelAnalysis() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelAnalysis$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,

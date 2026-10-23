@@ -17,6 +17,8 @@ import com.mawena.fluluks.files.FilesException
 import com.mawena.fluluks.files.Search
 import com.mawena.fluluks.files.SharedPrefStore
 import com.mawena.fluluks.files.Sources
+import com.mawena.fluluks.files.SpaceAnalysis
+import com.mawena.fluluks.files.SpaceReport
 import com.mawena.fluluks.files.Thumbnails
 import com.mawena.fluluks.files.TransferState
 import com.mawena.fluluks.files.Trash
@@ -304,6 +306,14 @@ class HostApiImpl(
             SearchResultMsg(r.entries.map(::entryMsg), r.truncated)
         }
 
+    override fun analyzeSpace(sourceId: String, path: String, callback: (Result<SpaceReportMsg>) -> Unit) =
+        io(callback) { spaceMsg(SpaceAnalysis.run(sourceId, path)) }
+
+    override fun spaceChildren(sourceId: String, path: String, callback: (Result<SpaceReportMsg>) -> Unit) =
+        io(callback) { spaceMsg(SpaceAnalysis.children(sourceId, path)) }
+
+    override fun cancelAnalysis() = SpaceAnalysis.cancel()
+
     override fun cancelSearch() = Search.cancel()
 
     override fun thumbnail(sourceId: String, path: String, sizePx: Long, callback: (Result<ByteArray?>) -> Unit) =
@@ -408,6 +418,13 @@ class HostApiImpl(
                 FileType.SYMLINK -> "link"
                 FileType.OTHER -> "other"
             },
+        )
+
+        private fun spaceMsg(r: SpaceReport) = SpaceReportMsg(
+            path = r.path, totalBytes = r.totalBytes, fileCount = r.fileCount.toLong(),
+            children = r.children.map { SpaceItemMsg(it.name, it.path, it.isDir, it.size, it.fileCount.toLong()) },
+            biggest = r.biggest.map(::entryMsg), truncated = r.truncated, otherCount = r.otherCount.toLong(),
+            otherBytes = r.otherBytes,
         )
 
         internal fun transferMsg(t: TransferState) = TransferMsg(
