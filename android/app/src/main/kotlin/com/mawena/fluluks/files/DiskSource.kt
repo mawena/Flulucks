@@ -145,6 +145,17 @@ class DiskSource(override val id: String, private val engine: Engine = NativeEng
         }
     }
 
+    override fun openOverwrite(path: String): OutputStream {
+        val p = PathRules.require(path)
+        val h = handle()
+        val parent = WriteOps.parentOf(p)
+        val f = write(parent) { EngineError.check(engine.openFile(h, b(p), OpenFlags.RDWR or OpenFlags.TRUNC)) }
+        return EngineOutputStream(engine, f, onChunk = ::touch) {
+            VolumeManager.noteWrite(id)
+            VolumeManager.notifyChanged(id, parent)
+        }
+    }
+
     override fun details(path: String): Details? {
         val p = PathRules.require(path)
         val h = handle()

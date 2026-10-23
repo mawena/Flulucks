@@ -353,7 +353,7 @@ fonctions choisies par le planificateur ; les lecteurs et stockages distants pas
 
 ## 16. Évolution du 2026-10-22 (suite) : vérification et réparation
 
-Décision de l'utilisateur : la **phase 11** (v1.4.0) apporte la **réparation des disques** dans
+Décision de l'utilisateur : la **phase 12** (v1.5.0, phase 11 avant le 2026-10-23, voir § 19) apporte la **réparation des disques** dans
 l'application, avec les outils de référence de Linux intégrés au moteur natif.
 - **Vérifier d'abord, en lecture seule**, et montrer un rapport en français ; réparer seulement après
   confirmation, avec le conseil de sauvegarder les données importantes avant.
@@ -368,7 +368,7 @@ l'application, avec les outils de référence de Linux intégrés au moteur nati
 
 ## 17. Évolution du 2026-10-22 (suite) : gestion des partitions
 
-Décision de l'utilisateur : la **phase 12** (v1.5.0) apporte la **gestion des partitions** d'un disque USB,
+Décision de l'utilisateur : la **phase 13** (v1.6.0, phase 12 avant le 2026-10-23, voir § 19) apporte la **gestion des partitions** d'un disque USB,
 à la manière de GParted, et le choix de la **taille** au formatage.
 - **Choisir la taille** : formater une partition de la taille voulue au lieu de tout le disque ; le reste
   reste libre.
@@ -379,7 +379,7 @@ Décision de l'utilisateur : la **phase 12** (v1.5.0) apporte la **gestion des p
   étiquette), **supprimer** une partition, **formater une seule partition**, changer son **étiquette**,
   créer une **nouvelle table** (MBR ou GPT).
 - **Redimensionner** une partition et son système de fichiers, agrandir ou réduire :
-  - ext4 par `resize2fs` (e2fsprogs, déjà intégré en phase 11) ;
+  - ext4 par `resize2fs` (e2fsprogs, déjà intégré en phase 12) ;
   - NTFS par `ntfsresize` (ntfs-3g) ;
   - dans un volume LUKS2, le système de fichiers intérieur (la taille du segment LUKS2 suit la
     partition) ;
@@ -392,9 +392,61 @@ Décision de l'utilisateur : la **phase 12** (v1.5.0) apporte la **gestion des p
   - comme dans GParted, les opérations sont préparées, résumées, puis appliquées après confirmation, une
     à la fois ;
   - jamais sur un volume ouvert ;
-  - le système de fichiers est vérifié (outils de la phase 11) avant un redimensionnement ;
+  - le système de fichiers est vérifié (outils de la phase 12) avant un redimensionnement ;
   - avertissement : un débranchement pendant un redimensionnement ou un déplacement peut rendre la
     partition illisible, sauvegardez d'abord ;
   - toutes les opérations sont jugées sur des images par les outils de référence (`sfdisk`, `sgdisk`,
     `e2fsck`, `ntfsfix`, `cryptsetup`, montage par le noyau Linux), puis essayées sur une clé USB
     sacrifiée, jamais sur le vrai disque.
+
+## 18. Évolution du 2026-10-23 : lecteurs intégrés et dossiers distants (phase 10)
+
+Demande de l'utilisateur (§ 12) : voir des images, écouter de la musique, éditer des fichiers texte et lire des vidéos
+dans Portail ; accéder à des dossiers distants par FTP puis SFTP comme sources du gestionnaire. Phase 10, **v1.3.0**.
+*(Décisions du planificateur, à valider aux essais.)*
+- **Ouvrir dans Portail** : toucher un fichier ouvre le lecteur de Portail selon son extension (images → visionneuse,
+  musique → lecteur de musique, vidéos → lecteur vidéo, textes → éditeur) ; les autres fichiers s'ouvrent comme avant
+  dans une autre application. Un réglage « Ouvrir dans Portail » (activé par défaut) rend l'ancien comportement ;
+  « Ouvrir avec… » reste dans les actions d'un fichier.
+- **Visionneuse d'images** : images du dossier dans l'ordre de l'explorateur, glisser de l'une à l'autre, zoom par
+  pincement et double toucher ; JPEG, PNG, GIF, WebP et BMP décodés par Flutter, HEIC et HEIF convertis par
+  Android ; 64 Mio au plus par image ; partager, ouvrir avec, propriétés.
+- **Lecteur de musique** : la file d'attente est faite des fichiers audio du dossier, à partir de celui touché ;
+  lecture en arrière-plan avec notification et commandes (lecture, pause, précédent, suivant) ; écran « Lecture en
+  cours » et barre réduite dans l'application ; arrêt propre, avec un message, si le stockage est fermé ou le
+  disque débranché. Bibliothèque **Media3** d'AndroidX (ExoPlayer, MediaSession).
+- **Lecteur vidéo** : écran Android plein écran (Media3) : lecture, pause, barre de progression, recul et avance de
+  10 s ; sous-titres SubRip à côté de la vidéo (`film.srt`, `film.fr.srt`…), en UTF-8 ou Windows-1252, au choix
+  dans le lecteur.
+- **Éditeur de texte** : fichiers de 2 Mio au plus, en UTF-8 seulement (avec ou sans BOM, gardé) ; fins de ligne
+  Windows (CRLF) gardées ; enregistrement par un fichier temporaire qui remplace ensuite l'original (jamais d'original
+  à moitié écrit) ; si le fichier a changé depuis son ouverture, Portail demande avant d'écraser ; lecture seule si
+  le stockage l'est.
+- **Dossiers distants** (FTP et SFTP) : serveurs enregistrés (nom, adresse, port, utilisateur, dossier de départ),
+  connectés à la demande, puis parcourus comme les autres stockages : naviguer, ouvrir (avec les lecteurs),
+  partager, copier et déplacer dans les deux sens, renommer, créer, supprimer, compresser et extraire.
+  - Mot de passe mémorisé seulement si l'utilisateur coche « Mémoriser », alors chiffré par une clé du Keystore
+    d'Android ; sinon demandé à chaque connexion et gardé en mémoire le temps de la connexion.
+  - FTP n'est pas chiffré : le formulaire le dit (« le mot de passe et les fichiers circulent en clair »).
+  - SFTP : empreinte de la clé du serveur montrée et acceptée à la première connexion, puis vérifiée ; une clé
+    changée est refusée avec un avertissement (on peut oublier l'ancienne dans la fiche du serveur).
+    Authentification par mot de passe ou par une clé privée OpenSSH importée (Ed25519, ECDSA, RSA), chiffrée comme le
+    mot de passe.
+  - Pas de corbeille sur un dossier distant : la suppression y est définitive, et la boîte le dit. Liens
+    symboliques affichés mais non suivis, comme sur les disques. Place libre inconnue : non vérifiée avant une copie.
+  - Ce qui vient d'un disque chiffré ne part vers un serveur que par une action explicite (copie, déplacement,
+    compression) ; un ZIP compressé vers un serveur y est écrit directement, sans fichier temporaire sur le
+    téléphone.
+- **Confidentialité (§ 11, § 12)** : images, sous-titres et textes lus en mémoire ; rien d'un disque chiffré n'est
+  écrit sur le stockage du téléphone par les lecteurs.
+- **Bibliothèques** *(décision du planificateur)* : Media3 1.11.1 (Apache-2.0), Apache Commons Net 3.13.0
+  (Apache-2.0), JSch 2.28.8 de mwiede (BSD) avec Bouncy Castle 1.86 (licence MIT) pour Ed25519 et Curve25519 sur
+  Android ; pour les tests JVM seulement, Apache FtpServer 1.2.1 et Apache MINA SSHD 2.20.0 (Apache-2.0).
+
+## 19. Évolution du 2026-10-23 (suite) : interface complète et professionnelle
+
+Décision de l'utilisateur : une **phase 11** (v1.4.0) améliore l'interface de Portail pour en faire une application
+« vraiment complète et pro ». La réparation des disques devient la phase 12 (v1.5.0) et la gestion des partitions la
+phase 13 (v1.6.0).
+- Le contenu exact (charte visuelle, navigation, écrans revus, animations, thème sombre, accessibilité, tablette…) est
+  arrêté avec l'utilisateur au moment d'écrire le plan de la phase, après la v1.3.0.

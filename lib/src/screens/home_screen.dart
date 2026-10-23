@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
 import '../widgets/disk_card.dart';
+import '../widgets/server_tile.dart';
 import '../widgets/source_tile.dart';
 import '../widgets/transfer_bar.dart';
 import 'explorer_screen.dart';
 import 'filter_screen.dart';
+import 'server_form_screen.dart';
 import 'settings_screen.dart';
 import 'trash_screen.dart';
 
@@ -37,7 +39,7 @@ class HomeScreen extends StatelessWidget {
           final theme = Theme.of(context);
           final err = state.lastError;
           final ejectErr = state.ejectError;
-          final local = state.sources.where((s) => s.kind != 'disk').toList();
+          final local = state.sources.where((s) => s.kind != 'disk' && s.kind != 'remote').toList();
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -100,6 +102,17 @@ class HomeScreen extends StatelessWidget {
                 const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: Text(Fr.emptyList)))
               else
                 for (final d in state.disks) DiskCard(state: state, disk: d),
+              _Section(Fr.remoteFolders),
+              for (final s in state.servers) ServerTile(state: state, server: s),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  icon: const Icon(Icons.add),
+                  label: const Text(Fr.addServer),
+                  onPressed: () => Navigator.of(context)
+                      .push(MaterialPageRoute<void>(builder: (_) => ServerFormScreen(state: state))),
+                ),
+              ),
               if (state.favorites.isNotEmpty) ...[
                 _Section(Fr.favorites),
                 for (final f in state.favorites)

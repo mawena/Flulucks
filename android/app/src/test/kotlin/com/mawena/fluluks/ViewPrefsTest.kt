@@ -52,9 +52,9 @@ class ViewPrefsTest {
     }
 
     @Test fun defaultsAndUnknownValues() {
-        assertEquals(ViewSettings("name", true, false, false), prefs().get())
-        prefs().set(ViewSettings("size", false, true, true))
-        assertEquals(ViewSettings("size", false, true, true), prefs().get())
+        assertEquals(ViewSettings("name", true, false, false, builtInViewers = true), prefs().get())
+        prefs().set(ViewSettings("size", false, true, true, builtInViewers = false))
+        assertEquals(ViewSettings("size", false, true, true, builtInViewers = false), prefs().get())
         store.m["tri"] = "couleur"
         assertEquals("name", prefs().get().sort)
         prefs().set(ViewSettings("n'importe", true, false, false))

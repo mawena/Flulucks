@@ -308,35 +308,64 @@ dans le même commit que le travail.
 - [x] Fusion `feature/compression` → `develop`
 - [x] Version `v1.2.0`
 
-### Phase 10 — Lecteurs intégrés et stockages distants
-- [ ] Plan de la phase 10 écrit
-      *(demande du 2026-10-20, J.1 ; déplacée en phase 9 puis en phase 10 le 2026-10-22)*
-- [ ] Visionneuse d'images (glisser d'une photo à l'autre, zoom)
-- [ ] Lecteur de musique (lecture en arrière-plan, file d'attente du dossier)
-- [ ] Éditeur de fichiers texte (ouvrir, modifier, enregistrer, UTF-8)
-- [ ] Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)
-- [ ] Dossiers distants par FTP, comme source du gestionnaire (parcourir, copier, déplacer, ouvrir)
-- [ ] Dossiers distants par SFTP
-- [ ] Version `v1.3.0`
+### Phase 10 — Lecteurs intégrés et dossiers distants ([plan](2026-10-23-phase10-lecteurs-distants.md))
+- [x] Plan de la phase 10 écrit
+      *(demande du 2026-10-20, J.1 ; déplacée en phase 9 puis en phase 10 le 2026-10-22 ; spec § 18)*
+- [x] T1 — Lecture d'images et de textes, enregistrement sûr des textes
+- [x] T2 — « Ouvrir dans Portail » et éditeur de texte (UTF-8, BOM et fins de ligne gardés)
+- [x] T3 — Visionneuse d'images (glisser d'une photo à l'autre, zoom)
+- [x] T4 — Lecture à accès aléatoire et fournisseur de flux
+- [x] T5 — Serveurs enregistrés et sources distantes (secrets chiffrés par le Keystore)
+- [x] T6 — Dossiers distants dans le gestionnaire
+- [x] T7 — Dossiers distants par FTP
+- [x] T8 — Dossiers distants par SFTP (empreinte du serveur, clé privée)
+- [x] T9 — Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)
+- [x] T10 — Lecteur de musique (lecture en arrière-plan, file d'attente du dossier)
+- [x] T11 — Essais instrumentés sur le Pixel
+- [x] *(utilisateur)* T12 — Essais sur le Pixel
+- [x] T13 — Documentation
+- [x] Relecture finale de toute la branche
+- [x] Fusion `feature/lecteurs-distants` → `develop`
+- [x] Version `v1.3.0`
 
-### Phase 11 — Vérification et réparation des disques
-- [ ] Plan de la phase 11 écrit *(demande du 2026-10-22 ; spec § 16)*
+### Phase 11 — Interface complète et professionnelle ([plan](2026-10-23-phase11-interface.md))
+- [x] Plan de la phase 11 écrit *(demande du 2026-10-23 ; spec § 19 ; choix de conception à valider par l'utilisateur)*
+- [ ] T1 — Système de design : couleurs du logo, thèmes clair et sombre, choix du thème
+- [ ] T2 — Composants communs (états vides, erreurs, chargements, confirmations, feuilles d'actions)
+- [ ] T3 — Textes français (pluriels, unités, dates relatives)
+- [ ] T4 — Accueil revu et logo
+- [ ] T5 — Déverrouillage, formatage et saisies sensibles
+- [ ] T6 — Collection d'éléments et explorateur revu (fil d'Ariane, tout sélectionner, annuler la mise à la corbeille)
+- [ ] T7 — Liste ou grille dans les raccourcis et la recherche *(demande de l'utilisateur du 2026-10-23)*
+- [ ] T8 — Recherche dans tous les stockages
+- [ ] T9 — Réglages regroupés, « À propos », licences, aide et bienvenue
+- [ ] T10 — Barres du bas et écrans de la phase 10
+- [ ] T11 — Accessibilité, grands écrans et tests dorés
+- [ ] T12 — Captures et essais instrumentés sur le Pixel 4 XL
+- [ ] *(utilisateur)* T13 — Essais sur le Pixel
+- [ ] T14 — Documentation
+- [ ] Relecture finale de toute la branche
+- [ ] Fusion `feature/interface` → `develop`
+- [ ] Version `v1.4.0`
+
+### Phase 12 — Vérification et réparation des disques
+- [ ] Plan de la phase 12 écrit *(demande du 2026-10-22 ; spec § 16 ; phase 11 jusqu'au 2026-10-23)*
 - [ ] Vérification en lecture seule avec rapport, pour chaque système de fichiers
 - [ ] Réparation ext4 par e2fsck (e2fsprogs, sur l'accès USB du moteur)
 - [ ] Réparation NTFS par ntfsfix (ntfs-3g)
 - [ ] Réparation FAT32 et exFAT par fsck.fat et fsck.exfat
 - [ ] LUKS : vérification des deux en-têtes, sauvegarde et restauration de l'en-tête
-- [ ] Version `v1.4.0`
+- [ ] Version `v1.5.0`
 
-### Phase 12 — Gestion des partitions, comme GParted
-- [ ] Plan de la phase 12 écrit *(demande du 2026-10-22 ; spec § 17)*
+### Phase 13 — Gestion des partitions, comme GParted
+- [ ] Plan de la phase 13 écrit *(demande du 2026-10-22 ; spec § 17 ; phase 12 jusqu'au 2026-10-23)*
 - [ ] Vue du disque : partitions et espace libre à l'échelle, système de fichiers, étiquette, taille, place occupée
 - [ ] Taille choisie au formatage ; créer une partition dans un espace libre, en supprimer une, formater une seule partition
 - [ ] Changer l'étiquette d'une partition ; nouvelle table MBR ou GPT
 - [ ] Redimensionner (agrandir, réduire) : ext4 par resize2fs, NTFS par ntfsresize, système de fichiers dans LUKS2 ; FAT32 et exFAT à étudier
 - [ ] Déplacer une partition, si le plan sait le rendre sûr
 - [ ] Opérations préparées, résumées, puis appliquées après confirmation
-- [ ] Version `v1.5.0`
+- [ ] Version `v1.6.0`
 
 ---
 

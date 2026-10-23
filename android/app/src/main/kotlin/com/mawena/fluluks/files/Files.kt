@@ -71,6 +71,7 @@ object Files {
         // nos messages sont en français ; ceux de java.io commencent par le chemin absolu
         is FileNotFoundException -> FilesException(EngineError.FL_ENOENT, e.message?.takeUnless { it.startsWith("/") } ?: MSG_BAD_PATH)
         is SecurityException -> FilesException(EngineError.FL_EIO, MSG_NO_ACCESS)
+        is com.mawena.fluluks.remote.RemoteIOException -> FilesException(EngineError.FL_EIO, e.message ?: MSG_GENERIC)
         is IOException -> FilesException(EngineError.FL_EIO, MSG_GENERIC)
         is OutOfMemoryError -> FilesException(EngineError.FL_ENOMEM, MSG_GENERIC)
         else -> FilesException(EngineError.FL_EIO, MSG_GENERIC)
@@ -92,10 +93,13 @@ object Files {
     }
 
     /** Supprime chaque élément (récursif) ; un disque n'est synchronisé qu'une fois pour tout le lot. */
-    /** [permanent] : supprime ; sinon met à la corbeille du stockage ([Trash], définitif pour ce qui y est déjà). */
+    /**
+     * [permanent] : supprime ; sinon met à la corbeille du stockage ([Trash], définitif pour ce qui y est déjà). Sans
+     * corbeille (dossier distant), toujours définitif.
+     */
     fun delete(sourceId: String, paths: List<String>, permanent: Boolean) = guard("deleteDocument") {
         val src = source(sourceId)
-        if (permanent) src.deleteAll(paths) else Trash.moveToTrash(src, paths)
+        if (permanent || !src.hasTrash) src.deleteAll(paths) else Trash.moveToTrash(src, paths)
     }
 
     /** ACTION_VIEW sur l'URI de contenu, dans un sélecteur « Ouvrir avec… ». */

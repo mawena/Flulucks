@@ -1,0 +1,30 @@
+# essais instrumentés phase 10 — commit 2168f6e (+ essais T11 non commités) — google/coral/coral:13/TP1A.221005.002.B2/9382335:user/release-keys
+## SecretBoxInstrumentedTest
+INSTRUMENTATION_STATUS: test=sealOpenRoundTripAndTamperRefused
+INSTRUMENTATION_STATUS: test=sealOpenRoundTripAndTamperRefused
+OK (1 test)
+## SshCryptoInstrumentedTest
+INSTRUMENTATION_STATUS: test=curve25519Exchange
+INSTRUMENTATION_STATUS: test=curve25519Exchange
+INSTRUMENTATION_STATUS: test=ed25519KeySignsAndIsInspected
+INSTRUMENTATION_STATUS: test=ed25519KeySignsAndIsInspected
+OK (2 tests)
+## StreamProviderInstrumentedTest
+INSTRUMENTATION_STATUS: test=randomReadsThroughProxy
+INSTRUMENTATION_STATUS: test=randomReadsThroughProxy
+OK (1 test)
+## ReadersInstrumentedTest
+INSTRUMENTATION_STATUS: test=videoWithWindows1252Subtitle
+INSTRUMENTATION_STATUS: test=videoWithWindows1252Subtitle
+INSTRUMENTATION_STATUS: test=musicPlaysAndAdvances
+INSTRUMENTATION_STATUS: stack=org.junit.ComparisonFailure: expected:<[son.wav]> but was:<[]>
+INSTRUMENTATION_STATUS: test=musicPlaysAndAdvances
+INSTRUMENTATION_STATUS_CODE: -2
+FAILURES!!!
+Tests run: 2,  Failures: 1
+## ReadersInstrumentedTest (après correction du titre)
+INSTRUMENTATION_STATUS: test=videoWithWindows1252Subtitle
+INSTRUMENTATION_STATUS: test=videoWithWindows1252Subtitle
+INSTRUMENTATION_STATUS: test=musicPlaysAndAdvances
+INSTRUMENTATION_STATUS: test=musicPlaysAndAdvances
+OK (2 tests)

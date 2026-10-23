@@ -3,14 +3,16 @@ import 'package:flutter/material.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../strings_fr.dart';
 
-/// Icône d'un stockage selon son type (`phone`, `removable` : carte SD ou clé montée par Android, `disk`).
+/// Icône d'un stockage selon son type (`phone`, `removable` : carte SD ou clé montée par Android, `disk`, `remote`).
 IconData sourceIcon(String kind) => switch (kind) {
       'phone' => Icons.smartphone,
       'removable' => Icons.sd_storage,
+      'remote' => Icons.cloud_outlined,
       _ => Icons.usb,
     };
 
-/// Un stockage de l'accueil : libellé, place libre et barre d'occupation ; accès à sa corbeille si [onTrash].
+/// Un stockage de l'accueil : libellé, place libre et barre d'occupation (« Espace inconnu » pour un dossier distant) ;
+/// accès à sa corbeille si [onTrash].
 class SourceTile extends StatelessWidget {
   const SourceTile({super.key, required this.source, required this.onTap, this.onTrash});
 
@@ -30,9 +32,11 @@ class SourceTile extends StatelessWidget {
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(Fr.freeOf(source.freeBytes, source.totalBytes)),
-            const SizedBox(height: 6),
-            LinearProgressIndicator(value: used.toDouble()),
+            Text(total < 0 ? Fr.unknownSpace : Fr.freeOf(source.freeBytes, source.totalBytes)),
+            if (total >= 0) ...[
+              const SizedBox(height: 6),
+              LinearProgressIndicator(value: used.toDouble()),
+            ],
           ],
         ),
         trailing: onTrash == null

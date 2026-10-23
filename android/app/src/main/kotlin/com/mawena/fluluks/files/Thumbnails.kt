@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.annotation.VisibleForTesting
 import com.mawena.fluluks.engine.FileType
 import com.mawena.fluluks.provider.MimeTypes
+import com.mawena.fluluks.remote.RemoteSource
 import com.mawena.fluluks.volumes.VolumeManager
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Semaphore
@@ -26,6 +27,7 @@ interface ThumbDecoder {
  */
 object Thumbnails {
     const val MAX_PX = 256
+    const val REMOTE_IMAGE_MAX = 8L shl 20
     const val CACHE_BYTES = 32 shl 20
     const val PARALLEL = 3
     const val QUALITY = 80
@@ -43,6 +45,15 @@ object Thumbnails {
     @VisibleForTesting
     fun cachedBytes(): Long = synchronized(cache) { cacheBytes }
 
+    /** [src], dont le fichier [path] se relit depuis [bytes] déjà téléchargés. */
+    private class InMemory(src: FileSource, private val path: String, private val bytes: ByteArray) : FileSource by src {
+        override fun openRead(path: String): java.io.InputStream =
+            if (path == this.path) java.io.ByteArrayInputStream(bytes) else throw java.io.FileNotFoundException(path)
+
+        override fun openReadAt(path: String, offset: Long): java.io.InputStream =
+            openRead(path).also { it.skip(offset) }
+    }
+
     /** JPEG d'au plus [sizePx] (≤ [MAX_PX]) de côté, ou null : type inconnu, élément absent, décodage raté. */
     fun get(sourceId: String, path: String, sizePx: Int): ByteArray? {
         val px = sizePx.coerceIn(16, MAX_PX)
@@ -53,12 +64,16 @@ object Thumbnails {
             val mime = MimeTypes.forName(e.name)
             val video = mime.startsWith("video/")
             if (!video && !mime.startsWith("image/")) return null
+            // dossier distant : chaque vignette est un téléchargement ; pas de vidéo, images de 8 Mio au plus
+            if (src is RemoteSource && (video || e.size > REMOTE_IMAGE_MAX)) return null
             val key = "$sourceId|${e.path}|${e.size}|${e.mtime}|$px"
             synchronized(cache) { cache[key] }?.let { return it }
             permits.acquire()
             try {
                 synchronized(cache) { cache[key] }?.let { return it } // calculée pendant l'attente
-                val bytes = (if (video) decoder.video(src, e.path, px) else decoder.image(src, e.path, px)) ?: return null
+                // dossier distant : l'image (8 Mio au plus) est téléchargée une fois ; le décodeur la relit en mémoire
+                val from = if (src is RemoteSource) InMemory(src, e.path, src.openRead(e.path).use { it.readBytes() }) else src
+                val bytes = (if (video) decoder.video(from, e.path, px) else decoder.image(from, e.path, px)) ?: return null
                 put(key, bytes) { src !is DiskSource || VolumeManager.volume(sourceId) != null }
                 bytes
             } finally {

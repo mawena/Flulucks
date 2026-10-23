@@ -27,6 +27,9 @@ abstract class HostApi {
   Future<void> purgeTrash(String sourceId, List<String> ids);
   Future<void> emptyTrash(String sourceId);
   Future<void> openWith(String sourceId, String path);
+  Future<void> playVideo(String sourceId, String path);
+  Future<void> playAudio(String sourceId, List<String> paths, int startIndex);
+  Future<void> playerCommand(String command, int? positionMs);
   Future<void> share(String sourceId, List<String> paths);
   Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
   Future<void> startCompress(String srcId, List<String> paths, String dstDir, String name);
@@ -41,6 +44,19 @@ abstract class HostApi {
   Future<FolderSizeMsg> folderSize(String sourceId, String path);
   Future<String?> sha256(String sourceId, String path);
   Future<void> cancelHash();
+  Future<List<RemoteServerMsg>> listServers();
+  Future<RemoteServerMsg> saveServer(RemoteServerMsg server, Uint8List? password, Uint8List? keyPassphrase);
+  Future<void> deleteServer(String serverId);
+  Future<SourceMsg> connectServer(String serverId, Uint8List? password);
+  Future<void> disconnectServer(String serverId);
+  Future<void> trustHostKey(String serverId, String fingerprint);
+  Future<void> forgetHostKey(String serverId);
+  Future<String?> importPrivateKey(String serverId);
+  Future<void> forgetPrivateKey(String serverId);
+  Future<Uint8List> readImage(String sourceId, String path);
+  Future<TextFileMsg> readText(String sourceId, String path);
+  Future<TextSaveMsg> writeText(String sourceId, String path, String text, bool bom, bool crlf, int expectedMtime,
+      int expectedSize, bool force);
   Future<List<FilterItemMsg>> quickFilter(String filter);
   Future<List<RenamePreviewMsg>> previewRename(String sourceId, List<String> paths, RenameRuleMsg rule);
   Future<void> applyRename(String sourceId, List<String> paths, RenameRuleMsg rule);
@@ -110,6 +126,13 @@ class PigeonHostApi implements HostApi {
   @override
   Future<void> openWith(String sourceId, String path) => _api.openWith(sourceId, path);
   @override
+  Future<void> playVideo(String sourceId, String path) => _api.playVideo(sourceId, path);
+  @override
+  Future<void> playAudio(String sourceId, List<String> paths, int startIndex) =>
+      _api.playAudio(sourceId, paths, startIndex);
+  @override
+  Future<void> playerCommand(String command, int? positionMs) => _api.playerCommand(command, positionMs);
+  @override
   Future<void> share(String sourceId, List<String> paths) => _api.share(sourceId, paths);
   @override
   Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move) =>
@@ -141,6 +164,33 @@ class PigeonHostApi implements HostApi {
   Future<String?> sha256(String sourceId, String path) => _api.sha256(sourceId, path);
   @override
   Future<void> cancelHash() => _api.cancelHash();
+  @override
+  Future<List<RemoteServerMsg>> listServers() => _api.listServers();
+  @override
+  Future<RemoteServerMsg> saveServer(RemoteServerMsg server, Uint8List? password, Uint8List? keyPassphrase) =>
+      _api.saveServer(server, password, keyPassphrase);
+  @override
+  Future<void> deleteServer(String serverId) => _api.deleteServer(serverId);
+  @override
+  Future<SourceMsg> connectServer(String serverId, Uint8List? password) => _api.connectServer(serverId, password);
+  @override
+  Future<void> disconnectServer(String serverId) => _api.disconnectServer(serverId);
+  @override
+  Future<void> trustHostKey(String serverId, String fingerprint) => _api.trustHostKey(serverId, fingerprint);
+  @override
+  Future<void> forgetHostKey(String serverId) => _api.forgetHostKey(serverId);
+  @override
+  Future<String?> importPrivateKey(String serverId) => _api.importPrivateKey(serverId);
+  @override
+  Future<void> forgetPrivateKey(String serverId) => _api.forgetPrivateKey(serverId);
+  @override
+  Future<Uint8List> readImage(String sourceId, String path) => _api.readImage(sourceId, path);
+  @override
+  Future<TextFileMsg> readText(String sourceId, String path) => _api.readText(sourceId, path);
+  @override
+  Future<TextSaveMsg> writeText(String sourceId, String path, String text, bool bom, bool crlf, int expectedMtime,
+          int expectedSize, bool force) =>
+      _api.writeText(sourceId, path, text, bom, crlf, expectedMtime, expectedSize, force);
   @override
   Future<List<FilterItemMsg>> quickFilter(String filter) => _api.quickFilter(filter);
   @override
