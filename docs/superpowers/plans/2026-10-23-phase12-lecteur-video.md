@@ -89,7 +89,7 @@ AndroidX Test (instrumenté). **Aucune nouvelle dépendance.**
     `fun showInfo(text: String, hideAfterMs: Long?)`, `fun hideInfo()`, `fun controlRects(): List<Rect>` (zones de la
     barre du haut, si visible, en coordonnées de la fenêtre).
 
-- [ ] **Step 1 : tests en échec** (`VideoOrientationTest`)
+- [x] **Step 1 : tests en échec** (`VideoOrientationTest`)
 
 ```kotlin
 @Test fun autoModeUsesUserOrientation() = assertEquals(SCREEN_ORIENTATION_USER, requested(Auto))
@@ -117,22 +117,22 @@ AndroidX Test (instrumenté). **Aucune nouvelle dépendance.**
 }
 ```
 
-- [ ] **Step 2 :** `./gradlew -q --offline :app:testDebugUnitTest --tests '*VideoOrientationTest'` → échec de
+- [x] **Step 2 :** `./gradlew -q --offline :app:testDebugUnitTest --tests '*VideoOrientationTest'` → échec de
   compilation (`VideoOrientation` absent).
-- [ ] **Step 3 :** écrire `VideoOrientation.kt` (constantes `ActivityInfo.SCREEN_ORIENTATION_*`, inlinées à la
+- [x] **Step 3 :** écrire `VideoOrientation.kt` (constantes `ActivityInfo.SCREEN_ORIENTATION_*`, inlinées à la
   compilation, donc utilisables en JVM).
-- [ ] **Step 4 :** relancer → vert.
-- [ ] **Step 5 : vues.** Icônes vectorielles blanches 24 dp reprises d'AOSP (Apache-2.0) :
+- [x] **Step 4 :** relancer → vert.
+- [x] **Step 5 : vues.** Icônes vectorielles blanches 24 dp reprises d'AOSP (Apache-2.0) :
   `ic_qs_auto_rotate` → `video_ic_rotate`, `ic_lock` → `video_ic_lock`, `ic_lock_open` → `video_ic_lock_open`
   (`platforms/android-36/data/res/drawable/`). `VideoOverlay` : barre du haut en dégradé noir → transparent,
   titre (nom du fichier, une ligne, ellipse au milieu), boutons de 48 dp avec `contentDescription` ; marge haute selon
   les encarts système (barres et encoche) ; bulle centrale (texte blanc 20 sp sur fond noir 60 %, coins de 16 dp).
-- [ ] **Step 6 : activité.** `mode` (`OrientationMode.Auto` au départ) ; `requestedOrientation` posé avant
+- [x] **Step 6 : activité.** `mode` (`OrientationMode.Auto` au départ) ; `requestedOrientation` posé avant
   `setContentView` ; Tourner → `rotate(mode, resources.configuration.orientation == ORIENTATION_LANDSCAPE)` ;
   cadenas → `toggleLock(mode)` ; après chaque changement : `requestedOrientation`, `setLocked`, `showInfo(message,
   1 500)`, et `playerView.showController()` (relance la temporisation des commandes). La barre du haut suit les
   commandes (`setControllerVisibilityListener`). Manifeste : `android:screenOrientation="user"`.
-- [ ] **Step 7 :** suites vertes ; commit `feat(video): portrait par défaut, rotation selon Android, Tourner et cadenas`.
+- [x] **Step 7 :** suites vertes ; commit `feat(video): portrait par défaut, rotation selon Android, Tourner et cadenas`.
 
 ### Task 2 : pistes audio et sous-titres
 
@@ -155,7 +155,7 @@ AndroidX Test (instrumenté). **Aucune nouvelle dépendance.**
   - `object PlayerTracks` : `fun infos(tracks: Tracks): List<TrackInfo>` (pistes audio et texte **prises en charge**
     seulement), `fun apply(player: Player, tracks: Tracks, choice: TrackChoice, kind: TrackKind)`.
 
-- [ ] **Step 1 : tests en échec** (`TrackMenuTest`)
+- [x] **Step 1 : tests en échec** (`TrackMenuTest`)
 
 ```kotlin
 private fun audio(g: Int, lang: String?, label: String? = null, ch: Int = 2, sel: Boolean = false) =
@@ -193,25 +193,25 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
 @Test fun offIsCheckedWhenNoTextSelected() = assertTrue(text(listOf(text(0, "fr", null))).first().checked)
 ```
 
-- [ ] **Step 2 :** lancer `*TrackMenuTest` → échec de compilation.
-- [ ] **Step 3 :** écrire `TrackMenu.kt`. Règles du titre : parties = nom de la langue
+- [x] **Step 2 :** lancer `*TrackMenuTest` → échec de compilation.
+- [x] **Step 3 :** écrire `TrackMenu.kt`. Règles du titre : parties = nom de la langue
   (`Locale.forLanguageTag(code).getDisplayName(Locale.FRENCH)`, première lettre en capitale ; `und` ou vide → rien ;
   nom inconnu → le code tel quel), libellé (s'il n'est ni vide, ni égal au nom de la langue ou au code, casse ignorée),
   canaux pour l'audio (1 « Mono », 2 « Stéréo », 6 « 5.1 », 8 « 7.1 », autre > 0 « N canaux ») ; jointes par
   « · » ; aucune partie → « Piste N ». Titres en double suffixés de « (N) », N = rang dans la liste.
-- [ ] **Step 4 :** relancer → vert.
-- [ ] **Step 5 : `PlayerTracks`.** `infos` : groupes `C.TRACK_TYPE_AUDIO` et `C.TRACK_TYPE_TEXT`, pistes
+- [x] **Step 4 :** relancer → vert.
+- [x] **Step 5 : `PlayerTracks`.** `infos` : groupes `C.TRACK_TYPE_AUDIO` et `C.TRACK_TYPE_TEXT`, pistes
   `isTrackSupported(i)`, `Format.language`, `Format.label`, `Format.channelCount` (`Format.NO_VALUE` → -1),
   `isTrackSelected(i)`. `apply` : piste → `setTrackTypeDisabled(kind, false)` +
   `setOverrideForType(TrackSelectionOverride(groups[group].mediaTrackGroup, index))` ; `track` nul (texte) →
   `clearOverridesOfType(C.TRACK_TYPE_TEXT)` + `setTrackTypeDisabled(C.TRACK_TYPE_TEXT, true)`.
-- [ ] **Step 6 : vues.** Icône `video_ic_tracks` (copie d'`exo_ic_audiotrack` de Media3, Apache-2.0). Bouton Pistes
+- [x] **Step 6 : vues.** Icône `video_ic_tracks` (copie d'`exo_ic_audiotrack` de Media3, Apache-2.0). Bouton Pistes
   dans la barre du haut (avant Tourner). Toucher → `PopupMenu` ancré au bouton : sous-menus « Audio » et
   « Sous-titres », éléments à cocher exclusifs (`setGroupCheckable(…, true, true)`), « Aucune piste audio » désactivé
   si la liste est vide ; le choix appelle `PlayerTracks.apply` sur l'instantané `currentTracks` qui a servi au menu.
   `PlayerView.setShowSubtitleButton(false)` : le bouton Pistes le remplace. `newPlayer` : libellé d'un `.srt` = nom
   du fichier (`film.fr.srt`), langue inchangée.
-- [ ] **Step 7 :** suites vertes ; commit `feat(video): choix des pistes audio et des sous-titres`.
+- [x] **Step 7 :** suites vertes ; commit `feat(video): choix des pistes audio et des sous-titres`.
 
 ### Task 3 : glisser pour avancer ou reculer
 
@@ -236,7 +236,7 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
     `fun cancel(): Outcome`. `dispatch` : l'activité passe l'événement au lecteur ; `cancelChildren` : elle lui envoie
     d'abord un `ACTION_CANCEL` (le geste lui est retiré).
 
-- [ ] **Step 1 : tests en échec** (`TimeTextTest`, puis la partie glissement de `SeekGesturesTest` ; densité 2,
+- [x] **Step 1 : tests en échec** (`TimeTextTest`, puis la partie glissement de `SeekGesturesTest` ; densité 2,
   seuil 16 px, largeur 1 000 px, lecture à 60 000 ms sur 600 000 ms)
 
 ```kotlin
@@ -248,13 +248,13 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
     assertTrue(g.down(100f, 500f, 0, 1000, false, pb).dispatch)
     val start = g.move(140f, 502f)                           // au-delà du seuil : le geste est pris
     assertFalse(start.dispatch); assertTrue(start.cancelChildren)
-    assertEquals(Preview(66_000, 6_000), start.effect)       // 40 px
+    assertEquals(Preview(63_000, 3_000), start.effect)       // 40 px = 20 dp = 3 s
     assertEquals(Preview(75_000, 15_000), g.move(300f, 510f).effect)
     val end = g.up(300f, 510f, 400)
     assertFalse(end.dispatch); assertEquals(DragEnd(75_000, 15_000), end.effect)
 }
 @Test fun dragSeeksOnlyOnRelease() // aucun effet DragEnd avant up, un seul après
-@Test fun dragLeftRewinds() // 100 → 0 px : Preview(45_000, -15_000)
+@Test fun dragLeftRewinds() // 300 → 100 px : Preview(45_000, -15_000)
 @Test fun dragClampsToDuration() // lecture à 595 000 : Preview(600_000, 5_000) ; à 2 000 vers la gauche : Preview(0, -2_000)
 @Test fun dragUnknownDurationOnlyClampsAtZero() // durationMs = -1 : +15 s depuis 60 000 → 75 000
 @Test fun verticalMoveIsNotADrag() // move(102, 600) : dispatch vrai, aucun effet ; up : dispatch vrai
@@ -263,20 +263,20 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
 @Test fun cancelEndsDragWithoutSeek() // pendant un glissement : cancel() → DragEnd(60_000, 0), dispatch vrai
 ```
 
-- [ ] **Step 2 :** lancer `*TimeTextTest` et `*SeekGesturesTest` → échec de compilation.
-- [ ] **Step 3 :** écrire `TimeText.kt` et la partie glissement de `SeekGestures.kt`. Automate : `IDLE`, `PASS`
+- [x] **Step 2 :** lancer `*TimeTextTest` et `*SeekGesturesTest` → échec de compilation.
+- [x] **Step 3 :** écrire `TimeText.kt` et la partie glissement de `SeekGestures.kt`. Automate : `IDLE`, `PASS`
   (geste laissé au lecteur : départ sur une commande, ou vidéo non navigable), `PRESSED` (toucher passé au lecteur,
   peut devenir un toucher ou un glissement), `HELD` (toucher retenu, T4), `DRAGGING`. Le glissement part de `PRESSED`
   ou `HELD` quand |dx| > seuil et |dx| > |dy| ; cible = `clamp(position + dx / density × msPerDp, durée)`, figée sur la
   position au `down`. `cancelChildren` seulement depuis `PRESSED`.
-- [ ] **Step 4 :** relancer → vert.
-- [ ] **Step 5 : activité.** `dispatchTouchEvent` : `ACTION_DOWN`, `MOVE`, `UP`, `CANCEL` vont à `SeekGestures`
+- [x] **Step 4 :** relancer → vert.
+- [x] **Step 5 : activité.** `dispatchTouchEvent` : `ACTION_DOWN`, `MOVE`, `UP`, `CANCEL` vont à `SeekGestures`
   (coordonnées de la fenêtre, largeur du `PlayerView`, `onControl` = point dans `controlRects()` de l'overlay ou, si
   les commandes sont visibles, dans `exo_bottom_bar`, `exo_progress` ou `exo_center_controls`) ; les autres actions
   passent telles quelles. `Preview` → `showInfo(TimeText.preview(…), null)` ; `DragEnd` → `hideInfo()` et
   `seekTo(target)` si l'écart n'est pas nul. `Playback` lu sur le lecteur (`currentPosition`, `duration` ou -1 si
   `C.TIME_UNSET`, `isCurrentMediaItemSeekable`) ; lecteur absent → non navigable.
-- [ ] **Step 6 :** suites vertes ; commit `feat(video): glisser pour avancer ou reculer, avec l'aperçu de la position`.
+- [x] **Step 6 :** suites vertes ; commit `feat(video): glisser pour avancer ou reculer, avec l'aperçu de la position`.
 
 ### Task 4 : toucher deux fois, cumulable
 
@@ -284,9 +284,9 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
 `SeekGesturesTest.kt`.
 
 **Interfaces :** Consumes `SeekGestures`, `TimeText.seconds`, `TimeText.clamp` (T3). Produces
-`VideoOverlay.showJump(forward: Boolean, text: String)`.
+`VideoOverlay.showJump(forward: Boolean, text: String, hideAfterMs: Long)`.
 
-- [ ] **Step 1 : tests en échec** (suite de `SeekGesturesTest`)
+- [x] **Step 1 : tests en échec** (suite de `SeekGesturesTest`)
 
 ```kotlin
 @Test fun doubleTapRightJumpsForward() {
@@ -307,22 +307,22 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
 @Test fun notSeekableDoubleTapPasses() // seekable = false : les deux touchers passent au lecteur
 ```
 
-- [ ] **Step 2 :** lancer → échecs.
-- [ ] **Step 3 :** compléter `SeekGestures` : un toucher de `PRESSED` (sans glissement, ≤ `tapMaxMs`) devient candidat
+- [x] **Step 2 :** lancer → échecs.
+- [x] **Step 3 :** compléter `SeekGestures` : un toucher de `PRESSED` (sans glissement, ≤ `tapMaxMs`) devient candidat
   (position, heure du `up`) s'il n'est pas parti d'une commande ; un `down` à ≤ `doubleTapTimeoutMs` du `up` candidat
   et à ≤ `doubleTapSlop` de lui passe en `HELD` (retenu, même sur une commande devenue visible) ; un `down` hors
   commande à ≤ `streakMs` du dernier saut passe en `HELD` (série) ; au `up` d'un `HELD` resté toucher : `Jump` (côté
   = moitié de la largeur ; même côté : cumul, sinon cumul repart de ±10 s) ; tout autre `down` termine la série.
-- [ ] **Step 4 :** relancer → vert.
-- [ ] **Step 5 : activité et vues.** Au `down` passé en `PRESSED`, retenir `controllerWasVisible`
+- [x] **Step 4 :** relancer → vert.
+- [x] **Step 5 : activité et vues.** Au `down` passé en `PRESSED`, retenir `controllerWasVisible`
   (`playerView.isControllerFullyVisible`). `Jump` → `seekTo(TimeText.clamp(currentPosition + step, durée))`,
   `showJump(step > 0, TimeText.seconds(total))` (bulle au tiers gauche ou droit, cachée 700 ms après), et si
   `restoreControls` : `showController()` ou `hideController()` selon `controllerWasVisible`.
-- [ ] **Step 6 :** suites vertes ; commit `feat(video): toucher deux fois pour reculer ou avancer de 10 s, cumulable`.
+- [x] **Step 6 :** suites vertes ; commit `feat(video): toucher deux fois pour reculer ou avancer de 10 s, cumulable`.
 
 ### Task 5 : documentation
 
-- [ ] README : la ligne **Vidéo** des lecteurs intégrés décrit le portrait, la rotation selon Android, Tourner, le
+- [x] README : la ligne **Vidéo** des lecteurs intégrés décrit le portrait, la rotation selon Android, Tourner, le
   cadenas, les pistes et les gestes ; tableau de la feuille de route déjà à jour (phase 12 en v1.5.0). Fiche d'essais
   `docs/superpowers/research/2026-10-23-essais-phase12/essais.md` (T7). Commit `docs: lecteur vidéo de la phase 12`.
 
@@ -331,10 +331,10 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
 **Files :** Create `tools/fixtures/make_video_phase12.sh`,
 `android/app/src/androidTest/kotlin/com/mawena/fluluks/VideoPlayerInstrumentedTest.kt`.
 
-- [ ] **Step 1 :** script `make_video_phase12.sh <dossier>` (ffmpeg) : `video-phase12.mkv`, 6 s, mire 320 × 240,
+- [x] **Step 1 :** script `make_video_phase12.sh <dossier>` (ffmpeg) : `video-phase12.mkv`, 6 s, mire 320 × 240,
   deux pistes audio AAC (`fra` stéréo titrée « Original », `eng` mono titrée « Commentaires ») et une piste de
   sous-titres SubRip intégrée (`eng`). Contrôle par `ffprobe` (3 pistes audio+texte).
-- [ ] **Step 2 :** essais écrits et compilés (`./gradlew -q --offline :app:compileDebugAndroidTestKotlin`) :
+- [x] **Step 2 :** essais écrits et compilés (`./gradlew -q --offline :app:compileDebugAndroidTestKotlin`) :
   - `tracksListedInFrench` : lecteur de `newPlayer` sur `video-phase12.mkv` + `film.fr.srt` à côté ;
     `TrackMenu.audio(PlayerTracks.infos(…))` donne « Français · Original · Stéréo » et « Anglais · Commentaires · Mono » ;
     `TrackMenu.text` commence par « Désactivés », contient « Français · film.fr.srt » et une piste « Anglais » ;
@@ -343,20 +343,22 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
   - `activityStartsInUserOrientationAndLocks` : `VideoActivity` lancée sur la vidéo → `requestedOrientation` =
     `SCREEN_ORIENTATION_USER` ; clic sur le cadenas → `LOCKED` ; clic sur Tourner → `USER_LANDSCAPE` ou
     `USER_PORTRAIT` ; re-clic sur le cadenas → `USER`.
-- [ ] **Step 3 *(téléphone)* :** pousser la fixture (`adb push … /data/local/tmp/fluluks/fixtures/`), lancer
-  `connectedDebugAndroidTest` filtré sur `VideoPlayerInstrumentedTest` et `ReadersInstrumentedTest` → verts ;
+- [x] **Step 3 *(téléphone)* :** pousser la fixture (`adb push … /data/local/tmp/fluluks/fixtures/`), installer
+  l'APK de débogage et l'APK de test par `adb install -r -t`, lancer `am instrument -w -r -e class …` sur
+  `VideoPlayerInstrumentedTest` et `ReadersInstrumentedTest` → verts, puis désinstaller seulement
+  `com.mawena.fluluks.test` (jamais `connectedDebugAndroidTest`, qui désinstalle l'application et ses données) ;
   commit `test(video): essais instrumentés de la phase 12 sur le Pixel`.
 
 ### Task 7 *(utilisateur)* : essais sur le Pixel
 
-- [ ] Construire et installer l'APK sur le Pixel **avant** de demander l'essai.
-- [ ] Fiche `docs/superpowers/research/2026-10-23-essais-phase12/essais.md` remplie (orientation avec la rotation
+- [x] Construire et installer l'APK sur le Pixel **avant** de demander l'essai.
+- [x] Fiche `docs/superpowers/research/2026-10-23-essais-phase12/essais.md` remplie (orientation avec la rotation
   automatique activée puis coupée, Tourner, cadenas, pistes, glissement, double toucher et série, vidéo distante).
 
 ### Fin de phase
 
-- [ ] Relecture finale de toute la branche.
-- [ ] Fusion `feature/lecteur-video` → `develop`, puis `release/1.5.0` (pubspec `1.5.0+12`), `main`, étiquette
+- [x] Relecture finale de toute la branche.
+- [x] Fusion `feature/lecteur-video` → `develop`, puis `release/1.5.0` (pubspec `1.5.0+12`), `main`, étiquette
   `v1.5.0`. Pas de push sans l'accord de l'utilisateur.
 
 ---

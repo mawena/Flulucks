@@ -1,0 +1,17 @@
+# Essais instrumentés de la phase 12 sur le Pixel 4 XL (2026-10-23 17:14)
+# APK de débogage de feature/lecteur-video (f5f42c0), installée par adb install -r -t ; am instrument
+
+## VideoPlayerInstrumentedTest
+INSTRUMENTATION_STATUS: class=com.mawena.fluluks.VideoPlayerInstrumentedTest
+INSTRUMENTATION_STATUS: test=activityStartsInUserOrientationAndLocks
+INSTRUMENTATION_STATUS: test=audioTrackSwitches
+INSTRUMENTATION_STATUS: test=tracksListedInFrench
+INSTRUMENTATION_STATUS: test=subtitlesCanBeDisabled
+OK (4 tests)
+
+## ReadersInstrumentedTest
+INSTRUMENTATION_STATUS: class=com.mawena.fluluks.ReadersInstrumentedTest
+INSTRUMENTATION_STATUS: test=videoWithWindows1252Subtitle
+INSTRUMENTATION_STATUS: test=remoteMusicPreparedOffMainThread
+INSTRUMENTATION_STATUS: test=musicPlaysAndAdvances
+OK (3 tests)

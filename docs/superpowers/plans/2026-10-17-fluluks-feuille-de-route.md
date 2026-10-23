@@ -356,29 +356,70 @@ dans le même commit que le travail.
 - [x] T4 — Toucher deux fois pour reculer ou avancer de 10 s, cumulable
 - [x] T5 — Documentation
 - [x] T6 — Essais instrumentés sur le Pixel
-- [ ] *(utilisateur)* T7 — Essais sur le Pixel ([fiche](../research/2026-10-23-essais-phase12/essais.md))
-- [ ] Relecture finale de toute la branche
-- [ ] Fusion `feature/lecteur-video` → `develop`
-- [ ] Version `v1.5.0`
+- [x] *(utilisateur)* T7 — Essais sur le Pixel ([fiche](../research/2026-10-23-essais-phase12/essais.md)) *(2026-10-23 : toute la fiche réussie selon l'utilisateur, sur l'APK de la phase 12)*
+- [x] Relecture finale de toute la branche *(1 point important corrigé : pincement à deux doigts ; JVM 350 tests)*
+- [x] Fusion `feature/lecteur-video` → `develop`
+- [x] Version `v1.5.0`
 
-### Phase 13 — Vérification et réparation des disques
-- [ ] Plan de la phase 13 écrit *(demande du 2026-10-22 ; spec § 16 ; phase 11, puis phase 12, jusqu'au 2026-10-23)*
+### Phase 13 — Connexions SSH : terminal, clés, tunnels ([plan](2026-10-23-phase13-ssh.md))
+- [x] Plan de la phase 13 écrit *(demande du 2026-10-23 ; spec § 21)*
+- [ ] T1 — Connexions SSH fiables et expliquées : messages précis, Tester la connexion, keyboard-interactive, `mawena.cloud:2244`
+- [ ] T2 — Sessions de terminal (Kotlin) : PTY xterm, sortie par lots, 8 sessions
+- [ ] T3 — Sessions gardées en arrière-plan : service et notification « Tout fermer »
+- [ ] T4 — Écran Terminal (xterm) : thème, copier-coller, pincement, Reconnecter
+- [ ] T5 — Barre de touches : Échap, Tab, Ctrl, Alt, flèches
+- [ ] T6 — Sessions multiples, bouton Terminal, Ouvrir un terminal ici
+- [ ] T7 — Trousseau de clés SSH : générer, importer, clé publique
+- [ ] T8 — Installer la clé publique sur le serveur
+- [ ] T9 — Commandes enregistrées
+- [ ] T10 — Tunnels (redirection de port locale)
+- [ ] T11 — Documentation
+- [ ] T12 — Essais instrumentés sur le Pixel
+- [ ] *(utilisateur)* T13 — Essais sur le Pixel
+- [ ] Relecture finale de toute la branche
+- [ ] Fusion `feature/ssh` → `develop`
+- [ ] Version `v1.6.0`
+
+### Phase 14 — Chiffrement de fichiers, de dossiers et coffres ([plan](2026-10-23-phase14-chiffrement.md))
+- [x] Plan de la phase 14 écrit *(demande du 2026-10-23 ; spec § 22)*
+- [ ] T1 — Moteur : scrypt et format age (chiffrement en flux, lecture à accès aléatoire, juge Python)
+- [ ] T2 — Moteur : ZIP chiffré AES-256 et archives ZIP protégées par mot de passe (libarchive sur mbedTLS)
+- [ ] T3 — Moteur : coffres LUKS2 dans un fichier, formatage sans table, emplacements de clé sûrs en cas de coupure
+- [ ] T4 — Poignées JNI et moteur Kotlin : chiffrement, déchiffrement, coffres en cascade sous leur fichier
+- [ ] T5 — Chiffrer, déchiffrer, vérifier, changer le mot de passe d'un fichier ; original supprimé après vérification
+- [ ] T6 — Ouvrir un fichier chiffré sans copie en clair (source déchiffrée en mémoire, fournisseur de flux)
+- [ ] T7 — Saisie des mots de passe : force, générateur de mots de passe et de phrases, copie protégée
+- [ ] T8 — Écrans Chiffrer et Déchiffrer dans l'explorateur, ZIP protégés, partage d'un fichier chiffré
+- [ ] T9 — Coffres (Kotlin) : création, ouverture comme un stockage, fermeture avant le stockage porteur
+- [ ] T10 — Coffres (écrans) : création, section « Coffres » de l'accueil, ouvrir, fermer, parcourir
+- [ ] T11 — Mot de passe et clé de secours d'un coffre
+- [ ] T12 — Déverrouillage biométrique d'un coffre (visage ou empreinte)
+- [ ] T13 — Coffres fermés à l'écran éteint, masqués dans les captures
+- [ ] T14 — Documentation
+- [ ] T15 — Essais instrumentés sur le Pixel
+- [ ] *(utilisateur)* T16 — Essais sur le Pixel
+- [ ] Relecture finale de toute la branche
+- [ ] Fusion `feature/chiffrement` → `develop`
+- [ ] Version `v1.7.0`
+
+### Phase 15 — Vérification et réparation des disques
+- [ ] Plan de la phase 15 écrit *(demande du 2026-10-22 ; spec § 16 ; phase 11, puis 12, 13 et 14, jusqu'au 2026-10-23)*
 - [ ] Vérification en lecture seule avec rapport, pour chaque système de fichiers
 - [ ] Réparation ext4 par e2fsck (e2fsprogs, sur l'accès USB du moteur)
 - [ ] Réparation NTFS par ntfsfix (ntfs-3g)
 - [ ] Réparation FAT32 et exFAT par fsck.fat et fsck.exfat
 - [ ] LUKS : vérification des deux en-têtes, sauvegarde et restauration de l'en-tête
-- [ ] Version `v1.6.0`
+- [ ] Version `v1.8.0`
 
-### Phase 14 — Gestion des partitions, comme GParted
-- [ ] Plan de la phase 14 écrit *(demande du 2026-10-22 ; spec § 17 ; phase 12, puis phase 13, jusqu'au 2026-10-23)*
+### Phase 16 — Gestion des partitions, comme GParted
+- [ ] Plan de la phase 16 écrit *(demande du 2026-10-22 ; spec § 17 ; phase 12, puis 13, 14 et 15, jusqu'au 2026-10-23)*
 - [ ] Vue du disque : partitions et espace libre à l'échelle, système de fichiers, étiquette, taille, place occupée
 - [ ] Taille choisie au formatage ; créer une partition dans un espace libre, en supprimer une, formater une seule partition
 - [ ] Changer l'étiquette d'une partition ; nouvelle table MBR ou GPT
 - [ ] Redimensionner (agrandir, réduire) : ext4 par resize2fs, NTFS par ntfsresize, système de fichiers dans LUKS2 ; FAT32 et exFAT à étudier
 - [ ] Déplacer une partition, si le plan sait le rendre sûr
 - [ ] Opérations préparées, résumées, puis appliquées après confirmation
-- [ ] Version `v1.7.0`
+- [ ] Version `v1.9.0`
 
 ---
 

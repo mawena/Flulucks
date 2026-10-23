@@ -12,7 +12,7 @@ photo dans les applications habituelles.
 Elle est née d'un besoin simple : utiliser sur un téléphone non rooté (un Pixel 4 XL) le disque
 LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permettait.
 
-> **État actuel : version 1.4.0 ; gestionnaire de fichiers (interface claire ou sombre et accessible, recherche dans
+> **État actuel : version 1.5.0 ; gestionnaire de fichiers (interface claire ou sombre et accessible, recherche dans
 > tous les stockages, lecteurs intégrés de photos, musique, vidéos et textes, dossiers distants FTP et SFTP, archives
 > ZIP, 7z, RAR et TAR, corbeille, analyse de l'espace, renommage par lot), lecture et écriture sur ext4, FAT, exFAT
 > et NTFS, formatage des disques USB, en clair ou chiffrés.** L'écriture a été vérifiée sur PC (batteries de
@@ -22,7 +22,7 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
 > Une sauvegarde reste recommandée avant d'écrire sur un disque qui compte. Voir les
 > [limites](#limites-actuelles).
 
-## Ce que fait la version 1.4.0
+## Ce que fait la version 1.5.0
 
 ### Interface (nouveau en 1.4.0)
 
@@ -75,9 +75,15 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
   débranche les écouteurs. Une barre réduite reste en bas de tous les écrans ; l'écran **Lecture en cours** donne la
   position, le curseur, précédent, suivant, et le recul et l'avance de 10 s. Si le stockage disparaît (éjection,
   disque arraché, serveur déconnecté), la lecture s'arrête : « Lecture arrêtée : stockage fermé ».
-- **Vidéo** (MP4, M4V, MKV, WebM, MOV, 3GP, AVI) : plein écran, en paysage selon le capteur, recul et avance de
-  10 s ; l'écran reste allumé pendant la lecture. Les sous-titres `film.srt` et `film.<langue>.srt` posés à côté
-  de la vidéo sont proposés (UTF-8 ou Windows-1252 ; le premier est actif).
+- **Vidéo** (MP4, M4V, MKV, WebM, MOV, 3GP, AVI) : plein écran, **en portrait par défaut** ; le lecteur suit la
+  rotation du téléphone seulement quand la rotation automatique d'Android est activée. En haut, **Pistes** choisit
+  la piste audio et les sous-titres (ou les coupe), **Tourner** passe du portrait au paysage et inversement, et le
+  **cadenas** fige l'orientation (le rouvrir rend la rotation automatique). Comme dans VLC, **glisser**
+  horizontalement avance ou recule (la position visée s'affiche pendant le geste, la lecture y saute au lever du
+  doigt), et **toucher deux fois** la moitié gauche ou droite recule ou avance de 10 s, 10 s de plus à chaque
+  toucher rapproché. Les boutons reculent et avancent aussi de 10 s ; l'écran reste allumé pendant la lecture. Les
+  sous-titres `film.srt` et `film.<langue>.srt` posés à côté de la vidéo sont proposés (UTF-8 ou Windows-1252 ; le
+  premier est actif). *(Orientation, pistes et gestes : 1.5.0.)*
 - **Textes** (TXT, Markdown, JSON, XML, CSV, journaux, fichiers de configuration, code…) : éditeur pour les fichiers
   UTF-8 de 2 Mio au plus. Le BOM et les fins de ligne Windows sont gardés. L'enregistrement écrit un fichier
   temporaire qui remplace ensuite l'original, jamais d'original à moitié écrit ; si le fichier a changé depuis son
@@ -451,6 +457,9 @@ tools/android/run_native_tests.sh <numéro-adb>
 tools/android/check_image.sh <numéro-adb> engine-ecriture.img   # e2fsck des images écrites sur le téléphone
 # les essais instrumentés des archives lisent trois archives de build/native/fixtures-archives/, à pousser avant :
 # adb push build/native/fixtures-archives/{test_read_format_7zip_lzma2.7z,test_read_format_rar5_multiple_files.rar,hostile.zip} /data/local/tmp/fluluks/fixtures/
+# ceux du lecteur vidéo lisent video-phase12.mkv (deux pistes audio, un sous-titre), fabriquée par ffmpeg puis poussée :
+# tools/fixtures/make_video_phase12.sh build/native/fixtures-video
+# adb push build/native/fixtures-video/video-phase12.mkv /data/local/tmp/fluluks/fixtures/
 flutter test && flutter analyze
 ```
 
@@ -496,9 +505,11 @@ Le dépôt suit git flow :
 | 9 | Compression et décompression (ZIP, 7z, RAR, TAR), corbeille, analyse de l'espace, propriétés et SHA-256, renommage par lot, filtres | **v1.2.0** |
 | 10 | Visionneuse d'images, lecteurs de musique et de vidéo, éditeur de texte, dossiers distants FTP puis SFTP | **v1.3.0** |
 | 11 | Interface complète et professionnelle : thèmes clair et sombre, accessibilité, grands écrans, liste ou grille partout, recherche dans tous les stockages, aide, à propos et licences | **v1.4.0** |
-| 12 | Lecteur vidéo : portrait par défaut, rotation et verrou, pistes audio et sous-titres, gestes comme VLC | v1.5.0 |
-| 13 | Vérification et réparation des disques : e2fsck, ntfsfix, fsck.fat, fsck.exfat, en-têtes LUKS | v1.6.0 |
-| 14 | Gestion des partitions comme GParted : taille au formatage, créer, supprimer, redimensionner | v1.7.0 |
+| 12 | Lecteur vidéo : portrait par défaut, rotation et verrou, pistes audio et sous-titres, gestes comme VLC | **v1.5.0** |
+| 13 | Connexions SSH : terminal, sessions en arrière-plan, clés, commandes enregistrées, tunnels | v1.6.0 |
+| 14 | Chiffrement de fichiers et de dossiers, coffres de fichiers, chacun avec son mot de passe | v1.7.0 |
+| 15 | Vérification et réparation des disques : e2fsck, ntfsfix, fsck.fat, fsck.exfat, en-têtes LUKS | v1.8.0 |
+| 16 | Gestion des partitions comme GParted : taille au formatage, créer, supprimer, redimensionner | v1.9.0 |
 
 Suivi détaillé, étape par étape : [docs/superpowers/plans/2026-10-17-fluluks-feuille-de-route.md](docs/superpowers/plans/2026-10-17-fluluks-feuille-de-route.md).
 Conception : [docs/superpowers/specs/2026-10-17-fluluks-design.md](docs/superpowers/specs/2026-10-17-fluluks-design.md).
@@ -511,7 +522,8 @@ l'être sous GPL, avec ses sources. FatFs est sous une licence de type BSD à un
 GPL, comme libarchive (BSD à deux clauses) et liblzma (0BSD). Depuis la phase 10, l'application embarque aussi
 AndroidX Media3 1.11.1 et Apache Commons Net 3.13.0 (Apache-2.0), JSch 2.28.8 de mwiede (BSD) et Bouncy Castle
 1.86 (licence MIT), toutes compatibles avec la GPL ; Apache FtpServer 1.2.1 et Apache MINA SSHD 2.20.0 (Apache-2.0)
-ne servent qu'aux tests. Les licences des bibliothèques natives sont dans
+ne servent qu'aux tests. Les icônes du lecteur vidéo (phase 12) viennent d'AOSP et de Media3 (Apache-2.0). Les
+licences des bibliothèques natives sont dans
 `native/third_party/` (`ntfs-3g/COPYING`, `fatfs/LICENSE.txt`, `libarchive/COPYING`, `xz/COPYING`…) ; leurs correctifs sont décrits dans
 [native/third_party/PATCHES.md](native/third_party/PATCHES.md). Depuis la phase 11, toutes ces licences se lisent aussi
 dans l'application : À propos → **Licences des bibliothèques**.

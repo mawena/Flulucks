@@ -47,11 +47,11 @@
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/usb_device_filter" />
         </activity>
-        <!-- Lecteur vidéo de Portail (phase 10). -->
+        <!-- Lecteur vidéo de Portail (phase 10) ; orientation choisie par l'activité (phase 12). -->
         <activity
             android:name=".media.VideoActivity"
             android:exported="false"
-            android:screenOrientation="sensorLandscape"
+            android:screenOrientation="user"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:theme="@style/VideoTheme" />
         <!-- Lecture de la musique en arrière-plan (phase 10). -->
