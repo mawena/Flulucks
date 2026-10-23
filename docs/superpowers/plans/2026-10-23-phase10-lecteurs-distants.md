@@ -119,7 +119,7 @@ Pigeon : `TextFileMsg(text, bom, crlf, mtime, size, readOnlyReason?)`, `TextSave
 `@async Uint8List readImage(sourceId, path)`, `@async TextFileMsg readText(sourceId, path)`,
 `@async TextSaveMsg writeText(sourceId, path, text, bom, crlf, expectedMtime, expectedSize, force)`.
 
-- [ ] **Step 1 : tests** (`FileContentTest`, source locale et disque en mémoire `MemEngine`) :
+- [x] **Step 1 : tests** (`FileContentTest`, source locale et disque en mémoire `MemEngine`) :
   - `readImageReturnsBytes`, `imageTooBigRefused` (64 Mio + 1), `heicConverted` (convertisseur simulé appelé, JPEG
     rendu) ;
   - `readTextDetectsBomAndCrlf` (`EF BB BF` + `a\r\nb` → texte `a\nb`, bom, crlf) ; `notUtf8Refused` (Latin-1,
@@ -130,14 +130,14 @@ Pigeon : `TextFileMsg(text, bom, crlf, mtime, size, readOnlyReason?)`, `TextSave
   - `failedWriteKeepsOriginal` : écriture du temporaire en échec (disque plein simulé) → original intact, aucun
     `.portail-partiel` laissé ;
   - `readOnlySourceRefused` : lecture permise avec `readOnlyReason`, écriture refusée.
-- [ ] **Step 2 :** Run `cd android && ./gradlew -q :app:testDebugUnitTest --tests '*FileContentTest'` → FAIL
+- [x] **Step 2 :** Run `cd android && ./gradlew -q :app:testDebugUnitTest --tests '*FileContentTest'` → FAIL
   (classe absente).
-- [ ] **Step 3 :** implémenter : écriture dans `partialName(nom)` (ancien temporaire supprimé), fermeture, puis
+- [x] **Step 3 :** implémenter : écriture dans `partialName(nom)` (ancien temporaire supprimé), fermeture, puis
   suppression de l'original et renommage du temporaire ; si le renommage échoue, message « Enregistré sous
   « <temporaire> » » ; HEIC par `ImageDecoder.decodeBitmap` avec `setTargetSize`. Méthodes Pigeon sur le
   dispatcher IO, erreurs par `Files.toFilesException`.
-- [ ] **Step 4 :** tests verts ; suite JVM verte.
-- [ ] **Step 5 :** commit `feat(lecteurs): lecture d'images et de textes, enregistrement sûr des textes`.
+- [x] **Step 4 :** tests verts ; suite JVM verte.
+- [x] **Step 5 :** commit `feat(lecteurs): lecture d'images et de textes, enregistrement sûr des textes`.
 
 ### Task 2 : « Ouvrir dans Portail » et éditeur de texte (Flutter)
 

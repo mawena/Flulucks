@@ -14,6 +14,7 @@ import com.mawena.fluluks.files.BatchRename
 import com.mawena.fluluks.files.Details
 import com.mawena.fluluks.files.DiskSource
 import com.mawena.fluluks.files.Entry
+import com.mawena.fluluks.files.FileContent
 import com.mawena.fluluks.files.FileDetails
 import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.FilesException
@@ -341,6 +342,27 @@ class HostApiImpl(
                 FolderSizeMsg(size = s.size, files = s.files.toLong(), dirs = s.dirs.toLong(), truncated = s.truncated)
             }
         }
+
+    override fun readImage(sourceId: String, path: String, callback: (Result<ByteArray>) -> Unit) =
+        io(callback) { Files.guard("openDocument") { FileContent.readImage(Files.source(sourceId), path) } }
+
+    override fun readText(sourceId: String, path: String, callback: (Result<TextFileMsg>) -> Unit) =
+        io(callback) {
+            Files.guard("openDocument") {
+                val d = FileContent.readText(Files.source(sourceId), path)
+                TextFileMsg(d.text, d.bom, d.crlf, d.mtime, d.size, d.readOnlyReason)
+            }
+        }
+
+    override fun writeText(
+        sourceId: String, path: String, text: String, bom: Boolean, crlf: Boolean, expectedMtime: Long, expectedSize: Long,
+        force: Boolean, callback: (Result<TextSaveMsg>) -> Unit,
+    ) = io(callback) {
+        Files.guard("createDocument") {
+            val r = FileContent.writeText(Files.source(sourceId), path, text, bom, crlf, expectedMtime, expectedSize, force)
+            TextSaveMsg(r.saved, r.changed, r.mtime, r.size)
+        }
+    }
 
     override fun sha256(sourceId: String, path: String, callback: (Result<String?>) -> Unit) =
         io(callback) {

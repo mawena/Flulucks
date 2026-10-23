@@ -41,6 +41,10 @@ abstract class HostApi {
   Future<FolderSizeMsg> folderSize(String sourceId, String path);
   Future<String?> sha256(String sourceId, String path);
   Future<void> cancelHash();
+  Future<Uint8List> readImage(String sourceId, String path);
+  Future<TextFileMsg> readText(String sourceId, String path);
+  Future<TextSaveMsg> writeText(String sourceId, String path, String text, bool bom, bool crlf, int expectedMtime,
+      int expectedSize, bool force);
   Future<List<FilterItemMsg>> quickFilter(String filter);
   Future<List<RenamePreviewMsg>> previewRename(String sourceId, List<String> paths, RenameRuleMsg rule);
   Future<void> applyRename(String sourceId, List<String> paths, RenameRuleMsg rule);
@@ -141,6 +145,14 @@ class PigeonHostApi implements HostApi {
   Future<String?> sha256(String sourceId, String path) => _api.sha256(sourceId, path);
   @override
   Future<void> cancelHash() => _api.cancelHash();
+  @override
+  Future<Uint8List> readImage(String sourceId, String path) => _api.readImage(sourceId, path);
+  @override
+  Future<TextFileMsg> readText(String sourceId, String path) => _api.readText(sourceId, path);
+  @override
+  Future<TextSaveMsg> writeText(String sourceId, String path, String text, bool bom, bool crlf, int expectedMtime,
+          int expectedSize, bool force) =>
+      _api.writeText(sourceId, path, text, bom, crlf, expectedMtime, expectedSize, force);
   @override
   Future<List<FilterItemMsg>> quickFilter(String filter) => _api.quickFilter(filter);
   @override

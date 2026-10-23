@@ -311,7 +311,7 @@ dans le même commit que le travail.
 ### Phase 10 — Lecteurs intégrés et dossiers distants ([plan](2026-10-23-phase10-lecteurs-distants.md))
 - [x] Plan de la phase 10 écrit
       *(demande du 2026-10-20, J.1 ; déplacée en phase 9 puis en phase 10 le 2026-10-22 ; spec § 18)*
-- [ ] T1 — Lecture d'images et de textes, enregistrement sûr des textes
+- [x] T1 — Lecture d'images et de textes, enregistrement sûr des textes
 - [ ] T2 — « Ouvrir dans Portail » et éditeur de texte (UTF-8, BOM et fins de ligne gardés)
 - [ ] T3 — Visionneuse d'images (glisser d'une photo à l'autre, zoom)
 - [ ] T4 — Lecture à accès aléatoire et fournisseur de flux

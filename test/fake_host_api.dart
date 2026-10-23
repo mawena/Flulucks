@@ -211,6 +211,40 @@ class FakeHostApi implements HostApi {
   @override
   Future<void> cancelHash() async => hashCancels++;
 
+  /// Lecteurs : octets des images et textes par chemin ; une erreur par chemin (message) ; réponse de writeText
+  /// (défaut : enregistré, mtime + 1) ; enregistrements reçus (chemin, texte, bom, crlf, mtime, taille, force).
+  final images = <String, Uint8List>{};
+  final readErrors = <String, String>{};
+  final texts = <String, TextFileMsg>{};
+  TextSaveMsg Function(String path, bool force)? onWriteText;
+  String? writeError;
+  final writes = <(String, String, bool, bool, int, int, bool)>[];
+
+  @override
+  Future<Uint8List> readImage(String sourceId, String path) async {
+    calls.add('readImage $sourceId $path');
+    final err = readErrors[path];
+    if (err != null) throw PlatformException(code: '-1', message: err);
+    return images[path]!;
+  }
+
+  @override
+  Future<TextFileMsg> readText(String sourceId, String path) async {
+    calls.add('readText $sourceId $path');
+    final err = readErrors[path];
+    if (err != null) throw PlatformException(code: '-1', message: err);
+    return texts[path]!;
+  }
+
+  @override
+  Future<TextSaveMsg> writeText(String sourceId, String path, String text, bool bom, bool crlf, int expectedMtime,
+      int expectedSize, bool force) async {
+    writes.add((path, text, bom, crlf, expectedMtime, expectedSize, force));
+    if (writeError != null) throw PlatformException(code: '-13', message: writeError);
+    return onWriteText?.call(path, force) ??
+        TextSaveMsg(saved: true, changed: false, mtime: expectedMtime + 1, size: utf8.encode(text).length);
+  }
+
   /// Résultats des filtres rapides (vide si absent).
   final filters = <String, List<FilterItemMsg>>{};
 

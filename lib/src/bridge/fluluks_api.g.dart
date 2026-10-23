@@ -757,6 +757,140 @@ class DetailsMsg {
   }
 }
 
+/// Texte ouvert dans l'éditeur : `text` sans BOM, fins de ligne en « \n » ; `bom` et `crlf` à rendre à
+/// l'enregistrement ; `mtime` (secondes) et `size` pour voir s'il a changé ; `readOnlyReason` si le stockage est en
+/// lecture seule.
+class TextFileMsg {
+  TextFileMsg({
+    required this.text,
+    required this.bom,
+    required this.crlf,
+    required this.mtime,
+    required this.size,
+    this.readOnlyReason,
+  });
+
+  String text;
+
+  bool bom;
+
+  bool crlf;
+
+  int mtime;
+
+  int size;
+
+  String? readOnlyReason;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      text,
+      bom,
+      crlf,
+      mtime,
+      size,
+      readOnlyReason,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static TextFileMsg decode(Object result) {
+    result as List<Object?>;
+    return TextFileMsg(
+      text: result[0]! as String,
+      bom: result[1]! as bool,
+      crlf: result[2]! as bool,
+      mtime: result[3]! as int,
+      size: result[4]! as int,
+      readOnlyReason: result[5] as String?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! TextFileMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(text, other.text) && _deepEquals(bom, other.bom) && _deepEquals(crlf, other.crlf) && _deepEquals(mtime, other.mtime) && _deepEquals(size, other.size) && _deepEquals(readOnlyReason, other.readOnlyReason);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'TextFileMsg(text: $text, bom: $bom, crlf: $crlf, mtime: $mtime, size: $size, readOnlyReason: $readOnlyReason)';
+  }
+}
+
+/// Enregistrement d'un texte : `changed` si le fichier a changé depuis son ouverture (rien n'est alors écrit).
+class TextSaveMsg {
+  TextSaveMsg({
+    required this.saved,
+    required this.changed,
+    required this.mtime,
+    required this.size,
+  });
+
+  bool saved;
+
+  bool changed;
+
+  int mtime;
+
+  int size;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      saved,
+      changed,
+      mtime,
+      size,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static TextSaveMsg decode(Object result) {
+    result as List<Object?>;
+    return TextSaveMsg(
+      saved: result[0]! as bool,
+      changed: result[1]! as bool,
+      mtime: result[2]! as int,
+      size: result[3]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! TextSaveMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(saved, other.saved) && _deepEquals(changed, other.changed) && _deepEquals(mtime, other.mtime) && _deepEquals(size, other.size);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'TextSaveMsg(saved: $saved, changed: $changed, mtime: $mtime, size: $size)';
+  }
+}
+
 /// Règle de renommage par lot : `mode` `number` (`base`, `start`), `replace` (`find`, `replace`, `caseSensitive`)
 /// ou `photoDate`.
 class RenameRuleMsg {
@@ -1365,32 +1499,38 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is DetailsMsg) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is RenameRuleMsg) {
+    }    else if (value is TextFileMsg) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    }    else if (value is RenamePreviewMsg) {
+    }    else if (value is TextSaveMsg) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    }    else if (value is FilterItemMsg) {
+    }    else if (value is RenameRuleMsg) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    }    else if (value is FolderSizeMsg) {
+    }    else if (value is RenamePreviewMsg) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
-    }    else if (value is SpaceItemMsg) {
+    }    else if (value is FilterItemMsg) {
       buffer.putUint8(141);
       writeValue(buffer, value.encode());
-    }    else if (value is SpaceReportMsg) {
+    }    else if (value is FolderSizeMsg) {
       buffer.putUint8(142);
       writeValue(buffer, value.encode());
-    }    else if (value is SearchResultMsg) {
+    }    else if (value is SpaceItemMsg) {
       buffer.putUint8(143);
       writeValue(buffer, value.encode());
-    }    else if (value is ViewPrefsMsg) {
+    }    else if (value is SpaceReportMsg) {
       buffer.putUint8(144);
       writeValue(buffer, value.encode());
-    }    else if (value is FavoriteMsg) {
+    }    else if (value is SearchResultMsg) {
       buffer.putUint8(145);
+      writeValue(buffer, value.encode());
+    }    else if (value is ViewPrefsMsg) {
+      buffer.putUint8(146);
+      writeValue(buffer, value.encode());
+    }    else if (value is FavoriteMsg) {
+      buffer.putUint8(147);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -1417,22 +1557,26 @@ class _PigeonCodec extends StandardMessageCodec {
       case 136:
         return DetailsMsg.decode(readValue(buffer)!);
       case 137:
-        return RenameRuleMsg.decode(readValue(buffer)!);
+        return TextFileMsg.decode(readValue(buffer)!);
       case 138:
-        return RenamePreviewMsg.decode(readValue(buffer)!);
+        return TextSaveMsg.decode(readValue(buffer)!);
       case 139:
-        return FilterItemMsg.decode(readValue(buffer)!);
+        return RenameRuleMsg.decode(readValue(buffer)!);
       case 140:
-        return FolderSizeMsg.decode(readValue(buffer)!);
+        return RenamePreviewMsg.decode(readValue(buffer)!);
       case 141:
-        return SpaceItemMsg.decode(readValue(buffer)!);
+        return FilterItemMsg.decode(readValue(buffer)!);
       case 142:
-        return SpaceReportMsg.decode(readValue(buffer)!);
+        return FolderSizeMsg.decode(readValue(buffer)!);
       case 143:
-        return SearchResultMsg.decode(readValue(buffer)!);
+        return SpaceItemMsg.decode(readValue(buffer)!);
       case 144:
-        return ViewPrefsMsg.decode(readValue(buffer)!);
+        return SpaceReportMsg.decode(readValue(buffer)!);
       case 145:
+        return SearchResultMsg.decode(readValue(buffer)!);
+      case 146:
+        return ViewPrefsMsg.decode(readValue(buffer)!);
+      case 147:
         return FavoriteMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -2142,6 +2286,66 @@ class FluLuksHostApi {
         isNullValid: true,
     )
     ;
+  }
+
+  /// Lecteurs (phase 10) : octets d'une image (64 Mio au plus, HEIC converti en JPEG) ; texte UTF-8 de l'éditeur
+  /// (2 Mio au plus), enregistré par un fichier temporaire, refusé (`changed`) s'il a changé depuis son ouverture,
+  /// sauf `force`.
+  Future<Uint8List> readImage(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.readImage$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as Uint8List;
+  }
+
+  Future<TextFileMsg> readText(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.readText$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as TextFileMsg;
+  }
+
+  Future<TextSaveMsg> writeText(String sourceId, String path, String text, bool bom, bool crlf, int expectedMtime, int expectedSize, bool force) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.writeText$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path, text, bom, crlf, expectedMtime, expectedSize, force]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as TextSaveMsg;
   }
 
   /// Filtre rapide (`photos`, `videos`, `music`, `documents`, `archives`, `recent`) : 500 fichiers au plus, du plus récent.

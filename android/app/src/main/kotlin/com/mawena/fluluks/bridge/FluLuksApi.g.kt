@@ -741,6 +741,122 @@ data class DetailsMsg (
 }
 
 /**
+ * Texte ouvert dans l'éditeur : `text` sans BOM, fins de ligne en « \n » ; `bom` et `crlf` à rendre à
+ * l'enregistrement ; `mtime` (secondes) et `size` pour voir s'il a changé ; `readOnlyReason` si le stockage est en
+ * lecture seule.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class TextFileMsg (
+  val text: String,
+  val bom: Boolean,
+  val crlf: Boolean,
+  val mtime: Long,
+  val size: Long,
+  val readOnlyReason: String? = null
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): TextFileMsg {
+      val text = pigeonVar_list[0] as String
+      val bom = pigeonVar_list[1] as Boolean
+      val crlf = pigeonVar_list[2] as Boolean
+      val mtime = pigeonVar_list[3] as Long
+      val size = pigeonVar_list[4] as Long
+      val readOnlyReason = pigeonVar_list[5] as String?
+      return TextFileMsg(text, bom, crlf, mtime, size, readOnlyReason)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      text,
+      bom,
+      crlf,
+      mtime,
+      size,
+      readOnlyReason,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as TextFileMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.text, other.text) && FluLuksApiPigeonUtils.deepEquals(this.bom, other.bom) && FluLuksApiPigeonUtils.deepEquals(this.crlf, other.crlf) && FluLuksApiPigeonUtils.deepEquals(this.mtime, other.mtime) && FluLuksApiPigeonUtils.deepEquals(this.size, other.size) && FluLuksApiPigeonUtils.deepEquals(this.readOnlyReason, other.readOnlyReason)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.text)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.bom)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.crlf)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.mtime)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.size)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.readOnlyReason)
+    return result
+  }
+  override fun toString(): String {
+    return "TextFileMsg(text=$text, bom=$bom, crlf=$crlf, mtime=$mtime, size=$size, readOnlyReason=$readOnlyReason)"
+  }
+}
+
+/**
+ * Enregistrement d'un texte : `changed` si le fichier a changé depuis son ouverture (rien n'est alors écrit).
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class TextSaveMsg (
+  val saved: Boolean,
+  val changed: Boolean,
+  val mtime: Long,
+  val size: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): TextSaveMsg {
+      val saved = pigeonVar_list[0] as Boolean
+      val changed = pigeonVar_list[1] as Boolean
+      val mtime = pigeonVar_list[2] as Long
+      val size = pigeonVar_list[3] as Long
+      return TextSaveMsg(saved, changed, mtime, size)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      saved,
+      changed,
+      mtime,
+      size,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as TextSaveMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.saved, other.saved) && FluLuksApiPigeonUtils.deepEquals(this.changed, other.changed) && FluLuksApiPigeonUtils.deepEquals(this.mtime, other.mtime) && FluLuksApiPigeonUtils.deepEquals(this.size, other.size)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.saved)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.changed)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.mtime)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.size)
+    return result
+  }
+  override fun toString(): String {
+    return "TextSaveMsg(saved=$saved, changed=$changed, mtime=$mtime, size=$size)"
+  }
+}
+
+/**
  * Règle de renommage par lot : `mode` `number` (`base`, `start`), `replace` (`find`, `replace`, `caseSensitive`)
  * ou `photoDate`.
  *
@@ -1283,45 +1399,55 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          RenameRuleMsg.fromList(it)
+          TextFileMsg.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          RenamePreviewMsg.fromList(it)
+          TextSaveMsg.fromList(it)
         }
       }
       139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          FilterItemMsg.fromList(it)
+          RenameRuleMsg.fromList(it)
         }
       }
       140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          FolderSizeMsg.fromList(it)
+          RenamePreviewMsg.fromList(it)
         }
       }
       141.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          SpaceItemMsg.fromList(it)
+          FilterItemMsg.fromList(it)
         }
       }
       142.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          SpaceReportMsg.fromList(it)
+          FolderSizeMsg.fromList(it)
         }
       }
       143.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          SearchResultMsg.fromList(it)
+          SpaceItemMsg.fromList(it)
         }
       }
       144.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ViewPrefsMsg.fromList(it)
+          SpaceReportMsg.fromList(it)
         }
       }
       145.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          SearchResultMsg.fromList(it)
+        }
+      }
+      146.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          ViewPrefsMsg.fromList(it)
+        }
+      }
+      147.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           FavoriteMsg.fromList(it)
         }
@@ -1363,40 +1489,48 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is RenameRuleMsg -> {
+      is TextFileMsg -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is RenamePreviewMsg -> {
+      is TextSaveMsg -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is FilterItemMsg -> {
+      is RenameRuleMsg -> {
         stream.write(139)
         writeValue(stream, value.toList())
       }
-      is FolderSizeMsg -> {
+      is RenamePreviewMsg -> {
         stream.write(140)
         writeValue(stream, value.toList())
       }
-      is SpaceItemMsg -> {
+      is FilterItemMsg -> {
         stream.write(141)
         writeValue(stream, value.toList())
       }
-      is SpaceReportMsg -> {
+      is FolderSizeMsg -> {
         stream.write(142)
         writeValue(stream, value.toList())
       }
-      is SearchResultMsg -> {
+      is SpaceItemMsg -> {
         stream.write(143)
         writeValue(stream, value.toList())
       }
-      is ViewPrefsMsg -> {
+      is SpaceReportMsg -> {
         stream.write(144)
         writeValue(stream, value.toList())
       }
-      is FavoriteMsg -> {
+      is SearchResultMsg -> {
         stream.write(145)
+        writeValue(stream, value.toList())
+      }
+      is ViewPrefsMsg -> {
+        stream.write(146)
+        writeValue(stream, value.toList())
+      }
+      is FavoriteMsg -> {
+        stream.write(147)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1453,6 +1587,14 @@ interface FluLuksHostApi {
   fun folderSize(sourceId: String, path: String, callback: (Result<FolderSizeMsg>) -> Unit)
   fun sha256(sourceId: String, path: String, callback: (Result<String?>) -> Unit)
   fun cancelHash()
+  /**
+   * Lecteurs (phase 10) : octets d'une image (64 Mio au plus, HEIC converti en JPEG) ; texte UTF-8 de l'éditeur
+   * (2 Mio au plus), enregistré par un fichier temporaire, refusé (`changed`) s'il a changé depuis son ouverture,
+   * sauf `force`.
+   */
+  fun readImage(sourceId: String, path: String, callback: (Result<ByteArray>) -> Unit)
+  fun readText(sourceId: String, path: String, callback: (Result<TextFileMsg>) -> Unit)
+  fun writeText(sourceId: String, path: String, text: String, bom: Boolean, crlf: Boolean, expectedMtime: Long, expectedSize: Long, force: Boolean, callback: (Result<TextSaveMsg>) -> Unit)
   /** Filtre rapide (`photos`, `videos`, `music`, `documents`, `archives`, `recent`) : 500 fichiers au plus, du plus récent. */
   fun quickFilter(filter: String, callback: (Result<List<FilterItemMsg>>) -> Unit)
   /** Renommage par lot : aperçu, puis tout ou rien (refusé si un nom est en conflit). */
@@ -2175,6 +2317,75 @@ interface FluLuksHostApi {
               FluLuksApiPigeonUtils.wrapError(exception)
             }
             reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.readImage$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathArg = args[1] as String
+            api.readImage(sourceIdArg, pathArg) { result: Result<ByteArray> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.readText$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathArg = args[1] as String
+            api.readText(sourceIdArg, pathArg) { result: Result<TextFileMsg> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.writeText$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathArg = args[1] as String
+            val textArg = args[2] as String
+            val bomArg = args[3] as Boolean
+            val crlfArg = args[4] as Boolean
+            val expectedMtimeArg = args[5] as Long
+            val expectedSizeArg = args[6] as Long
+            val forceArg = args[7] as Boolean
+            api.writeText(sourceIdArg, pathArg, textArg, bomArg, crlfArg, expectedMtimeArg, expectedSizeArg, forceArg) { result: Result<TextSaveMsg> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
           }
         } else {
           channel.setMessageHandler(null)

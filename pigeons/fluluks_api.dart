@@ -191,6 +191,35 @@ class DetailsMsg {
   String fs;
 }
 
+/// Texte ouvert dans l'éditeur : `text` sans BOM, fins de ligne en « \n » ; `bom` et `crlf` à rendre à
+/// l'enregistrement ; `mtime` (secondes) et `size` pour voir s'il a changé ; `readOnlyReason` si le stockage est en
+/// lecture seule.
+class TextFileMsg {
+  TextFileMsg({
+    required this.text,
+    required this.bom,
+    required this.crlf,
+    required this.mtime,
+    required this.size,
+    this.readOnlyReason,
+  });
+  String text;
+  bool bom;
+  bool crlf;
+  int mtime;
+  int size;
+  String? readOnlyReason;
+}
+
+/// Enregistrement d'un texte : `changed` si le fichier a changé depuis son ouverture (rien n'est alors écrit).
+class TextSaveMsg {
+  TextSaveMsg({required this.saved, required this.changed, required this.mtime, required this.size});
+  bool saved;
+  bool changed;
+  int mtime;
+  int size;
+}
+
 /// Règle de renommage par lot : `mode` `number` (`base`, `start`), `replace` (`find`, `replace`, `caseSensitive`)
 /// ou `photoDate`.
 class RenameRuleMsg {
@@ -366,6 +395,25 @@ abstract class FluLuksHostApi {
   @async
   String? sha256(String sourceId, String path);
   void cancelHash();
+
+  /// Lecteurs (phase 10) : octets d'une image (64 Mio au plus, HEIC converti en JPEG) ; texte UTF-8 de l'éditeur
+  /// (2 Mio au plus), enregistré par un fichier temporaire, refusé (`changed`) s'il a changé depuis son ouverture,
+  /// sauf `force`.
+  @async
+  Uint8List readImage(String sourceId, String path);
+  @async
+  TextFileMsg readText(String sourceId, String path);
+  @async
+  TextSaveMsg writeText(
+    String sourceId,
+    String path,
+    String text,
+    bool bom,
+    bool crlf,
+    int expectedMtime,
+    int expectedSize,
+    bool force,
+  );
 
   /// Filtre rapide (`photos`, `videos`, `music`, `documents`, `archives`, `recent`) : 500 fichiers au plus, du plus récent.
   @async
