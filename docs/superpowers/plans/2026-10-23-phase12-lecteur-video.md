@@ -89,7 +89,7 @@ AndroidX Test (instrumenté). **Aucune nouvelle dépendance.**
     `fun showInfo(text: String, hideAfterMs: Long?)`, `fun hideInfo()`, `fun controlRects(): List<Rect>` (zones de la
     barre du haut, si visible, en coordonnées de la fenêtre).
 
-- [ ] **Step 1 : tests en échec** (`VideoOrientationTest`)
+- [x] **Step 1 : tests en échec** (`VideoOrientationTest`)
 
 ```kotlin
 @Test fun autoModeUsesUserOrientation() = assertEquals(SCREEN_ORIENTATION_USER, requested(Auto))
@@ -117,22 +117,22 @@ AndroidX Test (instrumenté). **Aucune nouvelle dépendance.**
 }
 ```
 
-- [ ] **Step 2 :** `./gradlew -q --offline :app:testDebugUnitTest --tests '*VideoOrientationTest'` → échec de
+- [x] **Step 2 :** `./gradlew -q --offline :app:testDebugUnitTest --tests '*VideoOrientationTest'` → échec de
   compilation (`VideoOrientation` absent).
-- [ ] **Step 3 :** écrire `VideoOrientation.kt` (constantes `ActivityInfo.SCREEN_ORIENTATION_*`, inlinées à la
+- [x] **Step 3 :** écrire `VideoOrientation.kt` (constantes `ActivityInfo.SCREEN_ORIENTATION_*`, inlinées à la
   compilation, donc utilisables en JVM).
-- [ ] **Step 4 :** relancer → vert.
-- [ ] **Step 5 : vues.** Icônes vectorielles blanches 24 dp reprises d'AOSP (Apache-2.0) :
+- [x] **Step 4 :** relancer → vert.
+- [x] **Step 5 : vues.** Icônes vectorielles blanches 24 dp reprises d'AOSP (Apache-2.0) :
   `ic_qs_auto_rotate` → `video_ic_rotate`, `ic_lock` → `video_ic_lock`, `ic_lock_open` → `video_ic_lock_open`
   (`platforms/android-36/data/res/drawable/`). `VideoOverlay` : barre du haut en dégradé noir → transparent,
   titre (nom du fichier, une ligne, ellipse au milieu), boutons de 48 dp avec `contentDescription` ; marge haute selon
   les encarts système (barres et encoche) ; bulle centrale (texte blanc 20 sp sur fond noir 60 %, coins de 16 dp).
-- [ ] **Step 6 : activité.** `mode` (`OrientationMode.Auto` au départ) ; `requestedOrientation` posé avant
+- [x] **Step 6 : activité.** `mode` (`OrientationMode.Auto` au départ) ; `requestedOrientation` posé avant
   `setContentView` ; Tourner → `rotate(mode, resources.configuration.orientation == ORIENTATION_LANDSCAPE)` ;
   cadenas → `toggleLock(mode)` ; après chaque changement : `requestedOrientation`, `setLocked`, `showInfo(message,
   1 500)`, et `playerView.showController()` (relance la temporisation des commandes). La barre du haut suit les
   commandes (`setControllerVisibilityListener`). Manifeste : `android:screenOrientation="user"`.
-- [ ] **Step 7 :** suites vertes ; commit `feat(video): portrait par défaut, rotation selon Android, Tourner et cadenas`.
+- [x] **Step 7 :** suites vertes ; commit `feat(video): portrait par défaut, rotation selon Android, Tourner et cadenas`.
 
 ### Task 2 : pistes audio et sous-titres
 
