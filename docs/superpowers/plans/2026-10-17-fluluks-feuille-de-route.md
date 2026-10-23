@@ -338,8 +338,8 @@ dans le même commit que le travail.
 - [x] T6 — Collection d'éléments et explorateur revu (fil d'Ariane, tout sélectionner, annuler la mise à la corbeille)
 - [x] T7 — Liste ou grille dans les raccourcis et la recherche *(demande de l'utilisateur du 2026-10-23)*
 - [ ] T8 — Recherche dans tous les stockages
-- [ ] T9 — Réglages regroupés, « À propos », licences, aide et bienvenue
-- [ ] T10 — Barres du bas et écrans de la phase 10
+- [x] T9 — Réglages regroupés, « À propos », licences, aide et bienvenue
+- [x] T10 — Barres du bas et écrans de la phase 10
 - [ ] T11 — Accessibilité, grands écrans et tests dorés
 - [ ] T12 — Captures et essais instrumentés sur le Pixel 4 XL
 - [ ] *(utilisateur)* T13 — Essais sur le Pixel
