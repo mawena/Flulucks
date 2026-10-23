@@ -344,7 +344,7 @@ dans le même commit que le travail.
 - [x] T12 — Captures et essais instrumentés sur le Pixel 4 XL
 - [x] *(utilisateur)* T13 — Essais sur le Pixel *(2026-10-23 : toute la fiche réussie selon l'utilisateur ; [fiche](../research/2026-10-23-essais-phase11/essais.md))*
 - [x] T14 — Documentation *(README : section « Interface » et trois captures du Pixel)*
-- [ ] Relecture finale de toute la branche
+- [x] Relecture finale de toute la branche *(6 points importants corrigés, chacun avec son test ; 430 tests Flutter)*
 - [ ] Fusion `feature/interface` → `develop`
 - [ ] Version `v1.4.0`
 
