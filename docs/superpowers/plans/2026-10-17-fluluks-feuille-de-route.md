@@ -323,7 +323,7 @@ dans le même commit que le travail.
 - [x] T10 — Lecteur de musique (lecture en arrière-plan, file d'attente du dossier)
 - [x] T11 — Essais instrumentés sur le Pixel
 - [ ] *(utilisateur)* T12 — Essais sur le Pixel
-- [ ] T13 — Documentation
+- [x] T13 — Documentation
 - [ ] Relecture finale de toute la branche
 - [ ] Fusion `feature/lecteurs-distants` → `develop`
 - [ ] Version `v1.3.0`

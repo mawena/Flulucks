@@ -378,7 +378,7 @@ positionMs?)`, événement `onPlayerChanged(PlayerMsg?)`), `app_state.dart`, `ho
 
 ### Task 13 : documentation et v1.3.0
 
-- [ ] README (lecteurs, dossiers distants, limites : pas de corbeille distante, FTP en clair, liens non suivis ;
+- [x] README (lecteurs, dossiers distants, limites : pas de corbeille distante, FTP en clair, liens non suivis ;
   licences des nouvelles bibliothèques), feuille de route cochée ; commit `docs: lecteurs intégrés et dossiers
   distants`.
 - [ ] Relecture finale de toute la branche, puis fusion `feature/lecteurs-distants` → `develop`, `release/1.3.0`
