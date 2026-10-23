@@ -357,7 +357,7 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
 
 ### Fin de phase
 
-- [ ] Relecture finale de toute la branche.
+- [x] Relecture finale de toute la branche.
 - [ ] Fusion `feature/lecteur-video` → `develop`, puis `release/1.5.0` (pubspec `1.5.0+12`), `main`, étiquette
   `v1.5.0`. Pas de push sans l'accord de l'utilisateur.
 
