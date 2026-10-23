@@ -213,4 +213,47 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.calls, contains('openWith phone /rapport.pdf'));
   });
+
+  /// Relecture finale (C2) : le stockage se ferme pendant une modification ; le texte reste à l'écran.
+  testWidgets('dirtyEditorKeptWhenSourceCloses', (tester) async {
+    final api = api0();
+    final state = await pump(tester, api);
+    await openNotes(tester);
+    await tester.enterText(find.byType(TextField), 'texte précieux');
+    await tester.pump();
+    api.sources = [];
+    await state.refreshSources();
+    await tester.pumpAndSettle();
+    expect(find.byType(TextEditorScreen), findsOneWidget); // pas fermé
+    expect(find.text('texte précieux'), findsOneWidget);
+    expect(find.textContaining('Stockage fermé'), findsOneWidget);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.save)).onPressed, isNull);
+    // en partant, on peut abandonner le texte ; l'explorateur du stockage fermé part avec
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(find.text('Enregistrer'), findsNothing); // plus d'enregistrement possible
+    await tester.tap(find.text('Ne pas enregistrer'));
+    await tester.pumpAndSettle();
+    expect(find.byType(TextEditorScreen), findsNothing);
+    expect(find.byType(ExplorerScreen), findsNothing);
+  });
+
+  testWidgets('cleanEditorClosesWithSource', (tester) async {
+    final api = api0();
+    final state = await pump(tester, api);
+    await openNotes(tester);
+    api.sources = [];
+    await state.refreshSources();
+    await tester.pumpAndSettle();
+    expect(find.byType(TextEditorScreen), findsNothing);
+    expect(find.byType(ExplorerScreen), findsNothing);
+  });
+
+  /// Relecture finale (I6) : le clavier n'apprend pas le texte (disques chiffrés).
+  testWidgets('keyboardDoesNotLearn', (tester) async {
+    await pump(tester, api0());
+    await openNotes(tester);
+    final tf = tester.widget<TextField>(find.byType(TextField));
+    expect([tf.enableIMEPersonalizedLearning, tf.enableSuggestions, tf.autocorrect], [false, false, false]);
+  });
 }

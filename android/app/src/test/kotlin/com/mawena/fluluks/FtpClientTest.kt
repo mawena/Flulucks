@@ -70,6 +70,7 @@ class FtpClientTest {
             .createUserManager()
         users.save(BaseUser().apply { name = "u"; password = "secret"; homeDirectory = root.path; authorities = listOf(WritePermission()) })
         users.save(BaseUser().apply { name = "anonymous"; homeDirectory = anon.path })
+        users.save(BaseUser().apply { name = "élodie"; password = "mötdepässe"; homeDirectory = root.path })
         val f = FtpServerFactory()
         f.userManager = users
         f.addListener("default", ListenerFactory().apply { serverAddress = "127.0.0.1"; port = 0 }.createListener())
@@ -223,6 +224,14 @@ class FtpClientTest {
         assertEquals(listOf("public.txt"), c.list("/").map { it.name })
         assertEquals("pour tous", c.openReadAt("/public.txt", 0).use { String(it.readBytes()) })
         assertEquals(1, stats().totalAnonymousLoginNumber)
+    }
+
+    /** Relecture finale (I3) : identifiant et mot de passe accentués envoyés en UTF-8 à un serveur UTF-8. */
+    @Test fun accentedCredentialsOnUtf8Server() {
+        put("a.txt", "x".toByteArray())
+        start()
+        val c = client(user = "élodie", password = "mötdepässe")
+        assertEquals(listOf("a.txt"), c.list("/").map { it.name })
     }
 
     @Test fun badPasswordMessage() {

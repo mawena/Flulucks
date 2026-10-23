@@ -59,6 +59,7 @@ class Fr {
   static const forward10 = 'Avancer de 10 s';
   static const stopPlayback = 'Arrêter la lecture';
   static const copy = 'Copier';
+  static const copyText = 'Copier le texte';
   static const cut = 'Couper';
   static const pasteHere = 'Coller ici';
   static const compress = 'Compresser';
@@ -165,6 +166,8 @@ class Fr {
   static const emptyFolder = 'Dossier vide';
   static const protectedFolder = 'Dossier protégé par Android';
   static const volumeClosed = 'Le disque a été fermé';
+  static const storageGoneKeepText =
+      'Stockage fermé : le texte ne peut plus être enregistré. Copiez-le avant de quitter (appui long, Tout sélectionner).';
   static const sortBy = 'Trier par';
   static const sortName = 'Nom';
   static const sortSize = 'Taille';

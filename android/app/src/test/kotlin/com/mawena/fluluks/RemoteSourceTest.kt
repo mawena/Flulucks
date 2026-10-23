@@ -159,4 +159,26 @@ class RemoteSourceTest {
         assertNull(store.get(saved.id)!!.keyInfo)
         assertNull(store.secrets(saved.id)?.privateKey)
     }
+
+    /** Relecture finale (I1) : les messages des clients distants arrivent tels quels, pas « L'opération a échoué ». */
+    @Test fun serverMessagesReachUser() {
+        com.mawena.fluluks.files.Files.setResolverForTests { if (it == "remote:s1") src() else null }
+        try {
+            client.listError = java.io.IOException("Serveur occupé : trop de transferts en cours")
+            val e1 = runCatching { com.mawena.fluluks.files.Files.list("remote:s1", "/", false) }.exceptionOrNull()
+            assertEquals("Serveur occupé : trop de transferts en cours", e1?.message)
+            put("a.txt", "x")
+            client.readError = java.io.IOException("Connexion perdue")
+            val e2 = runCatching { src().openRead("/a.txt").read() }.exceptionOrNull()!!
+            assertEquals("Connexion perdue", com.mawena.fluluks.files.Files.toFilesException(e2, "openDocument").message)
+        } finally {
+            com.mawena.fluluks.files.Files.setResolverForTests(null)
+        }
+        val saved = store.save(cfg.copy(id = ""), null, null)
+        Remotes.resetForTests(store) { _, _ -> throw java.io.IOException("Serveur injoignable") }
+        val e3 = runCatching { Remotes.connect(saved.id, null) }.exceptionOrNull()!!
+        assertEquals("Serveur injoignable", com.mawena.fluluks.files.Files.toFilesException(e3, "openDocument").message)
+        val e4 = runCatching { Remotes.importPrivateKey(saved.id, "pas une clé".toByteArray()) }.exceptionOrNull()!!
+        assertEquals("Clé privée illisible", com.mawena.fluluks.files.Files.toFilesException(e4, "openDocument").message)
+    }
 }

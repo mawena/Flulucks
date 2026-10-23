@@ -2241,6 +2241,7 @@ class FluLuksHostApi {
   }
 
   /// Musique : file faite des sons de `paths` (le dossier dans l'ordre affiché), départ sur `paths[startIndex]`.
+  /// Asynchrone : les URI d'un dossier distant se préparent par le réseau, hors du fil principal.
   Future<void> playAudio(String sourceId, List<String> paths, int startIndex) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.playAudio$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(

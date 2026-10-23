@@ -89,6 +89,12 @@ interface FileSource {
     /** Crée le fichier [name] sous [parent] (nom unique) ; rend son chemin et un flux d'écriture à fermer. */
     fun createFile(parent: String, name: String): Pair<String, OutputStream>
 
+    /**
+     * Réécrit en place le fichier ordinaire existant [path] (vidé puis réécrit) : même fichier, donc mêmes droits,
+     * propriétaire et liens durs. Flux d'écriture à fermer.
+     */
+    fun openOverwrite(path: String): OutputStream
+
     /** URI de contenu lisible par une autre application (Ouvrir avec, Partager). */
     fun contentUri(path: String): Uri
 

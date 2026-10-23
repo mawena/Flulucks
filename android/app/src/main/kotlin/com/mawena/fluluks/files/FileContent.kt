@@ -109,6 +109,10 @@ object FileContent {
         return TextDoc(if (crlf) text.replace("\r\n", "\n") else text, bom, crlf, e.mtime, e.size, ro)
     }
 
+    /** Réécriture en place interrompue : où trouver le texte complet (fichier caché). */
+    fun msgKeptIn(tmpName: String) =
+        "Enregistrement interrompu : le texte complet est dans « $tmpName » (fichier caché, à afficher dans le menu)"
+
     /**
      * Enregistre [text] dans [path] : refusé ([TextSave.changed]) si la date ou la taille diffèrent de celles lues à
      * l'ouverture, sauf [force]. [crlf] : toutes les fins de ligne en CRLF ; [bom] : BOM UTF-8 en tête.
@@ -136,13 +140,19 @@ object FileContent {
         } finally {
             if (!written) runCatching { src.delete(tmpPath) }
         }
-        // l'original n'est supprimé qu'une fois le nouveau contenu complet sur le stockage
-        src.delete(e.path)
+        // le texte complet est sur le stockage (place vérifiée) : l'original est réécrit en place, ce qui garde ses
+        // droits, son propriétaire et ses liens ; s'il échoue, le texte reste entier dans le temporaire
+        val size = (if (bom) BOM.size else 0) + body.size.toLong()
         try {
-            src.rename(tmpPath, e.name)
+            src.openOverwrite(e.path).use {
+                if (bom) it.write(BOM)
+                it.write(body)
+            }
+            if (src.stat(e.path)?.size != size) throw java.io.IOException("taille")
         } catch (x: Exception) {
-            throw FileNotFoundException("Enregistré sous « ${WriteOps.nameOf(tmpPath)} »")
+            throw FileNotFoundException(msgKeptIn(WriteOps.nameOf(tmpPath)))
         }
+        runCatching { src.delete(tmpPath) }
         val n = src.stat(e.path) ?: throw FileNotFoundException("Document introuvable")
         return TextSave(true, false, n.mtime, n.size)
     }

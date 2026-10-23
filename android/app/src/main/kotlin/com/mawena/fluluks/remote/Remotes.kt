@@ -58,7 +58,7 @@ object Remotes {
         val sec = Secrets(password?.copyOf() ?: stored?.password, stored?.keyPassphrase, stored?.privateKey)
         if (password != null) stored?.password?.fill(0)
         val client = try {
-            factory.connect(cfg, sec)
+            net { factory.connect(cfg, sec) }
         } catch (e: Exception) {
             sec.wipe()
             throw e
@@ -90,7 +90,7 @@ object Remotes {
      */
     fun importPrivateKey(serverId: String, key: ByteArray): String {
         try {
-            val info = PrivateKeys.describe(PrivateKeys.inspect(key))
+            val info = PrivateKeys.describe(net { PrivateKeys.inspect(key) })
             servers().get(serverId) ?: throw FileNotFoundException("Serveur introuvable")
             servers().setPrivateKey(serverId, key, info)
             return info

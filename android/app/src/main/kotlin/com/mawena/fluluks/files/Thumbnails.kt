@@ -45,6 +45,15 @@ object Thumbnails {
     @VisibleForTesting
     fun cachedBytes(): Long = synchronized(cache) { cacheBytes }
 
+    /** [src], dont le fichier [path] se relit depuis [bytes] déjà téléchargés. */
+    private class InMemory(src: FileSource, private val path: String, private val bytes: ByteArray) : FileSource by src {
+        override fun openRead(path: String): java.io.InputStream =
+            if (path == this.path) java.io.ByteArrayInputStream(bytes) else throw java.io.FileNotFoundException(path)
+
+        override fun openReadAt(path: String, offset: Long): java.io.InputStream =
+            openRead(path).also { it.skip(offset) }
+    }
+
     /** JPEG d'au plus [sizePx] (≤ [MAX_PX]) de côté, ou null : type inconnu, élément absent, décodage raté. */
     fun get(sourceId: String, path: String, sizePx: Int): ByteArray? {
         val px = sizePx.coerceIn(16, MAX_PX)
@@ -62,7 +71,9 @@ object Thumbnails {
             permits.acquire()
             try {
                 synchronized(cache) { cache[key] }?.let { return it } // calculée pendant l'attente
-                val bytes = (if (video) decoder.video(src, e.path, px) else decoder.image(src, e.path, px)) ?: return null
+                // dossier distant : l'image (8 Mio au plus) est téléchargée une fois ; le décodeur la relit en mémoire
+                val from = if (src is RemoteSource) InMemory(src, e.path, src.openRead(e.path).use { it.readBytes() }) else src
+                val bytes = (if (video) decoder.video(from, e.path, px) else decoder.image(from, e.path, px)) ?: return null
                 put(key, bytes) { src !is DiskSource || VolumeManager.volume(sourceId) != null }
                 bytes
             } finally {

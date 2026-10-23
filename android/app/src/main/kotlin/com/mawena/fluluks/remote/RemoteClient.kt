@@ -26,6 +26,13 @@ interface RemoteClient : Closeable {
     fun delete(path: String, dir: Boolean)
 }
 
+/**
+ * Échec d'un dossier distant au message français écrit pour l'utilisateur (« Serveur injoignable », « Connexion
+ * perdue », « Serveur occupé… ») : montré tel quel, jamais remplacé par « L'opération a échoué ». Ne contient pas de
+ * secret.
+ */
+class RemoteIOException(message: String, cause: Throwable? = null) : java.io.IOException(message, cause)
+
 /** Clé du serveur SFTP jamais vue : [fingerprint] (« ssh-ed25519 SHA256:… ») à montrer avant de lui faire confiance. */
 class HostKeyUnknown(val fingerprint: String) : Exception("Clé du serveur inconnue")
 

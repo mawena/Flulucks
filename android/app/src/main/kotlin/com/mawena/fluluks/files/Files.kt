@@ -71,6 +71,7 @@ object Files {
         // nos messages sont en français ; ceux de java.io commencent par le chemin absolu
         is FileNotFoundException -> FilesException(EngineError.FL_ENOENT, e.message?.takeUnless { it.startsWith("/") } ?: MSG_BAD_PATH)
         is SecurityException -> FilesException(EngineError.FL_EIO, MSG_NO_ACCESS)
+        is com.mawena.fluluks.remote.RemoteIOException -> FilesException(EngineError.FL_EIO, e.message ?: MSG_GENERIC)
         is IOException -> FilesException(EngineError.FL_EIO, MSG_GENERIC)
         is OutOfMemoryError -> FilesException(EngineError.FL_ENOMEM, MSG_GENERIC)
         else -> FilesException(EngineError.FL_EIO, MSG_GENERIC)

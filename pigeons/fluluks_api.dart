@@ -432,6 +432,8 @@ abstract class FluLuksHostApi {
   void playVideo(String sourceId, String path);
 
   /// Musique : file faite des sons de `paths` (le dossier dans l'ordre affiché), départ sur `paths[startIndex]`.
+  /// Asynchrone : les URI d'un dossier distant se préparent par le réseau, hors du fil principal.
+  @async
   void playAudio(String sourceId, List<String> paths, int startIndex);
 
   /// `play`, `pause`, `next`, `previous`, `back`, `forward`, `seek` (`positionMs`) ou `stop`.

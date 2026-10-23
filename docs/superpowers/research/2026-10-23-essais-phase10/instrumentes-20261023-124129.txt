@@ -1,0 +1,23 @@
+# essais instrumentés phase 10, passe de correction de la relecture finale — 51be43c + correctifs non commités
+## ReadersInstrumentedTest
+INSTRUMENTATION_STATUS: test=videoWithWindows1252Subtitle
+INSTRUMENTATION_STATUS: test=videoWithWindows1252Subtitle
+INSTRUMENTATION_STATUS: test=remoteMusicPreparedOffMainThread
+INSTRUMENTATION_STATUS: test=remoteMusicPreparedOffMainThread
+INSTRUMENTATION_STATUS: test=musicPlaysAndAdvances
+INSTRUMENTATION_STATUS: test=musicPlaysAndAdvances
+OK (3 tests)
+## StreamProviderInstrumentedTest
+INSTRUMENTATION_STATUS: test=randomReadsThroughProxy
+INSTRUMENTATION_STATUS: test=randomReadsThroughProxy
+OK (1 test)
+## SecretBoxInstrumentedTest
+INSTRUMENTATION_STATUS: test=sealOpenRoundTripAndTamperRefused
+INSTRUMENTATION_STATUS: test=sealOpenRoundTripAndTamperRefused
+OK (1 test)
+## SshCryptoInstrumentedTest
+INSTRUMENTATION_STATUS: test=curve25519Exchange
+INSTRUMENTATION_STATUS: test=curve25519Exchange
+INSTRUMENTATION_STATUS: test=ed25519KeySignsAndIsInspected
+INSTRUMENTATION_STATUS: test=ed25519KeySignsAndIsInspected
+OK (2 tests)

@@ -259,6 +259,19 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     notifyListeners();
   }
 
+  int _editorHolds = 0;
+
+  /// Un éditeur ouvert avec des modifications retient le retour à l'accueil des explorateurs d'un stockage disparu :
+  /// le texte reste à l'écran jusqu'à ce qu'on le quitte.
+  bool get editorHolding => _editorHolds > 0;
+
+  void holdForEditor() => _editorHolds++;
+
+  void releaseEditor() {
+    _editorHolds--;
+    notifyListeners();
+  }
+
   /// Musique en cours (phase 10), ou null.
   PlayerMsg? get player => _player;
 

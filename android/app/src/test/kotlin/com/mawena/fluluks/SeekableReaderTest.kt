@@ -7,6 +7,7 @@ import java.io.InputStream
 import kotlin.random.Random
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -82,6 +83,21 @@ class SeekableReaderTest {
         readAt(r, 0, 10)
         r.close()
         assertTrue(streams.all { it.closed })
+    }
+
+    /** Relecture finale (I5) : un flux inactif (musique en pause) rend sa connexion, puis se rouvre à la demande. */
+    @Test fun idleStreamReleased() {
+        var now = 0L
+        val r = SeekableReader(size.toLong(), clock = { now }) { off -> Closing(off).also { streams += it } }
+        readAt(r, 0, 10)
+        now += SeekableReader.IDLE_MS - 1
+        assertFalse(r.closeIfIdle())
+        assertFalse(streams[0].closed)
+        now += 1
+        assertTrue(r.closeIfIdle())
+        assertTrue(streams[0].closed)
+        assertArrayEquals(data.copyOfRange(10, 20), readAt(r, 10, 10))
+        assertEquals(2, r.opens)
     }
 
     @Test fun readerClosedWhenSourceGone() {

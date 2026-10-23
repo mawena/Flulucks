@@ -246,8 +246,12 @@ class FtpClient(
         runCatching { c.disconnect() }
     }
 
-    /** Nouvelle connexion : connexion, identification, passif, binaire, encodage. */
-    private fun open(): Conn {
+    /**
+     * Nouvelle connexion : connexion, identification, passif, binaire, encodage. L'identifiant et le mot de passe
+     * partent en UTF-8 si le serveur l'annonce avant l'identification (FEAT, RFC 2389) ou l'a déjà annoncé ; sinon en
+     * Latin-1, puis, s'ils sont refusés et contiennent des accents, une seconde fois en UTF-8 ([forceUtf8]).
+     */
+    private fun open(forceUtf8: Boolean = false): Conn {
         val c = Conn()
         c.connectTimeout = CONNECT_TIMEOUT
         c.defaultTimeout = timeoutMs
@@ -266,7 +270,16 @@ class FtpClient(
                 throw Failure("Serveur injoignable")
             }
             if (!FTPReply.isPositiveCompletion(c.replyCode)) throw Failure("Connexion refusée par le serveur")
-            login(c)
+            val early = forceUtf8 || utf8 == true || (utf8 == null && utf8BeforeLogin(c))
+            if (early) {
+                c.sendCommand("OPTS UTF8 ON")
+                c.useUtf8()
+            }
+            if (!login(c)) {
+                if (early || !accentedCredentials()) throw AuthFailed(missing = false)
+                discard(c)
+                return open(forceUtf8 = true)
+            }
             c.enterLocalPassiveMode()
             if (!c.setFileType(FTP.BINARY_FILE_TYPE)) throw Failure("Mode binaire refusé par le serveur")
             val u = utf8 ?: c.hasFeature("UTF8").also {
@@ -274,7 +287,7 @@ class FtpClient(
                 mlsd = c.hasFeature("MLST") || c.hasFeature("MLSD")
                 utf8 = it
             }
-            if (u) {
+            if (u && !early) {
                 c.sendCommand("OPTS UTF8 ON") // certains serveurs répondent 5xx tout en parlant UTF-8
                 c.useUtf8()
             }
@@ -294,16 +307,20 @@ class FtpClient(
         }
     }
 
-    /** `USER` + `PASS` ; le mot de passe n'existe en texte que pendant l'appel. */
-    private fun login(c: Conn) {
-        val ok = if (server.user.isEmpty()) {
-            c.login(ANON_USER, ANON_PASSWORD)
-        } else {
-            val pw = secrets.password?.takeIf { it.isNotEmpty() } ?: throw AuthFailed(missing = true)
-            c.login(server.user, String(pw, Charsets.UTF_8))
-        }
-        if (!ok) throw AuthFailed(missing = false)
+    /** `USER` + `PASS` ; faux si refusés. Le mot de passe n'existe en texte que pendant l'appel. */
+    private fun login(c: Conn): Boolean = if (server.user.isEmpty()) {
+        c.login(ANON_USER, ANON_PASSWORD)
+    } else {
+        val pw = secrets.password?.takeIf { it.isNotEmpty() } ?: throw AuthFailed(missing = true)
+        c.login(server.user, String(pw, Charsets.UTF_8))
     }
+
+    /** `FEAT` avant l'identification : vrai si le serveur y annonce UTF8 (beaucoup refusent avant `USER`). */
+    private fun utf8BeforeLogin(c: Conn): Boolean =
+        runCatching { FTPReply.isPositiveCompletion(c.feat()) && c.hasFeature("UTF8") }.getOrDefault(false)
+
+    private fun accentedCredentials(): Boolean =
+        server.user.any { it.code > 0x7F } || secrets.password?.any { it < 0 } == true
 
     /** Flux d'un `RETR` : la fin des données doit être confirmée par le serveur, sinon le fichier est tronqué. */
     private inner class Download(private val c: Conn, s: InputStream) : FilterInputStream(s) {

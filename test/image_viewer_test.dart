@@ -151,4 +151,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('1 / 5'), findsNothing);
   });
+
+  /// Relecture finale (I5) : sur un dossier distant, une seule voisine préchargée (connexions comptées).
+  testWidgets('remotePreloadsOneNeighbour', (tester) async {
+    final api = api0();
+    api.sources = [src('phone')..kind = 'remote'];
+    await pump(tester, api);
+    await tester.tap(find.text('c.jpg'));
+    await tester.pumpAndSettle();
+    expect(reads(api).toSet(), {'/c.jpg', '/d.webp'});
+  });
 }

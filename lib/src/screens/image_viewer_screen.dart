@@ -52,10 +52,12 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
 
   Future<Uint8List> _load(String path) => _bytes.putIfAbsent(path, () => widget.state.api.readImage(widget.sourceId, path));
 
-  /// Charge l'image [i] et ses voisines, oublie les autres.
+  /// Charge l'image [i] et ses voisines, oublie les autres. Dossier distant : la suivante seulement (chaque image est
+  /// un téléchargement qui occupe une connexion du serveur).
   void _keepAround(int i) {
+    final remote = widget.state.sourceById(widget.sourceId)?.kind == 'remote';
     final keep = {
-      for (var k = math.max(0, i - 1); k <= math.min(widget.images.length - 1, i + 1); k++) widget.images[k].path,
+      for (var k = math.max(0, remote ? i : i - 1); k <= math.min(widget.images.length - 1, i + 1); k++) widget.images[k].path,
     };
     _bytes.removeWhere((p, _) => !keep.contains(p));
     for (final p in keep) {

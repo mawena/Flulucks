@@ -108,7 +108,9 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
   void _onState() {
     if (!mounted || _closed) return;
     if (_source == null) {
-      // stockage disparu (éjection, débranchement, carte retirée) : retour à l'accueil
+      // stockage disparu (éjection, débranchement, carte retirée) : retour à l'accueil, une fois quitté l'éditeur
+      // qui garde un texte non enregistré
+      if (state.editorHolding) return;
       _closed = true;
       if (!state.takeClosedNotice(widget.sourceId)) return; // un autre explorateur s'en est chargé
       final messenger = ScaffoldMessenger.maybeOf(context);

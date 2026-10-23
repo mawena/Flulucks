@@ -47,7 +47,7 @@ class AndroidMusic(private val context: Context) : MusicBackend {
     }
 
     override fun start(sourceId: String, paths: List<String>, startIndex: Int) {
-        // URI préparées ici (fil du pont) : le fournisseur de flux d'un dossier distant les crée sans réseau
+        // URI préparées ici, sur un fil d'E/S du pont : celles d'un dossier distant demandent la taille au serveur
         val src = Files.source(sourceId)
         val names = paths.map(WriteOps::nameOf)
         val items = paths.map { p ->

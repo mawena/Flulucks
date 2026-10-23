@@ -169,6 +169,44 @@ class FileContentTest {
         noPartial()
     }
 
+    /** Relecture finale (I2) : le même fichier est réécrit (droits, inode gardés), jamais supprimé puis recréé. */
+    @Test fun saveRewritesSameFile() {
+        val f = local("deploy.sh", "echo un\n".toByteArray())
+        assertTrue(f.setExecutable(true))
+        val ino = java.nio.file.Files.getAttribute(f.toPath(), "unix:ino")
+        val d = FileContent.readText(phone(), "/deploy.sh")
+        assertTrue(FileContent.writeText(phone(), "/deploy.sh", "echo deux\n", d.bom, d.crlf, d.mtime, d.size, force = false).saved)
+        assertEquals("echo deux\n", f.readText())
+        assertTrue(f.canExecute())
+        assertEquals(ino, java.nio.file.Files.getAttribute(f.toPath(), "unix:ino"))
+        noPartial()
+        // disque : réécrit aussi en place
+        onDisk("t.txt", "original".toByteArray())
+        val dd = FileContent.readText(disk(), "/t.txt")
+        assertTrue(FileContent.writeText(disk(), "/t.txt", "nouveau", dd.bom, dd.crlf, dd.mtime, dd.size, force = false).saved)
+        assertArrayEquals("nouveau".toByteArray(), e.nodes["/t.txt"])
+        noPartial()
+    }
+
+    /** Réécriture en place interrompue : le texte complet reste dans le temporaire, et le message le dit. */
+    @Test fun failedRewriteKeepsFullTextInTemp() {
+        local("notes.txt", "ancien".toByteArray())
+        val inner = phone()
+        val failing = object : FileSource by inner {
+            override fun openOverwrite(path: String): java.io.OutputStream = object : java.io.OutputStream() {
+                override fun write(b: Int) = throw java.io.IOException("disque arraché")
+                override fun write(b: ByteArray, off: Int, len: Int) = throw java.io.IOException("disque arraché")
+            }
+        }
+        val d = FileContent.readText(failing, "/notes.txt")
+        val x = refused<FileNotFoundException> {
+            FileContent.writeText(failing, "/notes.txt", "texte précieux", d.bom, d.crlf, d.mtime, d.size, force = false)
+        }
+        val tmpName = Transfers.partialName("notes.txt")
+        assertTrue(x.message!!, x.message!!.contains(tmpName))
+        assertEquals("texte précieux", File(root, tmpName).readText())
+    }
+
     @Test fun readOnlySourceRefused() {
         local("t.txt", "lu".toByteArray())
         root.setWritable(false) // stockage en lecture seule

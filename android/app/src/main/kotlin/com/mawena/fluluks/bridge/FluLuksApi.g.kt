@@ -1744,8 +1744,11 @@ interface FluLuksHostApi {
   fun openWith(sourceId: String, path: String, callback: (Result<Unit>) -> Unit)
   /** Lecteur vidéo de Portail (plein écran, sous-titres `.srt` à côté de la vidéo). */
   fun playVideo(sourceId: String, path: String, callback: (Result<Unit>) -> Unit)
-  /** Musique : file faite des sons de `paths` (le dossier dans l'ordre affiché), départ sur `paths[startIndex]`. */
-  fun playAudio(sourceId: String, paths: List<String>, startIndex: Long)
+  /**
+   * Musique : file faite des sons de `paths` (le dossier dans l'ordre affiché), départ sur `paths[startIndex]`.
+   * Asynchrone : les URI d'un dossier distant se préparent par le réseau, hors du fil principal.
+   */
+  fun playAudio(sourceId: String, paths: List<String>, startIndex: Long, callback: (Result<Unit>) -> Unit)
   /** `play`, `pause`, `next`, `previous`, `back`, `forward`, `seek` (`positionMs`) ou `stop`. */
   fun playerCommand(command: String, positionMs: Long?)
   fun share(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit)
@@ -2271,13 +2274,14 @@ interface FluLuksHostApi {
             val sourceIdArg = args[0] as String
             val pathsArg = args[1] as List<String>
             val startIndexArg = args[2] as Long
-            val wrapped: List<Any?> = try {
-              api.playAudio(sourceIdArg, pathsArg, startIndexArg)
-              listOf(null)
-            } catch (exception: Throwable) {
-              FluLuksApiPigeonUtils.wrapError(exception)
+            api.playAudio(sourceIdArg, pathsArg, startIndexArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(null))
+              }
             }
-            reply.reply(wrapped)
           }
         } else {
           channel.setMessageHandler(null)

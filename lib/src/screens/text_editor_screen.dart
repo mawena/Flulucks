@@ -32,17 +32,42 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
   bool get _dirty => _doc != null && _ctrl.text != _saved;
   bool get _readOnly => _doc?.readOnlyReason != null;
 
+  /// Stockage disparu (éjection, verrouillage automatique, câble arraché) : le texte reste, sans enregistrement.
+  bool get _gone => widget.state.sourceById(widget.sourceId) == null;
+
+  /// Retient le retour à l'accueil des explorateurs tant qu'il y a des modifications ([AppState.holdForEditor]).
+  bool _holding = false;
+
   @override
   void initState() {
     super.initState();
-    _ctrl.addListener(() => setState(() {}));
+    _ctrl.addListener(_changed);
+    widget.state.addListener(_onState);
     _load();
   }
 
   @override
   void dispose() {
+    widget.state.removeListener(_onState);
     _ctrl.dispose();
+    // après le démontage : l'explorateur d'un stockage disparu peut alors revenir à l'accueil
+    if (_holding) Future.microtask(widget.state.releaseEditor);
     super.dispose();
+  }
+
+  void _changed() {
+    if (_dirty && !_holding) {
+      _holding = true;
+      widget.state.holdForEditor();
+    } else if (!_dirty && _holding && !_gone) {
+      _holding = false;
+      widget.state.releaseEditor();
+    }
+    setState(() {});
+  }
+
+  void _onState() {
+    if (mounted) setState(() {});
   }
 
   Future<void> _load() async {
@@ -111,7 +136,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text(Fr.cancel)),
           TextButton(onPressed: () => Navigator.pop(ctx, 'discard'), child: const Text(Fr.dontSave)),
-          TextButton(onPressed: () => Navigator.pop(ctx, 'save'), child: const Text(Fr.save)),
+          if (!_gone) TextButton(onPressed: () => Navigator.pop(ctx, 'save'), child: const Text(Fr.save)),
         ],
       ),
     );
@@ -124,6 +149,17 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
     if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(32), child: Text(_error!)));
     if (_doc == null) return const Center(child: CircularProgressIndicator());
     return Column(children: [
+      if (_gone)
+        MaterialBanner(
+          leading: const Icon(Icons.warning_amber),
+          content: const Text(Fr.storageGoneKeepText),
+          actions: [
+            TextButton(
+              onPressed: () => Clipboard.setData(ClipboardData(text: _ctrl.text)),
+              child: const Text(Fr.copyText),
+            ),
+          ],
+        ),
       if (_readOnly)
         ListTile(
           dense: true,
@@ -137,6 +173,10 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
           maxLines: null,
           expands: true,
           keyboardType: TextInputType.multiline,
+          // texte d'un disque chiffré : le clavier ne l'apprend pas et ne le corrige pas
+          enableIMEPersonalizedLearning: false,
+          enableSuggestions: false,
+          autocorrect: false,
           textAlignVertical: TextAlignVertical.top,
           style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
           decoration: const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.all(12)),
@@ -159,7 +199,7 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
                 IconButton(
                   tooltip: Fr.save,
                   icon: const Icon(Icons.save),
-                  onPressed: _dirty && !_saving ? () => _save() : null,
+                  onPressed: _dirty && !_saving && !_gone ? () => _save() : null,
                 ),
             ],
           ),

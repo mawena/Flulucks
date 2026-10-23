@@ -102,18 +102,25 @@ class StreamProvider : ContentProvider() {
         fun openProxy(src: FileSource, path: String, size: Long): ParcelFileDescriptor {
             val ctx = Files.context ?: throw FileNotFoundException(Files.MSG_SOURCE_CLOSED)
             val reader = SeekableReader(size) { off -> src.openReadAt(path, off) }
+            val idle = Runnable { reader.closeIfIdle() } // connexion rendue au serveur après une pause
             val sm = ctx.getSystemService(StorageManager::class.java)
             return sm.openProxyFileDescriptor(ParcelFileDescriptor.MODE_READ_ONLY, object : ProxyFileDescriptorCallback() {
                 override fun onGetSize() = size
 
                 override fun onRead(offset: Long, size: Int, data: ByteArray): Int = try {
-                    maxOf(0, reader.read(offset, data, size))
+                    maxOf(0, reader.read(offset, data, size)).also {
+                        handler.removeCallbacks(idle)
+                        handler.postDelayed(idle, SeekableReader.IDLE_MS + 500)
+                    }
                 } catch (e: Exception) {
                     reader.close()
                     throw ErrnoException("read", OsConstants.EIO)
                 }
 
-                override fun onRelease() = reader.close()
+                override fun onRelease() {
+                    handler.removeCallbacks(idle)
+                    reader.close()
+                }
             }, handler)
         }
     }

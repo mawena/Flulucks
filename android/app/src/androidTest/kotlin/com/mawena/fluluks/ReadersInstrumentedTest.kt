@@ -116,4 +116,58 @@ class ReadersInstrumentedTest {
             instr.runOnMainSync { player.release() }
         }
     }
+
+    /** Relecture finale (C1) : musique d'un dossier distant, lancée par le pont depuis le fil principal. */
+    @Test fun remoteMusicPreparedOffMainThread() {
+        val root = File(ctx.cacheDir, "distant-musique").apply { deleteRecursively(); mkdirs() }
+        File(root, "son.wav").writeBytes(silentWav(8))
+        val onMain = java.util.concurrent.atomic.AtomicInteger()
+        val client = object : com.mawena.fluluks.remote.RemoteClient {
+            private fun f(p: String) = File(root, p.removePrefix("/"))
+            private fun check() { if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) onMain.incrementAndGet() }
+            override fun list(path: String) = f(path).listFiles()!!.map { stat("/${it.name}")!! }
+            override fun stat(path: String): com.mawena.fluluks.files.Entry? {
+                check()
+                return f(path).takeIf { it.exists() }?.let {
+                    com.mawena.fluluks.files.Entry(it.name, path, if (it.isDirectory) com.mawena.fluluks.engine.FileType.DIR
+                    else com.mawena.fluluks.engine.FileType.FILE, it.length(), 0)
+                }
+            }
+            override fun openReadAt(path: String, offset: Long): java.io.InputStream {
+                check()
+                return java.io.FileInputStream(f(path)).also { it.skip(offset) }
+            }
+            override fun create(parent: String, name: String): java.io.OutputStream = throw UnsupportedOperationException()
+            override fun mkdir(parent: String, name: String) = throw UnsupportedOperationException()
+            override fun rename(path: String, newPath: String) = throw UnsupportedOperationException()
+            override fun delete(path: String, dir: Boolean) = throw UnsupportedOperationException()
+            override fun close() {}
+        }
+        val store = com.mawena.fluluks.remote.RemoteServers(File(ctx.cacheDir, "distant-fiches").apply { deleteRecursively() },
+            object : com.mawena.fluluks.remote.SecretBox {
+                override fun seal(plain: ByteArray) = plain.copyOf()
+                override fun open(sealed: ByteArray) = sealed.copyOf()
+            })
+        val saved = store.save(com.mawena.fluluks.remote.ServerConfig("", "sftp", "Essai", "h", 22, "u", "/", false, null, null), null, null)
+        com.mawena.fluluks.remote.Remotes.resetForTests(store) { _, _ -> client }
+        try {
+            val src = com.mawena.fluluks.remote.Remotes.connect(saved.id, null)
+            if (Music.backend == null) Music.backend = AndroidMusic(ctx)
+            val api = com.mawena.fluluks.bridge.HostApiImpl(ctx, object : io.flutter.plugin.common.BinaryMessenger {
+                override fun send(channel: String, message: java.nio.ByteBuffer?) {}
+                override fun send(channel: String, message: java.nio.ByteBuffer?, callback: io.flutter.plugin.common.BinaryMessenger.BinaryReply?) {}
+                override fun setMessageHandler(channel: String, handler: io.flutter.plugin.common.BinaryMessenger.BinaryMessageHandler?) {}
+            })
+            var result: Result<Unit>? = null
+            instr.runOnMainSync { api.playAudio(src.id, listOf("/son.wav"), 0) { result = it } }
+            waitFor { result != null }
+            assertTrue("échec : ${result?.exceptionOrNull()?.message}", result!!.isSuccess)
+            waitFor { Music.state.value.first?.playing == true }
+            assertEquals(0, onMain.get()) // aucun accès au serveur sur le fil principal
+        } finally {
+            Music.stop()
+            com.mawena.fluluks.remote.Remotes.resetForTests(null, null)
+            root.deleteRecursively()
+        }
+    }
 }

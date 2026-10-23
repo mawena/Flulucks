@@ -130,4 +130,19 @@ class RemoteFilesTest {
         assertNull(Thumbnails.get(rid, "/film.mp4", 128))
         assertEquals(listOf("image /petite.jpg"), calls)
     }
+
+    /** Relecture finale (I5) : une vignette distante n'est téléchargée qu'une fois, même si le décodeur relit. */
+    @Test fun remoteThumbnailDownloadedOnce() {
+        Thumbnails.decoder = object : ThumbDecoder {
+            override fun image(src: FileSource, path: String, sizePx: Int): ByteArray {
+                repeat(3) { src.openRead(path).use { it.readBytes() } } // limites, image, EXIF
+                return ByteArray(10)
+            }
+            override fun video(src: FileSource, path: String, sizePx: Int): ByteArray? = null
+        }
+        Thumbnails.clearForTests()
+        File(server, "p.jpg").writeBytes(ByteArray(5000) { it.toByte() })
+        assertNotNull(Thumbnails.get(rid, "/p.jpg", 128))
+        assertEquals(1, client.calls.count { it.startsWith("read /p.jpg") })
+    }
 }

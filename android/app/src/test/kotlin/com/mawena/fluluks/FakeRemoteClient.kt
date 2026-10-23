@@ -19,6 +19,10 @@ class FakeRemoteClient(private val root: File) : RemoteClient {
     val calls = ArrayList<String>()
     var closed = false
 
+    /** Erreur levée par [list] (serveur occupé, connexion perdue…), et par la lecture des flux de [openReadAt]. */
+    var listError: java.io.IOException? = null
+    var readError: java.io.IOException? = null
+
     /** Appelé à chaque écriture d'un envoi, avec son rang (annulation pendant une copie vers le serveur). */
     var onWrite: (Int) -> Unit = {}
     private var writes = 0
@@ -30,6 +34,7 @@ class FakeRemoteClient(private val root: File) : RemoteClient {
 
     override fun list(path: String): List<Entry> {
         calls += "list $path"
+        listError?.let { throw it }
         val d = f(path)
         if (!d.isDirectory) throw FileNotFoundException("Dossier introuvable")
         val real = d.listFiles()!!.map { entry("$path/${it.name}".replace("//", "/"), it) }
@@ -45,6 +50,8 @@ class FakeRemoteClient(private val root: File) : RemoteClient {
 
     override fun openReadAt(path: String, offset: Long): InputStream {
         calls += "read $path $offset"
+        val err = readError
+        if (err != null) return object : InputStream() { override fun read(): Int = throw err }
         return FileInputStream(f(path)).also { it.skip(offset) }
     }
 

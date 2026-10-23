@@ -101,4 +101,35 @@ class RemoteServersTest {
         File(tmp.root, "remote-servers.json").writeText("{pas du json")
         assertEquals(emptyList<ServerConfig>(), store().list())
     }
+
+    /** Relecture finale (I4) : la liste des serveurs ne déchiffre aucun secret ; « mot de passe mémorisé » est lu en clair. */
+    @Test fun listingDoesNotOpenSecrets() {
+        var opens = 0
+        val counting = object : SecretBox {
+            override fun seal(plain: ByteArray) = Box.seal(plain)
+            override fun open(sealed: ByteArray): ByteArray { opens++; return Box.open(sealed) }
+        }
+        val st = RemoteServers(tmp.root, counting)
+        val a = st.save(cfg(remember = true), "secret".toByteArray(), null)
+        assertTrue(a.hasPassword)
+        opens = 0
+        val listed = RemoteServers(tmp.root, counting).list()
+        assertEquals(listOf(true), listed.map { it.hasPassword })
+        assertEquals(0, opens)
+        assertFalse(st.save(a.copy(remember = false), null, null).hasPassword) // décoché : oublié
+        assertFalse(RemoteServers(tmp.root, counting).list().single().hasPassword)
+    }
+
+    /** Les secrets scellés sont binaires : ni JSON ni Base64 en clair à leur ouverture (pas de String à effacer). */
+    @Test fun sealedSecretsAreBinary() {
+        val a = store().save(cfg(remember = true), "secret".toByteArray(), "phrase".toByteArray())
+        val plain = Box.open(File(tmp.root, "remote-secrets/${a.id}").readBytes())
+        assertFalse(plain[0] == '{'.code.toByte())
+        assertTrue(contains(plain, "secret".toByteArray()))
+        assertFalse(contains(plain, "c2VjcmV0".toByteArray()))
+        val back = store().secrets(a.id)!!
+        assertArrayEquals("secret".toByteArray(), back.password)
+        assertArrayEquals("phrase".toByteArray(), back.keyPassphrase)
+        assertNull(back.privateKey)
+    }
 }

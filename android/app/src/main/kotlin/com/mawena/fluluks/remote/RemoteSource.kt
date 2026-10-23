@@ -32,14 +32,14 @@ class RemoteSource(val server: ServerConfig, val client: RemoteClient) : FileSou
 
     override fun list(path: String): List<Entry> {
         val p = PathRules.require(path)
-        return client.list(p).filter { DocNames.isValid(it.name) }
+        return net { client.list(p) }.filter { DocNames.isValid(it.name) }
             .map { it.copy(path = DocumentIds.child(p, it.name)) }
     }
 
     override fun stat(path: String): Entry? {
         val p = PathRules.require(path)
         if (p == "/") return Entry("/", "/", FileType.DIR, 0, 0)
-        return client.stat(p)?.copy(name = WriteOps.nameOf(p), path = p)
+        return net { client.stat(p) }?.copy(name = WriteOps.nameOf(p), path = p)
     }
 
     override fun space(): Pair<Long, Long> = -1L to -1L
@@ -57,7 +57,7 @@ class RemoteSource(val server: ServerConfig, val client: RemoteClient) : FileSou
     override fun mkdir(parent: String, name: String): String {
         val p = PathRules.require(parent)
         val n = free(p, name)
-        client.mkdir(p, n)
+        net { client.mkdir(p, n) }
         return DocumentIds.child(p, n)
     }
 
@@ -68,7 +68,7 @@ class RemoteSource(val server: ServerConfig, val client: RemoteClient) : FileSou
         val target = DocumentIds.child(WriteOps.parentOf(p), n)
         if (target == p) return p
         if (stat(target) != null) throw FileNotFoundException("Un élément porte déjà ce nom")
-        client.rename(p, target)
+        net { client.rename(p, target) }
         return target
     }
 
@@ -78,9 +78,9 @@ class RemoteSource(val server: ServerConfig, val client: RemoteClient) : FileSou
         val e = stat(p) ?: throw FileNotFoundException("Document introuvable")
         if (e.type == FileType.DIR) {
             for (c in list(p)) delete(c.path)
-            client.delete(p, dir = true)
+            net { client.delete(p, dir = true) }
         } else {
-            client.delete(p, dir = false) // un lien : le lien seul
+            net { client.delete(p, dir = false) } // un lien : le lien seul
         }
     }
 
@@ -89,18 +89,44 @@ class RemoteSource(val server: ServerConfig, val client: RemoteClient) : FileSou
         val t = PathRules.require(targetParent)
         if (t == p || t.startsWith("$p/")) throw FileNotFoundException("Un dossier ne peut pas être déplacé dans lui-même")
         val target = DocumentIds.child(t, free(t, WriteOps.nameOf(p)))
-        client.rename(p, target)
+        net { client.rename(p, target) }
         return target
     }
 
     override fun openRead(path: String): InputStream = openReadAt(path, 0)
 
-    override fun openReadAt(path: String, offset: Long): InputStream = client.openReadAt(PathRules.require(path), offset)
+    override fun openReadAt(path: String, offset: Long): InputStream {
+        val input = net { client.openReadAt(PathRules.require(path), offset) }
+        return object : java.io.FilterInputStream(input) {
+            override fun read(): Int = net { super.read() }
+            override fun read(b: ByteArray, off: Int, len: Int): Int = net { super.read(b, off, len) }
+            override fun skip(n: Long): Long = net { super.skip(n) }
+            override fun close() = net { super.close() }
+        }
+    }
 
     override fun createFile(parent: String, name: String): Pair<String, OutputStream> {
         val p = PathRules.require(parent)
         val n = free(p, name)
-        return DocumentIds.child(p, n) to client.create(p, n)
+        val out = net { client.create(p, n) }
+        return DocumentIds.child(p, n) to object : java.io.FilterOutputStream(out) {
+            override fun write(b: Int) = net { out.write(b) }
+            override fun write(b: ByteArray, off: Int, len: Int) = net { out.write(b, off, len) }
+            override fun flush() = net { out.flush() }
+            override fun close() = net { out.close() }
+        }
+    }
+
+    /** `STOR` (FTP) ou `put` en remplacement (SFTP) sur le fichier existant : le serveur garde ses droits. */
+    override fun openOverwrite(path: String): OutputStream {
+        val p = PathRules.require(path)
+        val out = net { client.create(WriteOps.parentOf(p), WriteOps.nameOf(p)) }
+        return object : java.io.FilterOutputStream(out) {
+            override fun write(b: Int) = net { out.write(b) }
+            override fun write(b: ByteArray, off: Int, len: Int) = net { out.write(b, off, len) }
+            override fun flush() = net { out.flush() }
+            override fun close() = net { out.close() }
+        }
     }
 
     override fun contentUri(path: String): Uri = StreamProvider.uriFor(this, path)
@@ -119,4 +145,20 @@ class RemoteSource(val server: ServerConfig, val client: RemoteClient) : FileSou
     companion object {
         const val PREFIX = "remote:"
     }
+}
+
+/**
+ * Appel d'un client distant : ses échecs d'E/S portent un message écrit pour l'utilisateur, gardé tel quel
+ * ([RemoteIOException]) ; « introuvable » reste une [FileNotFoundException].
+ */
+internal inline fun <T> net(block: () -> T): T = try {
+    block()
+} catch (e: FileNotFoundException) {
+    throw e
+} catch (e: RemoteIOException) {
+    throw e
+} catch (e: java.io.InterruptedIOException) {
+    throw e
+} catch (e: java.io.IOException) {
+    throw RemoteIOException(e.message ?: "Connexion perdue", e)
 }

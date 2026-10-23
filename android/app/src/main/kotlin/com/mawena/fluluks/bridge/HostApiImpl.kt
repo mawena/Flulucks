@@ -39,6 +39,7 @@ import com.mawena.fluluks.remote.AuthFailed
 import com.mawena.fluluks.remote.HostKeyChanged
 import com.mawena.fluluks.remote.HostKeyUnknown
 import com.mawena.fluluks.remote.PrivateKeys
+import com.mawena.fluluks.remote.RemoteIOException
 import com.mawena.fluluks.remote.Remotes
 import com.mawena.fluluks.remote.ServerConfig
 import com.mawena.fluluks.volumes.AutoLock
@@ -256,7 +257,7 @@ class HostApiImpl(
     private fun serverMsg(c: ServerConfig) = RemoteServerMsg(
         id = c.id, protocol = c.protocol, name = c.name, host = c.host, port = c.port.toLong(), user = c.user,
         startPath = c.startPath, remember = c.remember, hostKey = c.hostKey, keyInfo = c.keyInfo,
-        hasPassword = Remotes.servers().secrets(c.id)?.let { s -> (s.password != null).also { s.wipe() } } ?: false,
+        hasPassword = c.hasPassword,
         connected = Remotes.isConnected(c.id),
     )
 
@@ -317,9 +318,11 @@ class HostApiImpl(
         FilePicker.pick { uri ->
             if (uri == null) return@pick callback(Result.success(null))
             io(callback) {
-                val key = context.contentResolver.openInputStream(uri)?.use { readKeyFile(it) }
-                    ?: throw java.io.IOException(PrivateKeys.MSG_UNREADABLE)
-                Remotes.importPrivateKey(serverId, key)
+                Files.guard("openDocument") {
+                    val key = context.contentResolver.openInputStream(uri)?.use { readKeyFile(it) }
+                        ?: throw RemoteIOException(PrivateKeys.MSG_UNREADABLE)
+                    Remotes.importPrivateKey(serverId, key)
+                }
             }
         }
 
@@ -334,7 +337,7 @@ class HostApiImpl(
         }
         if (n > MAX_KEY_FILE) {
             buf.fill(0)
-            throw java.io.IOException(PrivateKeys.MSG_UNREADABLE)
+            throw RemoteIOException(PrivateKeys.MSG_UNREADABLE)
         }
         return buf.copyOf(n).also { buf.fill(0) }
     }
@@ -393,9 +396,8 @@ class HostApiImpl(
             VideoActivity.intent(context, sourceId, path)
         }
 
-    override fun playAudio(sourceId: String, paths: List<String>, startIndex: Long) = guarded {
-        Files.guard("openDocument") { Music.play(sourceId, paths, startIndex.toInt()) }
-    }
+    override fun playAudio(sourceId: String, paths: List<String>, startIndex: Long, callback: (Result<Unit>) -> Unit) =
+        io(callback) { Files.guard("openDocument") { Music.play(sourceId, paths, startIndex.toInt()) } }
 
     override fun playerCommand(command: String, positionMs: Long?) = guarded { Music.command(command, positionMs) }
 

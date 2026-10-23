@@ -11,11 +11,13 @@ import org.json.JSONObject
 /**
  * Serveur enregistré : [protocol] `ftp` ou `sftp` ; [startPath] : dossier ouvert à la connexion ; [remember] : mot de
  * passe et phrase de clé mémorisés (scellés) ; [hostKey] : clé SFTP acceptée (« ssh-ed25519 SHA256:… ») ;
- * [keyInfo] : clé privée importée (type et empreinte), null sans clé.
+ * [keyInfo] : clé privée importée (type et empreinte), null sans clé ; [hasPassword] : un mot de passe est mémorisé
+ * (lu sans rien déchiffrer).
  */
 data class ServerConfig(
     val id: String, val protocol: String, val name: String, val host: String, val port: Int, val user: String,
     val startPath: String, val remember: Boolean, val hostKey: String?, val keyInfo: String?,
+    val hasPassword: Boolean = false,
 )
 
 /** Secrets d'un serveur, en mémoire ; [wipe] les remet à zéro. */
@@ -28,7 +30,8 @@ class Secrets(var password: ByteArray?, var keyPassphrase: ByteArray?, var priva
 /**
  * Serveurs enregistrés (`remote-servers.json` sous [dir]) et leurs secrets, un fichier scellé par [box] et par serveur
  * (`remote-secrets/<id>`) : la clé privée importée, plus le mot de passe et la phrase de la clé si « Mémoriser » est
- * coché. Écritures par fichier temporaire puis renommage. Un fichier abîmé donne une liste vide.
+ * coché. Écritures par fichier temporaire puis renommage. Un fichier abîmé donne une liste vide. Le contenu scellé
+ * est binaire (longueur puis octets), jamais un texte : aucune copie en String qu'on ne pourrait remettre à zéro.
  */
 class RemoteServers(private val dir: File, private val box: SecretBox) {
     private val file = File(dir, "remote-servers.json")
@@ -63,19 +66,20 @@ class RemoteServers(private val dir: File, private val box: SecretBox) {
             host = c.host.trim(),
             startPath = PathRules.check(c.startPath) ?: "/",
         )
-        val all = list().toMutableList()
-        val i = all.indexOfFirst { it.id == s.id }
-        if (i >= 0) all[i] = s else all += s
-        write(all)
         val old = secrets(s.id)
         val sec = Secrets(
             if (s.remember) password ?: old?.password else null,
             if (s.remember) keyPassphrase ?: old?.keyPassphrase else null,
             old?.privateKey,
         )
-        writeSecrets(s.id, sec)
+        val saved = s.copy(hasPassword = sec.password != null)
+        val all = list().toMutableList()
+        val i = all.indexOfFirst { it.id == saved.id }
+        if (i >= 0) all[i] = saved else all += saved
+        write(all)
+        writeSecrets(saved.id, sec)
         old?.wipe()
-        return s
+        return saved
     }
 
     @Synchronized
@@ -103,13 +107,40 @@ class RemoteServers(private val dir: File, private val box: SecretBox) {
         if (!f.isFile) return null
         return try {
             val plain = box.open(f.readBytes())
-            val o = JSONObject(String(plain, Charsets.UTF_8))
-            plain.fill(0)
-            fun b(k: String) = o.optString(k).takeIf { it.isNotEmpty() }?.let { Base64.getDecoder().decode(it) }
-            Secrets(b("password"), b("keyPassphrase"), b("privateKey"))
+            try {
+                if (plain.isNotEmpty() && plain[0] == '{'.code.toByte()) legacySecrets(plain) else unpack(plain)
+            } finally {
+                plain.fill(0)
+            }
         } catch (e: Exception) {
             null
         }
+    }
+
+    /** Version 1 : octet 1, puis mot de passe, phrase de la clé et clé privée, chacun en longueur (−1 : absent) et octets. */
+    private fun pack(s: Secrets): ByteArray {
+        val parts = listOf(s.password, s.keyPassphrase, s.privateKey)
+        val buf = java.nio.ByteBuffer.allocate(1 + parts.sumOf { 4 + (it?.size ?: 0) })
+        buf.put(1)
+        for (p in parts) {
+            buf.putInt(p?.size ?: -1)
+            if (p != null) buf.put(p)
+        }
+        return buf.array()
+    }
+
+    private fun unpack(plain: ByteArray): Secrets {
+        val buf = java.nio.ByteBuffer.wrap(plain)
+        require(buf.get() == 1.toByte())
+        fun next(): ByteArray? = buf.getInt().let { n -> if (n < 0) null else ByteArray(n).also { buf.get(it) } }
+        return Secrets(next(), next(), next())
+    }
+
+    /** Ancien format (JSON et Base64) des premières versions de développement : relu, réécrit au prochain changement. */
+    private fun legacySecrets(plain: ByteArray): Secrets {
+        val o = JSONObject(String(plain, Charsets.UTF_8))
+        fun b(k: String) = o.optString(k).takeIf { it.isNotEmpty() }?.let { Base64.getDecoder().decode(it) }
+        return Secrets(b("password"), b("keyPassphrase"), b("privateKey"))
     }
 
     private fun update(id: String, change: (ServerConfig) -> ServerConfig) {
@@ -122,12 +153,7 @@ class RemoteServers(private val dir: File, private val box: SecretBox) {
             f.delete()
             return
         }
-        val o = JSONObject()
-        fun put(k: String, v: ByteArray?) {
-            if (v != null) o.put(k, Base64.getEncoder().encodeToString(v))
-        }
-        put("password", s.password); put("keyPassphrase", s.keyPassphrase); put("privateKey", s.privateKey)
-        val plain = o.toString().toByteArray(Charsets.UTF_8)
+        val plain = pack(s)
         secretsDir.mkdirs()
         atomic(f, box.seal(plain))
         plain.fill(0)
@@ -151,6 +177,7 @@ class RemoteServers(private val dir: File, private val box: SecretBox) {
         .put("id", c.id).put("protocol", c.protocol).put("name", c.name).put("host", c.host).put("port", c.port)
         .put("user", c.user).put("startPath", c.startPath).put("remember", c.remember)
         .put("hostKey", c.hostKey ?: JSONObject.NULL).put("keyInfo", c.keyInfo ?: JSONObject.NULL)
+        .put("hasPassword", c.hasPassword)
 
     private fun fromJson(o: JSONObject): ServerConfig? {
         val id = o.optString("id").ifEmpty { return null }
@@ -159,6 +186,7 @@ class RemoteServers(private val dir: File, private val box: SecretBox) {
             PathRules.check(o.optString("startPath")) ?: "/", o.optBoolean("remember"),
             o.optString("hostKey").takeIf { !o.isNull("hostKey") && it.isNotEmpty() },
             o.optString("keyInfo").takeIf { !o.isNull("keyInfo") && it.isNotEmpty() },
+            o.optBoolean("hasPassword"),
         )
     }
 }
