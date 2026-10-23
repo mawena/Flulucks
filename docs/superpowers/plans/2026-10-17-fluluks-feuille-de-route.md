@@ -325,8 +325,8 @@ dans le même commit que le travail.
 - [x] *(utilisateur)* T12 — Essais sur le Pixel
 - [x] T13 — Documentation
 - [x] Relecture finale de toute la branche
-- [ ] Fusion `feature/lecteurs-distants` → `develop`
-- [ ] Version `v1.3.0`
+- [x] Fusion `feature/lecteurs-distants` → `develop`
+- [x] Version `v1.3.0`
 
 ### Phase 11 — Interface complète et professionnelle ([plan](2026-10-23-phase11-interface.md))
 - [x] Plan de la phase 11 écrit *(demande du 2026-10-23 ; spec § 19 ; choix de conception à valider par l'utilisateur)*
