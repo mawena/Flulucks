@@ -282,8 +282,8 @@ dans le même commit que le travail.
 - [x] T7 — Écran de formatage *(menu « Formater… » de la carte du disque, exFAT par défaut, confirmation par le nom du disque ; Flutter 79)*
 - [x] *(utilisateur)* T8 — Essais : montage par le noyau sur le PC, clé USB sacrifiée sur le Pixel
 - [x] T9 — Documentation
-- [ ] Fusion `feature/formatage` → `develop`
-- [ ] Version `v1.1.0`
+- [x] Fusion `feature/formatage` → `develop`
+- [x] Version `v1.1.0`
 
 ### Phase 9 — Compression, corbeille et outils du gestionnaire ([plan](2026-10-22-phase9-compression.md))
 - [x] Plan de la phase 9 écrit *(demande du 2026-10-22 ; spec § 15)*
