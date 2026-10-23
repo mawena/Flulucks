@@ -25,6 +25,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   bool _allFilesAccess = false;
   TransferMsg? _transfer;
   int? _formatProgress;
+  int? _hashProgress;
   ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
   List<FavoriteMsg> _favorites = const [];
   ClipboardItems? _clipboard;
@@ -88,6 +89,9 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
 
   /// Pourcentage du formatage en cours (null sinon).
   int? get formatProgress => _formatProgress;
+
+  /// Pourcentage du calcul d'empreinte SHA-256 en cours (null sinon).
+  int? get hashProgress => _hashProgress;
 
   /// Le résultat d'une opération finie a été montré : plus aucun écran ne le réaffiche.
   void transferResultSeen() {
@@ -195,6 +199,12 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   @override
   void onFormatProgress(int? pct) {
     _formatProgress = pct;
+    notifyListeners();
+  }
+
+  @override
+  void onHashProgress(int? pct) {
+    _hashProgress = pct;
     notifyListeners();
   }
 

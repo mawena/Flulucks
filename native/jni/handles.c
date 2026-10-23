@@ -575,6 +575,12 @@ static void entry_json(fl_json *j, const char *name, size_t namelen, const fl_st
   fl_json_u64(j, st->size);
   fl_json_key(j, "mtime");
   fl_json_i64(j, st->mtime);
+  fl_json_key(j, "mode"); /* type + droits ; propriétaire : sens réel sur ext4 seulement */
+  fl_json_u64(j, st->mode);
+  fl_json_key(j, "uid");
+  fl_json_u64(j, st->uid);
+  fl_json_key(j, "gid");
+  fl_json_u64(j, st->gid);
   fl_json_obj_end(j);
 }
 

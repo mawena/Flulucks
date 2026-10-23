@@ -665,6 +665,159 @@ class TrashItemMsg {
   }
 }
 
+/// Propriétés d'un élément ; `mode`, `uid`, `gid` et `permissions` (« rwxr-xr-x ») sur ext4 seulement ; `fs` :
+/// système de fichiers d'un volume de disque, vide pour le téléphone.
+class DetailsMsg {
+  DetailsMsg({
+    required this.name,
+    required this.path,
+    required this.type,
+    required this.size,
+    required this.mtime,
+    this.mode,
+    this.uid,
+    this.gid,
+    this.permissions,
+    required this.fs,
+  });
+
+  String name;
+
+  String path;
+
+  String type;
+
+  int size;
+
+  int mtime;
+
+  int? mode;
+
+  int? uid;
+
+  int? gid;
+
+  String? permissions;
+
+  String fs;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      name,
+      path,
+      type,
+      size,
+      mtime,
+      mode,
+      uid,
+      gid,
+      permissions,
+      fs,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static DetailsMsg decode(Object result) {
+    result as List<Object?>;
+    return DetailsMsg(
+      name: result[0]! as String,
+      path: result[1]! as String,
+      type: result[2]! as String,
+      size: result[3]! as int,
+      mtime: result[4]! as int,
+      mode: result[5] as int?,
+      uid: result[6] as int?,
+      gid: result[7] as int?,
+      permissions: result[8] as String?,
+      fs: result[9]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! DetailsMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(name, other.name) && _deepEquals(path, other.path) && _deepEquals(type, other.type) && _deepEquals(size, other.size) && _deepEquals(mtime, other.mtime) && _deepEquals(mode, other.mode) && _deepEquals(uid, other.uid) && _deepEquals(gid, other.gid) && _deepEquals(permissions, other.permissions) && _deepEquals(fs, other.fs);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'DetailsMsg(name: $name, path: $path, type: $type, size: $size, mtime: $mtime, mode: $mode, uid: $uid, gid: $gid, permissions: $permissions, fs: $fs)';
+  }
+}
+
+/// Taille d'un dossier et de son contenu ; `truncated` si le calcul s'est arrêté avant la fin.
+class FolderSizeMsg {
+  FolderSizeMsg({
+    required this.size,
+    required this.files,
+    required this.dirs,
+    required this.truncated,
+  });
+
+  int size;
+
+  int files;
+
+  int dirs;
+
+  bool truncated;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      size,
+      files,
+      dirs,
+      truncated,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static FolderSizeMsg decode(Object result) {
+    result as List<Object?>;
+    return FolderSizeMsg(
+      size: result[0]! as int,
+      files: result[1]! as int,
+      dirs: result[2]! as int,
+      truncated: result[3]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! FolderSizeMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(size, other.size) && _deepEquals(files, other.files) && _deepEquals(dirs, other.dirs) && _deepEquals(truncated, other.truncated);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'FolderSizeMsg(size: $size, files: $files, dirs: $dirs, truncated: $truncated)';
+  }
+}
+
 /// Élément d'un dossier analysé (taille totale pour un dossier).
 class SpaceItemMsg {
   SpaceItemMsg({
@@ -1015,20 +1168,26 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is TrashItemMsg) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is SpaceItemMsg) {
+    }    else if (value is DetailsMsg) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is SpaceReportMsg) {
+    }    else if (value is FolderSizeMsg) {
       buffer.putUint8(137);
       writeValue(buffer, value.encode());
-    }    else if (value is SearchResultMsg) {
+    }    else if (value is SpaceItemMsg) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    }    else if (value is ViewPrefsMsg) {
+    }    else if (value is SpaceReportMsg) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    }    else if (value is FavoriteMsg) {
+    }    else if (value is SearchResultMsg) {
       buffer.putUint8(140);
+      writeValue(buffer, value.encode());
+    }    else if (value is ViewPrefsMsg) {
+      buffer.putUint8(141);
+      writeValue(buffer, value.encode());
+    }    else if (value is FavoriteMsg) {
+      buffer.putUint8(142);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -1053,14 +1212,18 @@ class _PigeonCodec extends StandardMessageCodec {
       case 135:
         return TrashItemMsg.decode(readValue(buffer)!);
       case 136:
-        return SpaceItemMsg.decode(readValue(buffer)!);
+        return DetailsMsg.decode(readValue(buffer)!);
       case 137:
-        return SpaceReportMsg.decode(readValue(buffer)!);
+        return FolderSizeMsg.decode(readValue(buffer)!);
       case 138:
-        return SearchResultMsg.decode(readValue(buffer)!);
+        return SpaceItemMsg.decode(readValue(buffer)!);
       case 139:
-        return ViewPrefsMsg.decode(readValue(buffer)!);
+        return SpaceReportMsg.decode(readValue(buffer)!);
       case 140:
+        return SearchResultMsg.decode(readValue(buffer)!);
+      case 141:
+        return ViewPrefsMsg.decode(readValue(buffer)!);
+      case 142:
         return FavoriteMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1695,6 +1858,83 @@ class FluLuksHostApi {
     ;
   }
 
+  /// Propriétés ; taille d'un dossier et SHA-256 d'un fichier calculés à la demande, arrêtés par `cancelHash`
+  /// (`sha256` rend alors null ; progression par `onHashProgress`).
+  Future<DetailsMsg> details(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.details$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as DetailsMsg;
+  }
+
+  Future<FolderSizeMsg> folderSize(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.folderSize$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as FolderSizeMsg;
+  }
+
+  Future<String?> sha256(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.sha256$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+    return pigeonVar_replyValue as String?;
+  }
+
+  Future<void> cancelHash() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelHash$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
   Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.thumbnail$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -1840,6 +2080,9 @@ abstract class FluLuksEventsApi {
   /// Pourcentage du formatage en cours ; null quand il n'y en a pas (ou plus).
   void onFormatProgress(int? pct);
 
+  /// Pourcentage du calcul d'empreinte en cours ; null à la fin.
+  void onHashProgress(int? pct);
+
   static void setUp(FluLuksEventsApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
@@ -1919,6 +2162,27 @@ abstract class FluLuksEventsApi {
           final int? arg_pct = args[0] as int?;
           try {
             api.onFormatProgress(arg_pct);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.fluluks.FluLuksEventsApi.onHashProgress$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final int? arg_pct = args[0] as int?;
+          try {
+            api.onHashProgress(arg_pct);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

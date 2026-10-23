@@ -119,11 +119,17 @@ data class DirEntry(val name: String, val type: FileType, val size: Long, val mt
 }
 
 /** Réponse de [NativeEngine.stat] (mêmes champs qu'une entrée ; `name` = dernier composant, "" pour "/"). */
-data class FsStat(val name: String, val type: FileType, val size: Long, val mtime: Long) {
+data class FsStat(
+    val name: String, val type: FileType, val size: Long, val mtime: Long,
+    /** Type + droits (st_mode), propriétaire ; null pour un moteur ancien. */
+    val mode: Int? = null, val uid: Long? = null, val gid: Long? = null,
+) {
     companion object {
         fun parse(json: ByteArray): FsStat {
-            val e = DirEntry.from(parseObject(json))
-            return FsStat(e.name, e.type, e.size, e.mtime)
+            val o = parseObject(json)
+            val e = DirEntry.from(o)
+            fun opt(k: String) = if (o.has(k)) o.getLong(k) else null
+            return FsStat(e.name, e.type, e.size, e.mtime, opt("mode")?.toInt(), opt("uid"), opt("gid"))
         }
     }
 }

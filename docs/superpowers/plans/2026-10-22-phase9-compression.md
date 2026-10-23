@@ -331,11 +331,11 @@ List<EntryMsg>, truncated`), `spaceChildren(sourceId, path)`, `cancelAnalysis()`
 gid?, fs`), `folderSize(sourceId, path) → FolderSizeMsg` (annulable), `sha256(sourceId, path) → String`
 (annulable, progression par `onHashProgress(int? pct)`), `cancelHash()`.
 
-- [ ] **Step 1 : tests** : `test_handles` `test_stat_droits` (mode 0644, uid du parent) ;
+- [x] **Step 1 : tests** : `test_handles` `test_stat_droits` (mode 0644, uid du parent) ;
   JVM `sha256KnownVector` (« abc »), `sha256Cancel`, `modeString` (`0755` → `rwxr-xr-x`) ; Flutter
   `propertiesShowOwnerOnExt4`, `hashButtonShowsProgressThenDigest`.
-- [ ] **Step 2 → 4 :** FAIL, implémenter, verts.
-- [ ] **Step 5 :** commit `feat(gestionnaire): propriétés et empreinte SHA-256`.
+- [x] **Step 2 → 4 :** FAIL, implémenter, verts.
+- [x] **Step 5 :** commit `feat(gestionnaire): propriétés et empreinte SHA-256`.
 
 ### Task 10 : renommage par lot
 

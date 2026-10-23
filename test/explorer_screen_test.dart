@@ -204,7 +204,9 @@ void main() {
     final api = api0();
     await pump(tester, api);
     await longPress(tester, 'b.txt');
-    await tester.tap(find.byTooltip('Renommer'));
+    await tester.tap(find.byTooltip("Plus d'actions"));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Renommer'));
     await tester.pumpAndSettle();
     expect(find.widgetWithText(TextField, 'b.txt'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'c.txt');
@@ -214,7 +216,9 @@ void main() {
     await longPress(tester, 'a.jpg');
     await tester.tap(find.text('b.txt'));
     await tester.pump();
-    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.drive_file_rename_outline)).onPressed, isNull);
+    await tester.tap(find.byTooltip("Plus d'actions"));
+    await tester.pumpAndSettle();
+    expect(tester.widget<PopupMenuItem<String>>(find.widgetWithText(PopupMenuItem<String>, 'Renommer')).enabled, isFalse);
   });
 
   testWidgets('shareDisabledForFolder', (tester) async {

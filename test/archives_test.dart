@@ -47,6 +47,14 @@ Future<void> openExplorerOn(WidgetTester tester, AppState state, String source) 
   await tester.pumpAndSettle();
 }
 
+/// Action du menu « Plus d'actions » de la barre de sélection.
+Future<void> tapMenu(WidgetTester tester, String action) async {
+  await tester.tap(find.byTooltip("Plus d'actions"));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(action));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   test('archiveNames', () {
     for (final n in ['a.zip', 'A.ZIP', 'a.7z', 'a.rar', 'a.tar', 'a.tar.gz', 'a.tgz', 'a.tar.xz', 'a.txz', 'a.gz', 'a.xz']) {
@@ -62,8 +70,7 @@ void main() {
     await pump(tester, api);
     await tester.longPress(find.text('b.txt'));
     await tester.pump();
-    await tester.tap(find.byTooltip('Compresser'));
-    await tester.pumpAndSettle();
+    await tapMenu(tester, 'Compresser');
     // un seul fichier : son nom sans l'extension est proposé
     expect(find.widgetWithText(TextField, 'b'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'sauvegarde');
@@ -78,8 +85,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.text('notes.txt'));
     await tester.pump();
-    await tester.tap(find.byTooltip('Compresser'));
-    await tester.pumpAndSettle();
+    await tapMenu(tester, 'Compresser');
     expect(find.widgetWithText(TextField, 'Archive'), findsOneWidget);
     await tester.enterText(find.byType(TextField), 'lot.ZIP');
     await tester.tap(find.text('OK'));
@@ -90,8 +96,7 @@ void main() {
     // Annuler ou nom vide : rien n'est lancé
     await tester.longPress(find.text('b.txt'));
     await tester.pump();
-    await tester.tap(find.byTooltip('Compresser'));
-    await tester.pumpAndSettle();
+    await tapMenu(tester, 'Compresser');
     await tester.enterText(find.byType(TextField), '  ');
     await tester.tap(find.text('OK'));
     await tester.pumpAndSettle();
@@ -103,7 +108,9 @@ void main() {
     await pump(tester, api, source: 'v1');
     await tester.longPress(find.text('film.mkv'));
     await tester.pump();
-    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.folder_zip)).onPressed, isNull);
+    await tester.tap(find.byTooltip("Plus d'actions"));
+    await tester.pumpAndSettle();
+    expect(tester.widget<PopupMenuItem<String>>(find.widgetWithText(PopupMenuItem<String>, 'Compresser')).enabled, isFalse);
   });
 
   testWidgets('tapArchiveShowsExtractSheet', (tester) async {

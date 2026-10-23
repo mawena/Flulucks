@@ -145,6 +145,18 @@ class DiskSource(override val id: String, private val engine: Engine = NativeEng
         }
     }
 
+    override fun details(path: String): Details? {
+        val p = PathRules.require(path)
+        val h = handle()
+        val st = WriteOps(engine, h).statOrNull(p) ?: return null
+        val fs = VolumeStat.parse(engine.statfs(h)).fs
+        val ext4 = fs == "ext4"
+        return Details(
+            if (p == "/") "" else WriteOps.nameOf(p), p, st.type, st.size, st.mtime,
+            st.mode.takeIf { ext4 }, st.uid.takeIf { ext4 }, st.gid.takeIf { ext4 }, fs,
+        )
+    }
+
     override fun openNative(path: String): NativeIn {
         val p = PathRules.require(path)
         val h = handle()

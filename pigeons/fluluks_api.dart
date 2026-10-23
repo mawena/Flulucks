@@ -164,6 +164,42 @@ class TrashItemMsg {
   bool isDir;
 }
 
+/// Propriétés d'un élément ; `mode`, `uid`, `gid` et `permissions` (« rwxr-xr-x ») sur ext4 seulement ; `fs` :
+/// système de fichiers d'un volume de disque, vide pour le téléphone.
+class DetailsMsg {
+  DetailsMsg({
+    required this.name,
+    required this.path,
+    required this.type,
+    required this.size,
+    required this.mtime,
+    this.mode,
+    this.uid,
+    this.gid,
+    this.permissions,
+    required this.fs,
+  });
+  String name;
+  String path;
+  String type;
+  int size;
+  int mtime;
+  int? mode;
+  int? uid;
+  int? gid;
+  String? permissions;
+  String fs;
+}
+
+/// Taille d'un dossier et de son contenu ; `truncated` si le calcul s'est arrêté avant la fin.
+class FolderSizeMsg {
+  FolderSizeMsg({required this.size, required this.files, required this.dirs, required this.truncated});
+  int size;
+  int files;
+  int dirs;
+  bool truncated;
+}
+
 /// Élément d'un dossier analysé (taille totale pour un dossier).
 class SpaceItemMsg {
   SpaceItemMsg({required this.name, required this.path, required this.isDir, required this.size, required this.fileCount});
@@ -283,6 +319,16 @@ abstract class FluLuksHostApi {
   @async
   SpaceReportMsg spaceChildren(String sourceId, String path);
   void cancelAnalysis();
+
+  /// Propriétés ; taille d'un dossier et SHA-256 d'un fichier calculés à la demande, arrêtés par `cancelHash`
+  /// (`sha256` rend alors null ; progression par `onHashProgress`).
+  @async
+  DetailsMsg details(String sourceId, String path);
+  @async
+  FolderSizeMsg folderSize(String sourceId, String path);
+  @async
+  String? sha256(String sourceId, String path);
+  void cancelHash();
   @async
   Uint8List? thumbnail(String sourceId, String path, int sizePx);
   ViewPrefsMsg getViewPrefs();
@@ -309,4 +355,7 @@ abstract class FluLuksEventsApi {
 
   /// Pourcentage du formatage en cours ; null quand il n'y en a pas (ou plus).
   void onFormatProgress(int? pct);
+
+  /// Pourcentage du calcul d'empreinte en cours ; null à la fin.
+  void onHashProgress(int? pct);
 }

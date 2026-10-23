@@ -68,6 +68,21 @@ class Fr {
   static const biggestFiles = 'Plus gros fichiers';
   static const analyzing = 'Analyse en cours…';
   static const spaceTruncated = "Analyse incomplète : arrêtée, ou trop d'éléments";
+  static const properties = 'Propriétés';
+  static const moreActions = "Plus d'actions";
+  static const location = 'Emplacement';
+  static const typeLabel = 'Type';
+  static const sizeLabel = 'Taille';
+  static const modifiedLabel = 'Modifié le';
+  static const fsLabel = 'Système de fichiers';
+  static const permissionsLabel = 'Droits';
+  static const ownerLabel = 'Propriétaire';
+  static const computing = 'Calcul…';
+  static const computeHash = "Calculer l'empreinte SHA-256";
+  static const hashLabel = 'SHA-256';
+  static const hashCancelled = 'Calcul annulé';
+  static const copyHash = "Copier l'empreinte";
+  static const hashCopied = 'Empreinte copiée';
   static const extractHere = 'Extraire ici';
   static const extractTo = 'Extraire vers…';
   static const share = 'Partager';
@@ -120,6 +135,15 @@ class Fr {
   static String spaceTotal(int bytes, int files) => '${humanSize(bytes)} — $files fichier(s)';
   static String spaceOthers(int n) => '… et $n autre(s) élément(s)';
   static String percent(int p) => '$p %';
+  static String folderSize(int bytes, int files, int dirs, {bool truncated = false}) =>
+      '${truncated ? 'Au moins ' : ''}${humanSize(bytes)} — $files fichier(s), $dirs dossier(s)';
+  static String ownerLine(int uid, int gid) => 'uid $uid, gid $gid';
+  static String typeName(String type) => switch (type) {
+        'dir' => 'Dossier',
+        'file' => 'Fichier',
+        'link' => 'Lien symbolique',
+        _ => 'Autre',
+      };
   static String transferDone(int n) => 'Terminé : $n fichier(s)';
 
   /// « Terminé : 3 fichier(s), 34 Mo/s » ; sans débit sous 1 s ou sous 1 Mo (chiffre sans intérêt).

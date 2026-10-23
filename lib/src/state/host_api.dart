@@ -37,6 +37,10 @@ abstract class HostApi {
   Future<SpaceReportMsg> analyzeSpace(String sourceId, String path);
   Future<SpaceReportMsg> spaceChildren(String sourceId, String path);
   Future<void> cancelAnalysis();
+  Future<DetailsMsg> details(String sourceId, String path);
+  Future<FolderSizeMsg> folderSize(String sourceId, String path);
+  Future<String?> sha256(String sourceId, String path);
+  Future<void> cancelHash();
   Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx);
   Future<ViewPrefsMsg> getViewPrefs();
   Future<void> setViewPrefs(ViewPrefsMsg prefs);
@@ -126,6 +130,14 @@ class PigeonHostApi implements HostApi {
   Future<SpaceReportMsg> spaceChildren(String sourceId, String path) => _api.spaceChildren(sourceId, path);
   @override
   Future<void> cancelAnalysis() => _api.cancelAnalysis();
+  @override
+  Future<DetailsMsg> details(String sourceId, String path) => _api.details(sourceId, path);
+  @override
+  Future<FolderSizeMsg> folderSize(String sourceId, String path) => _api.folderSize(sourceId, path);
+  @override
+  Future<String?> sha256(String sourceId, String path) => _api.sha256(sourceId, path);
+  @override
+  Future<void> cancelHash() => _api.cancelHash();
   @override
   Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx) => _api.thumbnail(sourceId, path, sizePx);
   @override

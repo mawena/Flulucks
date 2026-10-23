@@ -10,8 +10,10 @@ import android.provider.DocumentsContract
 import com.mawena.fluluks.engine.EngineError
 import com.mawena.fluluks.engine.FileType
 import com.mawena.fluluks.files.Archives
+import com.mawena.fluluks.files.Details
 import com.mawena.fluluks.files.DiskSource
 import com.mawena.fluluks.files.Entry
+import com.mawena.fluluks.files.FileDetails
 import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.FilesException
 import com.mawena.fluluks.files.Search
@@ -31,12 +33,14 @@ import com.mawena.fluluks.volumes.FormatOptions
 import com.mawena.fluluks.volumes.VolumeManager
 import com.mawena.fluluks.volumes.VolumeState
 import io.flutter.plugin.common.BinaryMessenger
+import java.io.FileNotFoundException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -51,6 +55,9 @@ class HostApiImpl(
 ) : FluLuksHostApi {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val events = FluLuksEventsApi(messenger)
+
+    /** Pourcentage du calcul d'empreinte en cours (null sinon), poussé vers Flutter. */
+    private val hashProgress = MutableStateFlow<Int?>(null)
 
     /** À appeler une fois : enregistre l'API hôte et pousse chaque changement d'état vers Flutter. */
     fun attach(messenger: BinaryMessenger) {
@@ -68,6 +75,9 @@ class HostApiImpl(
         }
         scope.launch {
             Transfers.state.collect { t -> events.onTransferChanged(t?.let(::transferMsg)) { /* réponse ignorée */ } }
+        }
+        scope.launch {
+            hashProgress.collect { pct -> events.onHashProgress(pct?.toLong()) { /* réponse ignorée */ } }
         }
         if (Build.VERSION.SDK_INT >= 30) {
             context.getSystemService(StorageManager::class.java)
@@ -314,6 +324,32 @@ class HostApiImpl(
 
     override fun cancelAnalysis() = SpaceAnalysis.cancel()
 
+    override fun details(sourceId: String, path: String, callback: (Result<DetailsMsg>) -> Unit) =
+        io(callback) {
+            Files.guard("queryChildDocuments") {
+                detailsMsg(Files.source(sourceId).details(path) ?: throw FileNotFoundException("Document introuvable"))
+            }
+        }
+
+    override fun folderSize(sourceId: String, path: String, callback: (Result<FolderSizeMsg>) -> Unit) =
+        io(callback) {
+            Files.guard("queryChildDocuments") {
+                val s = FileDetails.folderSize(Files.source(sourceId), path)
+                FolderSizeMsg(size = s.size, files = s.files.toLong(), dirs = s.dirs.toLong(), truncated = s.truncated)
+            }
+        }
+
+    override fun sha256(sourceId: String, path: String, callback: (Result<String?>) -> Unit) =
+        io(callback) {
+            try {
+                Files.guard("openDocument") { FileDetails.sha256(Files.source(sourceId), path) { hashProgress.value = it } }
+            } finally {
+                hashProgress.value = null
+            }
+        }
+
+    override fun cancelHash() = FileDetails.cancel()
+
     override fun cancelSearch() = Search.cancel()
 
     override fun thumbnail(sourceId: String, path: String, sizePx: Long, callback: (Result<ByteArray?>) -> Unit) =
@@ -410,14 +446,18 @@ class HostApiImpl(
             } ?: emptyList(),
         )
 
-        internal fun entryMsg(e: Entry) = EntryMsg(
-            name = e.name, path = e.path, size = e.size, mtime = e.mtime,
-            type = when (e.type) {
-                FileType.DIR -> "dir"
-                FileType.FILE -> "file"
-                FileType.SYMLINK -> "link"
-                FileType.OTHER -> "other"
-            },
+        internal fun entryMsg(e: Entry) = EntryMsg(name = e.name, path = e.path, size = e.size, mtime = e.mtime, type = typeName(e.type))
+
+        private fun typeName(t: FileType) = when (t) {
+            FileType.DIR -> "dir"
+            FileType.FILE -> "file"
+            FileType.SYMLINK -> "link"
+            FileType.OTHER -> "other"
+        }
+
+        private fun detailsMsg(d: Details) = DetailsMsg(
+            name = d.name, path = d.path, type = typeName(d.type), size = d.size, mtime = d.mtime, mode = d.mode?.toLong(),
+            uid = d.uid, gid = d.gid, permissions = d.permissions, fs = d.fs,
         )
 
         private fun spaceMsg(r: SpaceReport) = SpaceReportMsg(

@@ -57,6 +57,7 @@ int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t pas
 int fj_unmount(int64_t vol, bool force);
 
 int fj_statfs(int64_t vol, fl_json *out);
+/* {"name", "type", "size", "mtime", "mode", "uid", "gid"} ; fj_list rend les mêmes objets. */
 int fj_stat(int64_t vol, const char *path, fl_json *out);
 /* Tableau trié par nom (ordre des octets). */
 int fj_list(int64_t vol, const char *path, fl_json *out);

@@ -6,6 +6,7 @@ import '../state/app_state.dart';
 import '../state/sorting.dart';
 import '../strings_fr.dart';
 import '../widgets/clipboard_bar.dart';
+import '../widgets/properties_sheet.dart';
 import '../widgets/thumb.dart';
 import '../widgets/transfer_bar.dart';
 import 'search_screen.dart';
@@ -324,6 +325,13 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     state.clearClipboard(); // copie ou déplacement lancé : « Coller ici » disparaît
   }
 
+  /// Propriétés de l'élément sélectionné (la sélection est quittée).
+  Future<void> _properties() {
+    final path = _selected.single;
+    setState(_selected.clear);
+    return showProperties(context, state, widget.sourceId, path);
+  }
+
   /// Compresse la sélection dans un ZIP du dossier ouvert ; nom proposé : l'élément seul (sans son extension
   /// pour un fichier) ou « Archive ».
   Future<void> _compress() async {
@@ -361,17 +369,25 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           IconButton(
               tooltip: Fr.cut, icon: const Icon(Icons.content_cut), onPressed: _readOnly ? null : () => _toClipboard(move: true)),
           IconButton(
-              tooltip: Fr.compress, icon: const Icon(Icons.folder_zip), onPressed: _readOnly ? null : _compress),
-          IconButton(
             tooltip: Fr.share,
             icon: const Icon(Icons.share),
             onPressed: hasDir ? null : () => _run(() => state.api.share(widget.sourceId, _selected.toList())),
           ),
-          IconButton(
-              tooltip: Fr.rename,
-              icon: const Icon(Icons.drive_file_rename_outline),
-              onPressed: _readOnly || _selected.length != 1 ? null : _rename),
           IconButton(tooltip: Fr.delete, icon: const Icon(Icons.delete), onPressed: _readOnly ? null : _delete),
+          // le reste dans un menu : la barre tient sur la largeur d'un téléphone
+          PopupMenuButton<String>(
+            tooltip: Fr.moreActions,
+            onSelected: (a) => switch (a) {
+              'rename' => _rename(),
+              'compress' => _compress(),
+              _ => _properties(),
+            },
+            itemBuilder: (_) => [
+              PopupMenuItem(value: 'rename', enabled: !_readOnly && _selected.length == 1, child: const Text(Fr.rename)),
+              PopupMenuItem(value: 'compress', enabled: !_readOnly, child: const Text(Fr.compress)),
+              PopupMenuItem(value: 'properties', enabled: _selected.length == 1, child: const Text(Fr.properties)),
+            ],
+          ),
         ],
       );
     }

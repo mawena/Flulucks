@@ -1018,6 +1018,56 @@ static void test_arc_disque_ferme(void) {
   unlink(img);
 }
 
+/* Propriétés (phase 9) : fj_stat et fj_list rendent le mode, l'uid et le gid. Sur ext4, un fichier est créé en
+ * 0644 et un dossier en 0755, au propriétaire du parent (racine formatée pour 1234:5678). */
+static int64_t nombre(const cJSON *o, const char *cle) {
+  const cJSON *n = cJSON_GetObjectItem(o, cle);
+  return cJSON_IsNumber(n) ? (int64_t)n->valuedouble : -1;
+}
+
+static void test_stat_droits(void) {
+  char img[4200], contenu[32];
+  image_vierge(img, sizeof img, "stat-droits.img");
+  int64_t d = fj_open_image(img, false);
+  TT_ASSERT(d > 0);
+  TT_ASSERT_EQ(fj_format(d, "{\"fs\":\"ext4\",\"uid\":1234,\"gid\":5678}", NULL, 0, NULL, NULL), FL_OK);
+  int idx = partition_unique(d, contenu, sizeof contenu);
+  int64_t v = fj_mount(d, (uint32_t)idx, NULL, 0, true);
+  TT_ASSERT(v > 0);
+  int64_t f = fj_open_file(v, "/a.txt", FL_O_RDWR | FL_O_CREAT);
+  TT_ASSERT(f > 0);
+  TT_ASSERT_EQ(fj_close_file(f), FL_OK);
+  TT_ASSERT_EQ(fj_mkdir(v, "/D"), FL_OK);
+  const char *chemins[] = {"/a.txt", "/D"};
+  const int64_t modes[] = {0100644, 040755};
+  fl_json j;
+  for (int k = 0; k < 2; k++) {
+    fl_json_init(&j);
+    cJSON *st = json_de(fj_stat(v, chemins[k], &j), &j);
+    fl_json_free(&j);
+    TT_ASSERT(st != NULL);
+    TT_ASSERT_EQ(nombre(st, "mode"), modes[k]);
+    TT_ASSERT_EQ(nombre(st, "uid"), 1234);
+    TT_ASSERT_EQ(nombre(st, "gid"), 5678);
+    cJSON_Delete(st);
+  }
+  fl_json_init(&j);
+  cJSON *l = json_de(fj_list(v, "/", &j), &j);
+  fl_json_free(&j);
+  TT_ASSERT(cJSON_IsArray(l));
+  int vus = 0;
+  for (const cJSON *e = l ? l->child : NULL; e; e = e->next) {
+    const char *n = cJSON_GetStringValue(cJSON_GetObjectItem(e, "name"));
+    if (n && !strcmp(n, "a.txt")) vus += nombre(e, "mode") == 0100644 && nombre(e, "uid") == 1234;
+  }
+  TT_ASSERT_EQ(vus, 1);
+  cJSON_Delete(l);
+  TT_ASSERT_EQ(fj_unmount(v, false), FL_OK);
+  TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
+  TT_ASSERT_EQ(fj_debug_used(), 0);
+  unlink(img);
+}
+
 int main(void) {
   srand((unsigned)time(NULL));
   TT_RUN(test_scan_gpt_luks2);
@@ -1042,6 +1092,7 @@ int main(void) {
   TT_RUN(test_format_pendant_montage);
   TT_RUN(test_arc_par_jni);
   TT_RUN(test_arc_disque_ferme);
+  TT_RUN(test_stat_droits);
   if (!tt_failures && g_saute) return 77; /* SKIP_RETURN_CODE de CTest */
   TT_MAIN_END();
 }

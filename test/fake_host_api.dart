@@ -184,6 +184,33 @@ class FakeHostApi implements HostApi {
   @override
   Future<void> cancelAnalysis() async => calls.add('cancelAnalysis');
 
+  /// Propriétés par chemin ; taille des dossiers ; réponse de sha256 (null : annulé).
+  final detailsByPath = <String, DetailsMsg>{};
+  final folderSizes = <String, FolderSizeMsg>{};
+  Future<String?>? sha256Future;
+  int hashCancels = 0;
+
+  @override
+  Future<DetailsMsg> details(String sourceId, String path) async {
+    calls.add('details $sourceId $path');
+    return detailsByPath[path]!;
+  }
+
+  @override
+  Future<FolderSizeMsg> folderSize(String sourceId, String path) async {
+    calls.add('folderSize $sourceId $path');
+    return folderSizes[path]!;
+  }
+
+  @override
+  Future<String?> sha256(String sourceId, String path) async {
+    calls.add('sha256 $sourceId $path');
+    return sha256Future ?? 'f' * 64;
+  }
+
+  @override
+  Future<void> cancelHash() async => hashCancels++;
+
   /// Corbeille de chaque stockage.
   final trash = <String, List<TrashItemMsg>>{};
 

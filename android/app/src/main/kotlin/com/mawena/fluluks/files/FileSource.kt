@@ -73,6 +73,10 @@ interface FileSource {
     /** URI de contenu lisible par une autre application (Ouvrir avec, Partager). */
     fun contentUri(path: String): Uri
 
+    /** Propriétés de [path] (null s'il n'existe pas) ; droits et propriétaire seulement sur ext4 ([Details]). */
+    fun details(path: String): Details? =
+        stat(path)?.let { Details(it.name, it.path, it.type, it.size, it.mtime, null, null, null, fs = "") }
+
     /** Fichier ordinaire [path] pour le lecteur d'archives natif (phase 9), qui le ferme. */
     fun openNative(path: String): NativeIn
 
