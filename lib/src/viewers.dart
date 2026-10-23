@@ -16,7 +16,7 @@ const _text = {
 };
 
 /// Lecteurs déjà présents dans Portail ; les autres types s'ouvrent encore dans une autre application.
-const _available = {'image', 'text', 'video'};
+const _available = {'image', 'text', 'video', 'audio'};
 
 /// Lecteur de Portail pour [name] : `image`, `audio`, `video`, `text`, ou null (autre application). « .gitignore »
 /// compte comme l'extension « gitignore ».
@@ -48,6 +48,10 @@ Future<void> openViewer(BuildContext context, AppState state, String sourceId, E
       await openTextEditor(context, state, sourceId, e);
     case 'video':
       await state.api.playVideo(sourceId, e.path);
+    case 'audio':
+      // le dossier entier dans l'ordre affiché : le côté Kotlin en garde les sons pour la file d'attente
+      final files = folder.where((x) => x.type == 'file').toList();
+      await state.playAudio(sourceId, [for (final x in files) x.path], files.indexWhere((x) => x.path == e.path));
     default:
       await state.api.openWith(sourceId, e.path);
   }

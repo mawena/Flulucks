@@ -518,6 +518,72 @@ data class EntryMsg (
 }
 
 /**
+ * Musique en cours (phase 10) : morceau `index` sur `count` de la file ; positions en millisecondes (durée −1 :
+ * inconnue).
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class PlayerMsg (
+  val sourceId: String,
+  val title: String,
+  val index: Long,
+  val count: Long,
+  val playing: Boolean,
+  val positionMs: Long,
+  val durationMs: Long
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): PlayerMsg {
+      val sourceId = pigeonVar_list[0] as String
+      val title = pigeonVar_list[1] as String
+      val index = pigeonVar_list[2] as Long
+      val count = pigeonVar_list[3] as Long
+      val playing = pigeonVar_list[4] as Boolean
+      val positionMs = pigeonVar_list[5] as Long
+      val durationMs = pigeonVar_list[6] as Long
+      return PlayerMsg(sourceId, title, index, count, playing, positionMs, durationMs)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      sourceId,
+      title,
+      index,
+      count,
+      playing,
+      positionMs,
+      durationMs,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as PlayerMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.sourceId, other.sourceId) && FluLuksApiPigeonUtils.deepEquals(this.title, other.title) && FluLuksApiPigeonUtils.deepEquals(this.index, other.index) && FluLuksApiPigeonUtils.deepEquals(this.count, other.count) && FluLuksApiPigeonUtils.deepEquals(this.playing, other.playing) && FluLuksApiPigeonUtils.deepEquals(this.positionMs, other.positionMs) && FluLuksApiPigeonUtils.deepEquals(this.durationMs, other.durationMs)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.sourceId)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.title)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.index)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.count)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.playing)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.positionMs)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.durationMs)
+    return result
+  }
+  override fun toString(): String {
+    return "PlayerMsg(sourceId=$sourceId, title=$title, index=$index, count=$count, playing=$playing, positionMs=$positionMs, durationMs=$durationMs)"
+  }
+}
+
+/**
  * Avancement d'une copie ou d'un déplacement ; `error` peut accompagner `finished`.
  *
  * Generated class from Pigeon that represents data sent in messages.
@@ -1476,75 +1542,80 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
       }
       134.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          TransferMsg.fromList(it)
+          PlayerMsg.fromList(it)
         }
       }
       135.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          TrashItemMsg.fromList(it)
+          TransferMsg.fromList(it)
         }
       }
       136.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          DetailsMsg.fromList(it)
+          TrashItemMsg.fromList(it)
         }
       }
       137.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          TextFileMsg.fromList(it)
+          DetailsMsg.fromList(it)
         }
       }
       138.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          TextSaveMsg.fromList(it)
+          TextFileMsg.fromList(it)
         }
       }
       139.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          RenameRuleMsg.fromList(it)
+          TextSaveMsg.fromList(it)
         }
       }
       140.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          RenamePreviewMsg.fromList(it)
+          RenameRuleMsg.fromList(it)
         }
       }
       141.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          FilterItemMsg.fromList(it)
+          RenamePreviewMsg.fromList(it)
         }
       }
       142.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          FolderSizeMsg.fromList(it)
+          FilterItemMsg.fromList(it)
         }
       }
       143.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          SpaceItemMsg.fromList(it)
+          FolderSizeMsg.fromList(it)
         }
       }
       144.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          SpaceReportMsg.fromList(it)
+          SpaceItemMsg.fromList(it)
         }
       }
       145.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          SearchResultMsg.fromList(it)
+          SpaceReportMsg.fromList(it)
         }
       }
       146.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          RemoteServerMsg.fromList(it)
+          SearchResultMsg.fromList(it)
         }
       }
       147.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
-          ViewPrefsMsg.fromList(it)
+          RemoteServerMsg.fromList(it)
         }
       }
       148.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
+          ViewPrefsMsg.fromList(it)
+        }
+      }
+      149.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
           FavoriteMsg.fromList(it)
         }
@@ -1574,64 +1645,68 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
         stream.write(133)
         writeValue(stream, value.toList())
       }
-      is TransferMsg -> {
+      is PlayerMsg -> {
         stream.write(134)
         writeValue(stream, value.toList())
       }
-      is TrashItemMsg -> {
+      is TransferMsg -> {
         stream.write(135)
         writeValue(stream, value.toList())
       }
-      is DetailsMsg -> {
+      is TrashItemMsg -> {
         stream.write(136)
         writeValue(stream, value.toList())
       }
-      is TextFileMsg -> {
+      is DetailsMsg -> {
         stream.write(137)
         writeValue(stream, value.toList())
       }
-      is TextSaveMsg -> {
+      is TextFileMsg -> {
         stream.write(138)
         writeValue(stream, value.toList())
       }
-      is RenameRuleMsg -> {
+      is TextSaveMsg -> {
         stream.write(139)
         writeValue(stream, value.toList())
       }
-      is RenamePreviewMsg -> {
+      is RenameRuleMsg -> {
         stream.write(140)
         writeValue(stream, value.toList())
       }
-      is FilterItemMsg -> {
+      is RenamePreviewMsg -> {
         stream.write(141)
         writeValue(stream, value.toList())
       }
-      is FolderSizeMsg -> {
+      is FilterItemMsg -> {
         stream.write(142)
         writeValue(stream, value.toList())
       }
-      is SpaceItemMsg -> {
+      is FolderSizeMsg -> {
         stream.write(143)
         writeValue(stream, value.toList())
       }
-      is SpaceReportMsg -> {
+      is SpaceItemMsg -> {
         stream.write(144)
         writeValue(stream, value.toList())
       }
-      is SearchResultMsg -> {
+      is SpaceReportMsg -> {
         stream.write(145)
         writeValue(stream, value.toList())
       }
-      is RemoteServerMsg -> {
+      is SearchResultMsg -> {
         stream.write(146)
         writeValue(stream, value.toList())
       }
-      is ViewPrefsMsg -> {
+      is RemoteServerMsg -> {
         stream.write(147)
         writeValue(stream, value.toList())
       }
-      is FavoriteMsg -> {
+      is ViewPrefsMsg -> {
         stream.write(148)
+        writeValue(stream, value.toList())
+      }
+      is FavoriteMsg -> {
+        stream.write(149)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1669,6 +1744,10 @@ interface FluLuksHostApi {
   fun openWith(sourceId: String, path: String, callback: (Result<Unit>) -> Unit)
   /** Lecteur vidéo de Portail (plein écran, sous-titres `.srt` à côté de la vidéo). */
   fun playVideo(sourceId: String, path: String, callback: (Result<Unit>) -> Unit)
+  /** Musique : file faite des sons de `paths` (le dossier dans l'ordre affiché), départ sur `paths[startIndex]`. */
+  fun playAudio(sourceId: String, paths: List<String>, startIndex: Long)
+  /** `play`, `pause`, `next`, `previous`, `back`, `forward`, `seek` (`positionMs`) ou `stop`. */
+  fun playerCommand(command: String, positionMs: Long?)
   fun share(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit)
   fun startTransfer(srcId: String, paths: List<String>, dstId: String, dstDir: String, move: Boolean)
   /** Compresse `paths` dans un ZIP `name` sous `dstDir` (même stockage) ; même créneau que les copies. */
@@ -2173,6 +2252,45 @@ interface FluLuksHostApi {
                 reply.reply(FluLuksApiPigeonUtils.wrapResult(null))
               }
             }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.playAudio$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathsArg = args[1] as List<String>
+            val startIndexArg = args[2] as Long
+            val wrapped: List<Any?> = try {
+              api.playAudio(sourceIdArg, pathsArg, startIndexArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.playerCommand$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val commandArg = args[0] as String
+            val positionMsArg = args[1] as Long?
+            val wrapped: List<Any?> = try {
+              api.playerCommand(commandArg, positionMsArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
           }
         } else {
           channel.setMessageHandler(null)
@@ -2936,6 +3054,24 @@ class FluLuksEventsApi(private val binaryMessenger: BinaryMessenger, private val
     val channelName = "dev.flutter.pigeon.fluluks.FluLuksEventsApi.onHashProgress$separatedMessageChannelSuffix"
     val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
     channel.send(listOf(pctArg)) {
+      if (it is List<*>) {
+        if (it.size > 1) {
+          callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))
+        } else {
+          callback(Result.success(Unit))
+        }
+      } else {
+        callback(Result.failure(FluLuksApiPigeonUtils.createConnectionError(channelName)))
+      } 
+    }
+  }
+  /** Musique en cours, ou null à l'arrêt ; `message` : raison d'un arrêt subi (« Lecture arrêtée : stockage fermé »). */
+  fun onPlayerChanged(playerArg: PlayerMsg?, messageArg: String?, callback: (Result<Unit>) -> Unit)
+{
+    val separatedMessageChannelSuffix = if (messageChannelSuffix.isNotEmpty()) ".$messageChannelSuffix" else ""
+    val channelName = "dev.flutter.pigeon.fluluks.FluLuksEventsApi.onPlayerChanged$separatedMessageChannelSuffix"
+    val channel = BasicMessageChannel<Any?>(binaryMessenger, channelName, codec)
+    channel.send(listOf(playerArg, messageArg)) {
       if (it is List<*>) {
         if (it.size > 1) {
           callback(Result.failure(FlutterError(it[0] as String, it[1] as String, it[2] as String?)))

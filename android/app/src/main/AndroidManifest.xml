@@ -3,6 +3,7 @@
     <uses-feature android:name="android.hardware.usb.host" android:required="false" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Gestionnaire de fichiers (phase 6) : accès à tout le stockage du téléphone et aux cartes SD. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
@@ -53,6 +54,15 @@
             android:screenOrientation="sensorLandscape"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
+        <!-- Lecture de la musique en arrière-plan (phase 10). -->
+        <service
+            android:name=".media.MusicService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaSessionService" />
+            </intent-filter>
+        </service>
         <service
             android:name=".service.VolumeService"
             android:exported="false"

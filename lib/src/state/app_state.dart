@@ -27,6 +27,8 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   TransferMsg? _transfer;
   int? _formatProgress;
   int? _hashProgress;
+  PlayerMsg? _player;
+  String? _playerMessage;
   ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false, builtInViewers: true);
   List<FavoriteMsg> _favorites = const [];
   ClipboardItems? _clipboard;
@@ -244,6 +246,30 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     _hashProgress = pct;
     notifyListeners();
   }
+
+  /// Musique en cours (phase 10), ou null.
+  PlayerMsg? get player => _player;
+
+  /// Raison du dernier arrêt subi de la musique, rendue une seule fois.
+  String? takePlayerMessage() {
+    final m = _playerMessage;
+    _playerMessage = null;
+    return m;
+  }
+
+  @override
+  void onPlayerChanged(PlayerMsg? player, String? message) {
+    _player = player;
+    if (message != null) _playerMessage = message;
+    notifyListeners();
+  }
+
+  /// Lit les sons de [paths] (le dossier dans l'ordre affiché), à partir de `paths[startIndex]`.
+  Future<void> playAudio(String sourceId, List<String> paths, int startIndex) =>
+      _guard(() => api.playAudio(sourceId, paths, startIndex));
+
+  /// `play`, `pause`, `next`, `previous`, `back`, `forward`, `seek` ([positionMs]) ou `stop`.
+  Future<void> playerCommand(String command, {int? positionMs}) => _guard(() => api.playerCommand(command, positionMs));
 
   @override
   void onTransferChanged(TransferMsg? transfer) {

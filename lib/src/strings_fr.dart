@@ -50,6 +50,14 @@ class Fr {
   static const deleteBody = 'La suppression est définitive.';
   static const deleteRemoteBody = "Pas de corbeille sur un dossier distant : la suppression est définitive.";
   static const unknownSpace = 'Espace inconnu';
+  static const nowPlaying = 'Lecture en cours';
+  static const play = 'Lecture';
+  static const pause = 'Pause';
+  static const nextTrack = 'Suivant';
+  static const previousTrack = 'Précédent';
+  static const back10 = 'Reculer de 10 s';
+  static const forward10 = 'Avancer de 10 s';
+  static const stopPlayback = 'Arrêter la lecture';
   static const copy = 'Copier';
   static const cut = 'Couper';
   static const pasteHere = 'Coller ici';
@@ -174,6 +182,16 @@ class Fr {
 
   static String freeOf(int free, int total) => '${humanSize(free)} libres sur ${humanSize(total)}';
   static String deleteOne(String name) => 'Supprimer « $name » ?';
+  static String trackOf(int i, int n) => 'Morceau $i sur $n';
+
+  /// Durée « m:ss » ou « h:mm:ss » ; « --:-- » si inconnue.
+  static String clock(int ms) {
+    if (ms < 0) return '--:--';
+    final s = ms ~/ 1000;
+    final ss = (s % 60).toString().padLeft(2, '0');
+    if (s < 3600) return '${s ~/ 60}:$ss';
+    return '${s ~/ 3600}:${(s ~/ 60 % 60).toString().padLeft(2, '0')}:$ss';
+  }
   static String deleteMany(int n) => 'Supprimer $n éléments ?';
   static String clipboard(int n, bool move) => '$n élément(s) ${move ? 'à déplacer' : 'à copier'}';
   static String selected(int n) => '$n sélectionné(s)';

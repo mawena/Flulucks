@@ -32,6 +32,8 @@ import com.mawena.fluluks.files.Trash
 import com.mawena.fluluks.files.Transfers
 import com.mawena.fluluks.files.ViewPrefs
 import com.mawena.fluluks.files.ViewSettings
+import com.mawena.fluluks.media.AndroidMusic
+import com.mawena.fluluks.media.Music
 import com.mawena.fluluks.media.VideoActivity
 import com.mawena.fluluks.remote.AuthFailed
 import com.mawena.fluluks.remote.HostKeyChanged
@@ -73,9 +75,19 @@ class HostApiImpl(
     /** À appeler une fois : enregistre l'API hôte et pousse chaque changement d'état vers Flutter. */
     fun attach(messenger: BinaryMessenger) {
         FluLuksHostApi.setUp(messenger, this)
+        if (Music.backend == null) Music.backend = AndroidMusic(context)
         scope.launch {
             combine(VolumeManager.disks, VolumeManager.volumes) { d, v -> toMsgs(d, v) }
-                .collect { (d, v) -> events.onStateChanged(d, v) { /* réponse ignorée */ } }
+                .collect { (d, v) ->
+                    Music.checkSources() // musique d'un volume éjecté ou arraché : arrêtée
+                    events.onStateChanged(d, v) { /* réponse ignorée */ }
+                }
+        }
+        scope.launch {
+            Music.state.collect { (p, message) ->
+                val msg = p?.let { PlayerMsg(it.sourceId, it.title, it.index.toLong(), it.count.toLong(), it.playing, it.positionMs, it.durationMs) }
+                events.onPlayerChanged(msg, message) { /* réponse ignorée */ }
+            }
         }
         scope.launch {
             combine(VolumeManager.ejecting, VolumeManager.ejectError) { e, err -> e to err }
@@ -112,6 +124,7 @@ class HostApiImpl(
     private val storageCallback: Any? = if (Build.VERSION.SDK_INT >= 30) {
         object : StorageManager.StorageVolumeCallback() {
             override fun onStateChanged(volume: StorageVolume) {
+                Music.checkSources() // carte SD retirée
                 val (d, v) = toMsgs(VolumeManager.disks.value, VolumeManager.volumes.value)
                 events.onStateChanged(d, v) { /* réponse ignorée */ }
             }
@@ -290,7 +303,10 @@ class HostApiImpl(
             }
         }
 
-    override fun disconnectServer(serverId: String) = guardedValue { Remotes.disconnect(serverId) }
+    override fun disconnectServer(serverId: String) = guardedValue {
+        Remotes.disconnect(serverId)
+        Music.checkSources()
+    }
 
     override fun trustHostKey(serverId: String, fingerprint: String) = guardedValue { Remotes.trustHostKey(serverId, fingerprint) }
 
@@ -347,6 +363,12 @@ class HostApiImpl(
             Files.guard("openDocument") { Files.source(sourceId).stat(path) ?: throw java.io.FileNotFoundException("Document introuvable") }
             VideoActivity.intent(context, sourceId, path)
         }
+
+    override fun playAudio(sourceId: String, paths: List<String>, startIndex: Long) = guarded {
+        Files.guard("openDocument") { Music.play(sourceId, paths, startIndex.toInt()) }
+    }
+
+    override fun playerCommand(command: String, positionMs: Long?) = guarded { Music.command(command, positionMs) }
 
     override fun share(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit) =
         startPrepared(callback) { Files.shareIntent(sourceId, paths) }

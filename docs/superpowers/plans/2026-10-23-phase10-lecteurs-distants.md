@@ -344,15 +344,15 @@ path)`), `viewers.dart`.
 `FOREGROUND_SERVICE_MEDIA_PLAYBACK`), Pigeon (`playAudio(sourceId, paths, startIndex)`, `playerCommand(command,
 positionMs?)`, événement `onPlayerChanged(PlayerMsg?)`), `app_state.dart`, `home_screen.dart`, `explorer_screen.dart`.
 
-- [ ] **Step 1 : tests** : `MusicTest` : `queueFromFolder` (fichiers audio seulement, ordre affiché, départ sur le
+- [x] **Step 1 : tests** : `MusicTest` : `queueFromFolder` (fichiers audio seulement, ordre affiché, départ sur le
   fichier touché) ; `stopsWhenSourceGone` (source retirée → arrêt, file vidée, message « Lecture arrêtée : stockage
   fermé ») ; Flutter : barre réduite (titre, lecture/pause), écran « Lecture en cours » (position, durée, précédent,
   suivant, curseur), disparition à l'arrêt.
-- [ ] **Step 2 :** tests → FAIL.
-- [ ] **Step 3 :** implémenter : ExoPlayer avec focus audio et pause au débranchement des écouteurs, notification
+- [x] **Step 2 :** tests → FAIL.
+- [x] **Step 3 :** implémenter : ExoPlayer avec focus audio et pause au débranchement des écouteurs, notification
   Media3 par défaut, `MediaController` côté pont, position publiée toutes les 500 ms.
-- [ ] **Step 4 :** tests verts ; suites vertes.
-- [ ] **Step 5 :** commit `feat(lecteurs): lecteur de musique en arrière-plan`.
+- [x] **Step 4 :** tests verts ; suites vertes.
+- [x] **Step 5 :** commit `feat(lecteurs): lecteur de musique en arrière-plan`.
 
 ### Task 11 : essais instrumentés sur le Pixel
 

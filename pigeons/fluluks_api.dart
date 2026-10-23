@@ -113,6 +113,27 @@ class EntryMsg {
   int mtime;
 }
 
+/// Musique en cours (phase 10) : morceau `index` sur `count` de la file ; positions en millisecondes (durée −1 :
+/// inconnue).
+class PlayerMsg {
+  PlayerMsg({
+    required this.sourceId,
+    required this.title,
+    required this.index,
+    required this.count,
+    required this.playing,
+    required this.positionMs,
+    required this.durationMs,
+  });
+  String sourceId;
+  String title;
+  int index;
+  int count;
+  bool playing;
+  int positionMs;
+  int durationMs;
+}
+
 /// Avancement d'une copie ou d'un déplacement ; `error` peut accompagner `finished`.
 class TransferMsg {
   TransferMsg({
@@ -409,6 +430,12 @@ abstract class FluLuksHostApi {
   /// Lecteur vidéo de Portail (plein écran, sous-titres `.srt` à côté de la vidéo).
   @async
   void playVideo(String sourceId, String path);
+
+  /// Musique : file faite des sons de `paths` (le dossier dans l'ordre affiché), départ sur `paths[startIndex]`.
+  void playAudio(String sourceId, List<String> paths, int startIndex);
+
+  /// `play`, `pause`, `next`, `previous`, `back`, `forward`, `seek` (`positionMs`) ou `stop`.
+  void playerCommand(String command, int? positionMs);
   @async
   void share(String sourceId, List<String> paths);
   void startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
@@ -509,4 +536,7 @@ abstract class FluLuksEventsApi {
 
   /// Pourcentage du calcul d'empreinte en cours ; null à la fin.
   void onHashProgress(int? pct);
+
+  /// Musique en cours, ou null à l'arrêt ; `message` : raison d'un arrêt subi (« Lecture arrêtée : stockage fermé »).
+  void onPlayerChanged(PlayerMsg? player, String? message);
 }

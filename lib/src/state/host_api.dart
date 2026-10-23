@@ -28,6 +28,8 @@ abstract class HostApi {
   Future<void> emptyTrash(String sourceId);
   Future<void> openWith(String sourceId, String path);
   Future<void> playVideo(String sourceId, String path);
+  Future<void> playAudio(String sourceId, List<String> paths, int startIndex);
+  Future<void> playerCommand(String command, int? positionMs);
   Future<void> share(String sourceId, List<String> paths);
   Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
   Future<void> startCompress(String srcId, List<String> paths, String dstDir, String name);
@@ -123,6 +125,11 @@ class PigeonHostApi implements HostApi {
   Future<void> openWith(String sourceId, String path) => _api.openWith(sourceId, path);
   @override
   Future<void> playVideo(String sourceId, String path) => _api.playVideo(sourceId, path);
+  @override
+  Future<void> playAudio(String sourceId, List<String> paths, int startIndex) =>
+      _api.playAudio(sourceId, paths, startIndex);
+  @override
+  Future<void> playerCommand(String command, int? positionMs) => _api.playerCommand(command, positionMs);
   @override
   Future<void> share(String sourceId, List<String> paths) => _api.share(sourceId, paths);
   @override
