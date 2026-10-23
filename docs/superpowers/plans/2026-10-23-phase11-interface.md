@@ -779,7 +779,7 @@ touché : l'application tourne sur le faux pont.
 **Files :** Create `docs/superpowers/research/<AAAA-MM-JJ>-essais-phase11/essais.md`.
 
 - [ ] Construire et installer l'APK release sur le Pixel **avant** de demander l'essai.
-- [ ] Fiche d'essais, une ligne par point, avec une case « Réussi / Remarque » :
+- [x] Fiche d'essais, une ligne par point, avec une case « Réussi / Remarque » :
   - premier lancement (bienvenue, accès refusé puis accordé) ;
   - thème Système, Clair et Sombre, et démarrage en mode sombre (aucun éclair blanc) ;
   - accueil avec le vrai disque : déverrouiller avec « afficher la phrase » ; puces d'état ; éjecter ;

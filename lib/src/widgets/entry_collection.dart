@@ -62,6 +62,7 @@ class EntrySliver extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (items.isEmpty) return const SliverToBoxAdapter(child: SizedBox.shrink());
     if (grid) {
       return SliverPadding(
         padding: const EdgeInsets.all(Space.s),
@@ -82,22 +83,23 @@ class EntrySliver extends StatelessWidget {
         ),
       );
     }
-    // liste bornée à 840 dp et centrée sur un grand écran
-    return SliverLayoutBuilder(builder: (context, c) {
-      final side = math.max(0.0, (c.crossAxisExtent - Layout.maxList) / 2);
-      return SliverPadding(
-        padding: EdgeInsets.symmetric(horizontal: side),
-        sliver: SliverList.builder(
-          itemCount: items.length,
-          itemBuilder: (_, i) => _ListTile(
-            key: ValueKey(items[i].key),
-            parent: this,
-            item: items[i],
-            selected: _sel(items[i]),
-          ),
+    // liste bornée à 840 dp et centrée sur un grand écran ; la largeur de l'écran, et non un SliverLayoutBuilder,
+    // dont le constructeur serait rappelé à chaque image du défilement (toutes les lignes visibles reconstruites)
+    final side = math.max(0.0, (MediaQuery.sizeOf(context).width - Layout.maxList) / 2);
+    return SliverPadding(
+      padding: EdgeInsets.symmetric(horizontal: side),
+      // lignes de même hauteur : mesurées une fois, sur la première
+      sliver: SliverPrototypeExtentList.builder(
+        prototypeItem: _ListTile(parent: this, item: items.first, selected: false),
+        itemCount: items.length,
+        itemBuilder: (_, i) => _ListTile(
+          key: ValueKey(items[i].key),
+          parent: this,
+          item: items[i],
+          selected: _sel(items[i]),
         ),
-      );
-    });
+      ),
+    );
   }
 }
 
@@ -112,15 +114,18 @@ class _ListTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final e = item.entry;
     final more = parent.onMore;
-    final Widget? trailing = selected
-        ? Icon(Icons.check_circle_rounded, key: const ValueKey('check'), color: Theme.of(context).colorScheme.primary)
-        : more == null
+    // hors sélection, le bouton ⋮ seul : pas d'AnimatedSwitcher par ligne pendant un défilement rapide
+    final Widget? trailing = more != null && !selected
+        ? IconButton(tooltip: Fr.actionsOf(e.name), icon: const Icon(Icons.more_vert_rounded), onPressed: () => more(item))
+        : parent.isSelected == null
             ? null
-            : IconButton(
-                key: const ValueKey('more'),
-                tooltip: Fr.actionsOf(e.name),
-                icon: const Icon(Icons.more_vert_rounded),
-                onPressed: () => more(item),
+            : AnimatedSwitcher(
+                duration: Motion.of(context, Motion.short),
+                transitionBuilder: (child, a) => ScaleTransition(scale: a, child: child),
+                child: selected
+                    ? Icon(Icons.check_circle_rounded,
+                        key: const ValueKey('check'), color: Theme.of(context).colorScheme.primary)
+                    : const SizedBox.shrink(),
               );
     // retour haptique de la sélection donné par l'écran (selectionClick), pas celui de l'appui long du système
     return ListTile(
@@ -129,11 +134,7 @@ class _ListTile extends StatelessWidget {
       leading: EntryThumb(state: parent.state, cache: parent.thumbs, sourceId: item.sourceId, entry: e),
       title: Text(e.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text(item.subtitle ?? entrySubtitle(e), maxLines: 1, overflow: TextOverflow.ellipsis),
-      trailing: AnimatedSwitcher(
-        duration: Motion.of(context, Motion.short),
-        transitionBuilder: (child, a) => ScaleTransition(scale: a, child: child),
-        child: trailing ?? const SizedBox.shrink(),
-      ),
+      trailing: trailing,
       onTap: () => parent.onTap(item),
       onLongPress: parent.onLongPress == null ? null : () => parent.onLongPress!(item),
     );

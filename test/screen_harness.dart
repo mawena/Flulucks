@@ -34,15 +34,19 @@ late AppState harnessState;
 
 /// Affiche [screen] (une valeur de [screens]) sur les données de démonstration, comme dans l'application (racine
 /// `PortailRoot` : taille du texte bornée à 200 %), en [brightness], à [size] dp et à l'échelle de texte [textScale].
+/// [deviceView] : l'écran réel de l'appareil est gardé (captures sur le Pixel), [size] est ignorée.
 Future<void> pumpScreen(
   WidgetTester t,
   String screen, {
   Brightness brightness = Brightness.light,
   Size size = const Size(412, 869),
   double textScale = 1.0,
+  bool deviceView = false,
 }) async {
-  t.view.physicalSize = size;
-  t.view.devicePixelRatio = 1.0;
+  if (!deviceView) {
+    t.view.physicalSize = size;
+    t.view.devicePixelRatio = 1.0;
+  }
   t.platformDispatcher.platformBrightnessTestValue = brightness;
   t.platformDispatcher.textScaleFactorTestValue = textScale;
   addTearDown(() {
