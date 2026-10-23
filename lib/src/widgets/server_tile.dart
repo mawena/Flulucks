@@ -8,6 +8,7 @@ import '../screens/explorer_screen.dart';
 import '../screens/server_form_screen.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/feedback.dart';
 import '../ui/tokens.dart';
 
 /// Serveur distant enregistré (accueil) : toucher connecte puis ouvre son dossier de départ ; Déconnecter si la
@@ -84,7 +85,7 @@ Future<void> connectAndOpen(BuildContext context, AppState state, RemoteServerMs
           ),
         );
       default:
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? Fr.genericError)));
+        showMessage(context, e.message ?? Fr.genericError, kind: MessageKind.error);
     }
   }
 }

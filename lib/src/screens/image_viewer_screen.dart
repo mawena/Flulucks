@@ -6,6 +6,7 @@ import 'package:flutter/services.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/feedback.dart';
 import '../ui/tokens.dart';
 import '../widgets/properties_sheet.dart';
 
@@ -70,7 +71,7 @@ class _ImageViewerScreenState extends State<ImageViewerScreen> {
     try {
       await action();
     } on PlatformException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? Fr.genericError)));
+      if (mounted) showMessage(context, e.message ?? Fr.genericError, kind: MessageKind.error);
     }
   }
 
