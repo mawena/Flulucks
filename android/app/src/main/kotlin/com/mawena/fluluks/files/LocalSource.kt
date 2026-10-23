@@ -24,7 +24,7 @@ class LocalSource(
     override val id: String,
     override val stableKey: String,
     override val label: String,
-    private val root: File,
+    internal val root: File,
     private val hasAccess: () -> Boolean,
 ) : FileSource {
     override val readOnlyReason: String?
@@ -187,6 +187,23 @@ class LocalSource(
             throw FileNotFoundException("Écriture impossible dans ce dossier")
         }
         return DocumentIds.child(PathRules.require(parent), n) to out
+    }
+
+    override fun openNative(path: String): NativeIn {
+        val f = file(path)
+        if (!f.isFile) throw FileNotFoundException("Ce n'est pas un fichier ordinaire")
+        if (!f.canRead()) throw FileNotFoundException("Fichier illisible")
+        return NativeIn.Fd(f)
+    }
+
+    override fun createNative(parent: String, name: String): Pair<String, NativeOut> {
+        requireWritable()
+        val d = requireDir(parent)
+        val n = unique(d, requireName(name))
+        val f = File(d, n)
+        val ok = try { f.createNewFile() } catch (e: java.io.IOException) { false }
+        if (!ok) throw FileNotFoundException("Écriture impossible dans ce dossier")
+        return DocumentIds.child(PathRules.require(parent), n) to NativeOut.Fd(f)
     }
 
     override fun contentUri(path: String): Uri {

@@ -4,7 +4,7 @@
 /* Moteur à poignées du pont JNI (sans jni.h : compilé aussi dans les tests PC).
  *
  * Poignées : entiers 64 bits > 0, (génération << 16) | indice, dans une table de FJ_MAX entrées typées
- * (disque, volume, fichier). Une poignée périmée, inconnue, négative ou d'un autre type → FL_EINVAL,
+ * (disque, volume, fichier, archive). Une poignée périmée, inconnue, négative ou d'un autre type → FL_EINVAL,
  * sans jamais déréférencer l'objet. Toute valeur < 0 renvoyée est un code fl_err.
  *
  * Fils d'exécution : tout est sûr entre fils. La table est protégée par un mutex, jamais tenu pendant
@@ -57,6 +57,7 @@ int64_t fj_mount(int64_t disk, uint32_t part_index, const void *pass, size_t pas
 int fj_unmount(int64_t vol, bool force);
 
 int fj_statfs(int64_t vol, fl_json *out);
+/* {"name", "type", "size", "mtime", "mode", "uid", "gid"} ; fj_list rend les mêmes objets. */
 int fj_stat(int64_t vol, const char *path, fl_json *out);
 /* Tableau trié par nom (ordre des octets). */
 int fj_list(int64_t vol, const char *path, fl_json *out);
@@ -84,6 +85,28 @@ int fj_sync(int64_t vol);
  * croissant, depuis ce fil. */
 int fj_format(int64_t disk, const char *json, const void *pass, size_t passlen, void (*progress)(int pct, void *arg),
               void *arg);
+
+/* Archives (phase 9). Une poignée d'archive lit (fj_arc_*) ou écrit un ZIP (fj_arcw_*) sur un descripteur, ou
+ * sur un fichier du moteur ouvert par fj_open_file. La source appartient à la poignée dès l'appel, même en
+ * cas d'échec : le descripteur est fermé, le fichier aussi (synchronisé) par la fermeture de l'archive.
+ * Une archive sur un fichier est fermée sans commit avec lui (fj_close_file, démontage, fj_close_disk). */
+/* size : taille du fichier (fj_stat). FL_ENOTSUP : pas une archive reconnue. */
+int64_t fj_arc_open_fd(int fd);
+int64_t fj_arc_open_file(int64_t file, int64_t size);
+/* 1 : entrée suivante dans *out, {"name": base64 des octets bruts du nom, "type": "f"|"d"|"l"|"h"|"o",
+ * "size": octets (-1 inconnue), "mtime", "encrypted", "raw": flux compressé seul (.gz, .xz) dont le nom n'est
+ * pas celui du fichier} ; 0 : fin de l'archive ; < 0 : fl_err. */
+int fj_arc_next(int64_t arc, fl_json *out);
+/* Données de l'entrée courante : octets lus (<= FJ_PREAD_MAX), 0 à la fin de l'entrée, ou fl_err. */
+int64_t fj_arc_read(int64_t arc, void *buf, size_t len);
+int fj_arc_close(int64_t arc);
+int64_t fj_arcw_open_fd(int fd);
+int64_t fj_arcw_open_file(int64_t file);
+/* json : {"name": chemin UTF-8 relatif, "type": "f"|"d", "size", "mtime", "store": stockage sans compression}. */
+int fj_arcw_add(int64_t arc, const char *json);
+int fj_arcw_write(int64_t arc, const void *buf, size_t len);
+/* commit : termine le ZIP ; sinon abandon. Ferme la destination dans les deux cas. */
+int fj_arcw_close(int64_t arc, bool commit);
 
 /* Références et état « en fermeture » d'une entrée (tests) ; FL_EINVAL si la poignée est invalide. */
 int fj_debug_slot(int64_t h, unsigned *refs, bool *closing);

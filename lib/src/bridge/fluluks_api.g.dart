@@ -508,6 +508,7 @@ class TransferMsg {
     required this.cancelled,
     this.error,
     required this.elapsedMs,
+    required this.kind,
   });
 
   bool move;
@@ -531,6 +532,9 @@ class TransferMsg {
   /// Durée de l'opération en millisecondes (débit affiché à la fin).
   int elapsedMs;
 
+  /// `copy`, `move`, `compress` ou `extract`.
+  String kind;
+
   List<Object?> _toList() {
     return <Object?>[
       move,
@@ -543,6 +547,7 @@ class TransferMsg {
       cancelled,
       error,
       elapsedMs,
+      kind,
     ];
   }
 
@@ -562,6 +567,7 @@ class TransferMsg {
       cancelled: result[7]! as bool,
       error: result[8] as String?,
       elapsedMs: result[9]! as int,
+      kind: result[10]! as String,
     );
   }
 
@@ -574,7 +580,7 @@ class TransferMsg {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(move, other.move) && _deepEquals(currentName, other.currentName) && _deepEquals(fileIndex, other.fileIndex) && _deepEquals(fileCount, other.fileCount) && _deepEquals(doneBytes, other.doneBytes) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(finished, other.finished) && _deepEquals(cancelled, other.cancelled) && _deepEquals(error, other.error) && _deepEquals(elapsedMs, other.elapsedMs);
+    return _deepEquals(move, other.move) && _deepEquals(currentName, other.currentName) && _deepEquals(fileIndex, other.fileIndex) && _deepEquals(fileCount, other.fileCount) && _deepEquals(doneBytes, other.doneBytes) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(finished, other.finished) && _deepEquals(cancelled, other.cancelled) && _deepEquals(error, other.error) && _deepEquals(elapsedMs, other.elapsedMs) && _deepEquals(kind, other.kind);
   }
 
   @override
@@ -583,7 +589,574 @@ class TransferMsg {
 
   @override
   String toString() {
-    return 'TransferMsg(move: $move, currentName: $currentName, fileIndex: $fileIndex, fileCount: $fileCount, doneBytes: $doneBytes, totalBytes: $totalBytes, finished: $finished, cancelled: $cancelled, error: $error, elapsedMs: $elapsedMs)';
+    return 'TransferMsg(move: $move, currentName: $currentName, fileIndex: $fileIndex, fileCount: $fileCount, doneBytes: $doneBytes, totalBytes: $totalBytes, finished: $finished, cancelled: $cancelled, error: $error, elapsedMs: $elapsedMs, kind: $kind)';
+  }
+}
+
+/// Élément de la corbeille d'un stockage : `id` est son nom dans la corbeille, `name` et `originalPath` disent
+/// d'où il vient ; `deletedAt` en millisecondes (0 si inconnue).
+class TrashItemMsg {
+  TrashItemMsg({
+    required this.id,
+    required this.name,
+    required this.originalPath,
+    required this.deletedAt,
+    required this.size,
+    required this.isDir,
+  });
+
+  String id;
+
+  String name;
+
+  String originalPath;
+
+  int deletedAt;
+
+  int size;
+
+  bool isDir;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      id,
+      name,
+      originalPath,
+      deletedAt,
+      size,
+      isDir,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static TrashItemMsg decode(Object result) {
+    result as List<Object?>;
+    return TrashItemMsg(
+      id: result[0]! as String,
+      name: result[1]! as String,
+      originalPath: result[2]! as String,
+      deletedAt: result[3]! as int,
+      size: result[4]! as int,
+      isDir: result[5]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! TrashItemMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(id, other.id) && _deepEquals(name, other.name) && _deepEquals(originalPath, other.originalPath) && _deepEquals(deletedAt, other.deletedAt) && _deepEquals(size, other.size) && _deepEquals(isDir, other.isDir);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'TrashItemMsg(id: $id, name: $name, originalPath: $originalPath, deletedAt: $deletedAt, size: $size, isDir: $isDir)';
+  }
+}
+
+/// Propriétés d'un élément ; `mode`, `uid`, `gid` et `permissions` (« rwxr-xr-x ») sur ext4 seulement ; `fs` :
+/// système de fichiers d'un volume de disque, vide pour le téléphone.
+class DetailsMsg {
+  DetailsMsg({
+    required this.name,
+    required this.path,
+    required this.type,
+    required this.size,
+    required this.mtime,
+    this.mode,
+    this.uid,
+    this.gid,
+    this.permissions,
+    required this.fs,
+  });
+
+  String name;
+
+  String path;
+
+  String type;
+
+  int size;
+
+  int mtime;
+
+  int? mode;
+
+  int? uid;
+
+  int? gid;
+
+  String? permissions;
+
+  String fs;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      name,
+      path,
+      type,
+      size,
+      mtime,
+      mode,
+      uid,
+      gid,
+      permissions,
+      fs,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static DetailsMsg decode(Object result) {
+    result as List<Object?>;
+    return DetailsMsg(
+      name: result[0]! as String,
+      path: result[1]! as String,
+      type: result[2]! as String,
+      size: result[3]! as int,
+      mtime: result[4]! as int,
+      mode: result[5] as int?,
+      uid: result[6] as int?,
+      gid: result[7] as int?,
+      permissions: result[8] as String?,
+      fs: result[9]! as String,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! DetailsMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(name, other.name) && _deepEquals(path, other.path) && _deepEquals(type, other.type) && _deepEquals(size, other.size) && _deepEquals(mtime, other.mtime) && _deepEquals(mode, other.mode) && _deepEquals(uid, other.uid) && _deepEquals(gid, other.gid) && _deepEquals(permissions, other.permissions) && _deepEquals(fs, other.fs);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'DetailsMsg(name: $name, path: $path, type: $type, size: $size, mtime: $mtime, mode: $mode, uid: $uid, gid: $gid, permissions: $permissions, fs: $fs)';
+  }
+}
+
+/// Règle de renommage par lot : `mode` `number` (`base`, `start`), `replace` (`find`, `replace`, `caseSensitive`)
+/// ou `photoDate`.
+class RenameRuleMsg {
+  RenameRuleMsg({
+    required this.mode,
+    required this.base,
+    required this.start,
+    required this.find,
+    required this.replace,
+    required this.caseSensitive,
+  });
+
+  String mode;
+
+  String base;
+
+  int start;
+
+  String find;
+
+  String replace;
+
+  bool caseSensitive;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      mode,
+      base,
+      start,
+      find,
+      replace,
+      caseSensitive,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static RenameRuleMsg decode(Object result) {
+    result as List<Object?>;
+    return RenameRuleMsg(
+      mode: result[0]! as String,
+      base: result[1]! as String,
+      start: result[2]! as int,
+      find: result[3]! as String,
+      replace: result[4]! as String,
+      caseSensitive: result[5]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! RenameRuleMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(mode, other.mode) && _deepEquals(base, other.base) && _deepEquals(start, other.start) && _deepEquals(find, other.find) && _deepEquals(replace, other.replace) && _deepEquals(caseSensitive, other.caseSensitive);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'RenameRuleMsg(mode: $mode, base: $base, start: $start, find: $find, replace: $replace, caseSensitive: $caseSensitive)';
+  }
+}
+
+/// Nouveau nom d'un élément du lot ; `conflict` : raison du refus (null si permis).
+class RenamePreviewMsg {
+  RenamePreviewMsg({
+    required this.path,
+    required this.newName,
+    this.conflict,
+  });
+
+  String path;
+
+  String newName;
+
+  String? conflict;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      path,
+      newName,
+      conflict,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static RenamePreviewMsg decode(Object result) {
+    result as List<Object?>;
+    return RenamePreviewMsg(
+      path: result[0]! as String,
+      newName: result[1]! as String,
+      conflict: result[2] as String?,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! RenamePreviewMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(path, other.path) && _deepEquals(newName, other.newName) && _deepEquals(conflict, other.conflict);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'RenamePreviewMsg(path: $path, newName: $newName, conflict: $conflict)';
+  }
+}
+
+/// Fichier d'un filtre rapide de l'accueil : stockage (téléphone, carte SD) et chemin dans ce stockage.
+class FilterItemMsg {
+  FilterItemMsg({
+    required this.sourceId,
+    required this.path,
+    required this.name,
+    required this.size,
+    required this.mtime,
+  });
+
+  String sourceId;
+
+  String path;
+
+  String name;
+
+  int size;
+
+  int mtime;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      sourceId,
+      path,
+      name,
+      size,
+      mtime,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static FilterItemMsg decode(Object result) {
+    result as List<Object?>;
+    return FilterItemMsg(
+      sourceId: result[0]! as String,
+      path: result[1]! as String,
+      name: result[2]! as String,
+      size: result[3]! as int,
+      mtime: result[4]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! FilterItemMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(sourceId, other.sourceId) && _deepEquals(path, other.path) && _deepEquals(name, other.name) && _deepEquals(size, other.size) && _deepEquals(mtime, other.mtime);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'FilterItemMsg(sourceId: $sourceId, path: $path, name: $name, size: $size, mtime: $mtime)';
+  }
+}
+
+/// Taille d'un dossier et de son contenu ; `truncated` si le calcul s'est arrêté avant la fin.
+class FolderSizeMsg {
+  FolderSizeMsg({
+    required this.size,
+    required this.files,
+    required this.dirs,
+    required this.truncated,
+  });
+
+  int size;
+
+  int files;
+
+  int dirs;
+
+  bool truncated;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      size,
+      files,
+      dirs,
+      truncated,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static FolderSizeMsg decode(Object result) {
+    result as List<Object?>;
+    return FolderSizeMsg(
+      size: result[0]! as int,
+      files: result[1]! as int,
+      dirs: result[2]! as int,
+      truncated: result[3]! as bool,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! FolderSizeMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(size, other.size) && _deepEquals(files, other.files) && _deepEquals(dirs, other.dirs) && _deepEquals(truncated, other.truncated);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'FolderSizeMsg(size: $size, files: $files, dirs: $dirs, truncated: $truncated)';
+  }
+}
+
+/// Élément d'un dossier analysé (taille totale pour un dossier).
+class SpaceItemMsg {
+  SpaceItemMsg({
+    required this.name,
+    required this.path,
+    required this.isDir,
+    required this.size,
+    required this.fileCount,
+  });
+
+  String name;
+
+  String path;
+
+  bool isDir;
+
+  int size;
+
+  int fileCount;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      name,
+      path,
+      isDir,
+      size,
+      fileCount,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static SpaceItemMsg decode(Object result) {
+    result as List<Object?>;
+    return SpaceItemMsg(
+      name: result[0]! as String,
+      path: result[1]! as String,
+      isDir: result[2]! as bool,
+      size: result[3]! as int,
+      fileCount: result[4]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! SpaceItemMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(name, other.name) && _deepEquals(path, other.path) && _deepEquals(isDir, other.isDir) && _deepEquals(size, other.size) && _deepEquals(fileCount, other.fileCount);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'SpaceItemMsg(name: $name, path: $path, isDir: $isDir, size: $size, fileCount: $fileCount)';
+  }
+}
+
+/// Occupation d'un dossier : enfants du plus gros au plus petit (200 au plus, le reste résumé par `otherCount` et
+/// `otherBytes`), plus gros fichiers sous lui ; `truncated` si l'analyse s'est arrêtée avant la fin.
+class SpaceReportMsg {
+  SpaceReportMsg({
+    required this.path,
+    required this.totalBytes,
+    required this.fileCount,
+    required this.children,
+    required this.biggest,
+    required this.truncated,
+    required this.otherCount,
+    required this.otherBytes,
+  });
+
+  String path;
+
+  int totalBytes;
+
+  int fileCount;
+
+  List<SpaceItemMsg> children;
+
+  List<EntryMsg> biggest;
+
+  bool truncated;
+
+  int otherCount;
+
+  int otherBytes;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      path,
+      totalBytes,
+      fileCount,
+      children,
+      biggest,
+      truncated,
+      otherCount,
+      otherBytes,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static SpaceReportMsg decode(Object result) {
+    result as List<Object?>;
+    return SpaceReportMsg(
+      path: result[0]! as String,
+      totalBytes: result[1]! as int,
+      fileCount: result[2]! as int,
+      children: (result[3]! as List<Object?>).cast<SpaceItemMsg>(),
+      biggest: (result[4]! as List<Object?>).cast<EntryMsg>(),
+      truncated: result[5]! as bool,
+      otherCount: result[6]! as int,
+      otherBytes: result[7]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! SpaceReportMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(path, other.path) && _deepEquals(totalBytes, other.totalBytes) && _deepEquals(fileCount, other.fileCount) && _deepEquals(children, other.children) && _deepEquals(biggest, other.biggest) && _deepEquals(truncated, other.truncated) && _deepEquals(otherCount, other.otherCount) && _deepEquals(otherBytes, other.otherBytes);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'SpaceReportMsg(path: $path, totalBytes: $totalBytes, fileCount: $fileCount, children: $children, biggest: $biggest, truncated: $truncated, otherCount: $otherCount, otherBytes: $otherBytes)';
   }
 }
 
@@ -786,14 +1359,38 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is TransferMsg) {
       buffer.putUint8(134);
       writeValue(buffer, value.encode());
-    }    else if (value is SearchResultMsg) {
+    }    else if (value is TrashItemMsg) {
       buffer.putUint8(135);
       writeValue(buffer, value.encode());
-    }    else if (value is ViewPrefsMsg) {
+    }    else if (value is DetailsMsg) {
       buffer.putUint8(136);
       writeValue(buffer, value.encode());
-    }    else if (value is FavoriteMsg) {
+    }    else if (value is RenameRuleMsg) {
       buffer.putUint8(137);
+      writeValue(buffer, value.encode());
+    }    else if (value is RenamePreviewMsg) {
+      buffer.putUint8(138);
+      writeValue(buffer, value.encode());
+    }    else if (value is FilterItemMsg) {
+      buffer.putUint8(139);
+      writeValue(buffer, value.encode());
+    }    else if (value is FolderSizeMsg) {
+      buffer.putUint8(140);
+      writeValue(buffer, value.encode());
+    }    else if (value is SpaceItemMsg) {
+      buffer.putUint8(141);
+      writeValue(buffer, value.encode());
+    }    else if (value is SpaceReportMsg) {
+      buffer.putUint8(142);
+      writeValue(buffer, value.encode());
+    }    else if (value is SearchResultMsg) {
+      buffer.putUint8(143);
+      writeValue(buffer, value.encode());
+    }    else if (value is ViewPrefsMsg) {
+      buffer.putUint8(144);
+      writeValue(buffer, value.encode());
+    }    else if (value is FavoriteMsg) {
+      buffer.putUint8(145);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -816,10 +1413,26 @@ class _PigeonCodec extends StandardMessageCodec {
       case 134:
         return TransferMsg.decode(readValue(buffer)!);
       case 135:
-        return SearchResultMsg.decode(readValue(buffer)!);
+        return TrashItemMsg.decode(readValue(buffer)!);
       case 136:
-        return ViewPrefsMsg.decode(readValue(buffer)!);
+        return DetailsMsg.decode(readValue(buffer)!);
       case 137:
+        return RenameRuleMsg.decode(readValue(buffer)!);
+      case 138:
+        return RenamePreviewMsg.decode(readValue(buffer)!);
+      case 139:
+        return FilterItemMsg.decode(readValue(buffer)!);
+      case 140:
+        return FolderSizeMsg.decode(readValue(buffer)!);
+      case 141:
+        return SpaceItemMsg.decode(readValue(buffer)!);
+      case 142:
+        return SpaceReportMsg.decode(readValue(buffer)!);
+      case 143:
+        return SearchResultMsg.decode(readValue(buffer)!);
+      case 144:
+        return ViewPrefsMsg.decode(readValue(buffer)!);
+      case 145:
         return FavoriteMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -1158,14 +1771,88 @@ class FluLuksHostApi {
     return pigeonVar_replyValue! as String;
   }
 
-  Future<void> deleteEntries(String sourceId, List<String> paths) async {
+  /// `permanent` faux : à la corbeille du stockage (définitif pour ce qui y est déjà).
+  Future<void> deleteEntries(String sourceId, List<String> paths, bool permanent) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.deleteEntries$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
       pigeonVar_channelName,
       pigeonChannelCodec,
       binaryMessenger: pigeonVar_binaryMessenger,
     );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, paths]);
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, paths, permanent]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<List<TrashItemMsg>> listTrash(String sourceId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.listTrash$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<TrashItemMsg>();
+  }
+
+  Future<void> restoreTrash(String sourceId, List<String> ids) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.restoreTrash$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, ids]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> purgeTrash(String sourceId, List<String> ids) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.purgeTrash$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, ids]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  Future<void> emptyTrash(String sourceId) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.emptyTrash$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
@@ -1230,6 +1917,44 @@ class FluLuksHostApi {
     ;
   }
 
+  /// Compresse `paths` dans un ZIP `name` sous `dstDir` (même stockage) ; même créneau que les copies.
+  Future<void> startCompress(String srcId, List<String> paths, String dstDir, String name) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.startCompress$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[srcId, paths, dstDir, name]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Extrait `archive` sous `dstDir` de `dstId`, dans un dossier au nom de l'archive si `intoNewFolder`.
+  Future<void> startExtract(String srcId, String archive, String dstId, String dstDir, bool intoNewFolder) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.startExtract$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[srcId, archive, dstId, dstDir, intoNewFolder]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
   Future<void> cancelTransfer() async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelTransfer$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(
@@ -1275,6 +2000,198 @@ class FluLuksHostApi {
       binaryMessenger: pigeonVar_binaryMessenger,
     );
     final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Analyse de l'espace sous `path` (une à la fois) ; `spaceChildren` relit un dossier de la dernière analyse.
+  Future<SpaceReportMsg> analyzeSpace(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.analyzeSpace$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as SpaceReportMsg;
+  }
+
+  Future<SpaceReportMsg> spaceChildren(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.spaceChildren$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as SpaceReportMsg;
+  }
+
+  Future<void> cancelAnalysis() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelAnalysis$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Propriétés ; taille d'un dossier et SHA-256 d'un fichier calculés à la demande, arrêtés par `cancelHash`
+  /// (`sha256` rend alors null ; progression par `onHashProgress`).
+  Future<DetailsMsg> details(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.details$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as DetailsMsg;
+  }
+
+  Future<FolderSizeMsg> folderSize(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.folderSize$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return pigeonVar_replyValue! as FolderSizeMsg;
+  }
+
+  Future<String?> sha256(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.sha256$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+    return pigeonVar_replyValue as String?;
+  }
+
+  Future<void> cancelHash() async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.cancelHash$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(null);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
+  /// Filtre rapide (`photos`, `videos`, `music`, `documents`, `archives`, `recent`) : 500 fichiers au plus, du plus récent.
+  Future<List<FilterItemMsg>> quickFilter(String filter) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.quickFilter$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[filter]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<FilterItemMsg>();
+  }
+
+  /// Renommage par lot : aperçu, puis tout ou rien (refusé si un nom est en conflit).
+  Future<List<RenamePreviewMsg>> previewRename(String sourceId, List<String> paths, RenameRuleMsg rule) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.previewRename$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, paths, rule]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<RenamePreviewMsg>();
+  }
+
+  Future<void> applyRename(String sourceId, List<String> paths, RenameRuleMsg rule) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.applyRename$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, paths, rule]);
     final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
 
     _extractReplyValueOrThrow(
@@ -1430,6 +2347,9 @@ abstract class FluLuksEventsApi {
   /// Pourcentage du formatage en cours ; null quand il n'y en a pas (ou plus).
   void onFormatProgress(int? pct);
 
+  /// Pourcentage du calcul d'empreinte en cours ; null à la fin.
+  void onHashProgress(int? pct);
+
   static void setUp(FluLuksEventsApi? api, {BinaryMessenger? binaryMessenger, String messageChannelSuffix = '',}) {
     messageChannelSuffix = messageChannelSuffix.isNotEmpty ? '.$messageChannelSuffix' : '';
     {
@@ -1509,6 +2429,27 @@ abstract class FluLuksEventsApi {
           final int? arg_pct = args[0] as int?;
           try {
             api.onFormatProgress(arg_pct);
+            return wrapResponse(empty: true);
+          } on PlatformException catch (e) {
+            return wrapResponse(error: e);
+          }          catch (e) {
+            return wrapResponse(error: PlatformException(code: 'error', message: e.toString()));
+          }
+        });
+      }
+    }
+    {
+      final pigeonVar_channel = BasicMessageChannel<Object?>(
+          'dev.flutter.pigeon.fluluks.FluLuksEventsApi.onHashProgress$messageChannelSuffix', pigeonChannelCodec,
+          binaryMessenger: binaryMessenger);
+      if (api == null) {
+        pigeonVar_channel.setMessageHandler(null);
+      } else {
+        pigeonVar_channel.setMessageHandler((Object? message) async {
+          final List<Object?> args = message! as List<Object?>;
+          final int? arg_pct = args[0] as int?;
+          try {
+            api.onHashProgress(arg_pct);
             return wrapResponse(empty: true);
           } on PlatformException catch (e) {
             return wrapResponse(error: e);

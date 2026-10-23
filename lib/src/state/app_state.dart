@@ -25,9 +25,11 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   bool _allFilesAccess = false;
   TransferMsg? _transfer;
   int? _formatProgress;
+  int? _hashProgress;
   ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
   List<FavoriteMsg> _favorites = const [];
   ClipboardItems? _clipboard;
+  PendingExtract? _pendingExtract;
   final _closedNoticed = <String>{}; // stockages disparus dont la fermeture a déjà été annoncée
   (String, String)? _transferDestination;
 
@@ -56,11 +58,26 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
 
   void setClipboard(String sourceId, List<String> paths, {required bool move}) {
     _clipboard = ClipboardItems(sourceId, List.unmodifiable(paths), move);
+    _pendingExtract = null; // une seule action en attente dans la barre
     notifyListeners();
   }
 
   void clearClipboard() {
     _clipboard = null;
+    notifyListeners();
+  }
+
+  /// Archive en attente d'un dossier de destination (« Extraire vers… ») ; null sinon.
+  PendingExtract? get pendingExtract => _pendingExtract;
+
+  void setPendingExtract(String sourceId, String path) {
+    _pendingExtract = PendingExtract(sourceId, path);
+    _clipboard = null;
+    notifyListeners();
+  }
+
+  void clearPendingExtract() {
+    _pendingExtract = null;
     notifyListeners();
   }
 
@@ -72,6 +89,9 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
 
   /// Pourcentage du formatage en cours (null sinon).
   int? get formatProgress => _formatProgress;
+
+  /// Pourcentage du calcul d'empreinte SHA-256 en cours (null sinon).
+  int? get hashProgress => _hashProgress;
 
   /// Le résultat d'une opération finie a été montré : plus aucun écran ne le réaffiche.
   void transferResultSeen() {
@@ -156,6 +176,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
       _closedNoticed.removeAll(now);
       if (before.difference(now).isNotEmpty) {
         if (_clipboard != null && !now.contains(_clipboard!.sourceId)) _clipboard = null;
+        if (_pendingExtract != null && !now.contains(_pendingExtract!.sourceId)) _pendingExtract = null;
         PaintingBinding.instance.imageCache.clear();
       }
       _allFilesAccess = await api.hasAllFilesAccess();
@@ -182,6 +203,12 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   }
 
   @override
+  void onHashProgress(int? pct) {
+    _hashProgress = pct;
+    notifyListeners();
+  }
+
+  @override
   void onTransferChanged(TransferMsg? transfer) {
     _transfer = transfer;
     notifyListeners();
@@ -190,6 +217,19 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, {required bool move}) =>
       _guard(() async {
         await api.startTransfer(srcId, paths, dstId, dstDir, move);
+        _transferDestination = (dstId, dstDir);
+      });
+
+  /// Compresse [paths] dans le ZIP [name] sous [dstDir] du même stockage.
+  Future<void> startCompress(String srcId, List<String> paths, String dstDir, String name) => _guard(() async {
+        await api.startCompress(srcId, paths, dstDir, name);
+        _transferDestination = (srcId, dstDir);
+      });
+
+  /// Extrait [archive] sous [dstDir] de [dstId], dans un nouveau dossier au nom de l'archive si [intoNewFolder].
+  Future<void> startExtract(String srcId, String archive, String dstId, String dstDir, {required bool intoNewFolder}) =>
+      _guard(() async {
+        await api.startExtract(srcId, archive, dstId, dstDir, intoNewFolder);
         _transferDestination = (dstId, dstDir);
       });
 
@@ -272,6 +312,14 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     _lastError = e.message ?? Fr.genericError;
     notifyListeners();
   }
+}
+
+/// Archive choisie par « Extraire vers… », extraite par « Extraire ici » dans le dossier ouvert ensuite.
+class PendingExtract {
+  const PendingExtract(this.sourceId, this.path);
+
+  final String sourceId;
+  final String path;
 }
 
 /// Contenu du presse-papiers de l'explorateur.

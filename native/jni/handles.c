@@ -7,18 +7,21 @@
  *     de l'objet HORS du mutex, puis libération de l'entrée (génération + 1) et réveil.
  *   - une entrée en fermeture garde son type et son parent jusqu'à la fin de la destruction : un
  *     parent qui ferme ses enfants attend aussi ceux qu'un autre fil est en train de fermer.
- * Les enfants (volumes d'un disque, fichiers d'un volume) sont créés pendant que l'opération tient
+ * Les enfants (volumes d'un disque, fichiers d'un volume, archives d'un fichier) sont créés pendant que l'opération tient
  * une référence sur le parent : une fois les références du parent retombées à 0, plus aucun enfant
  * ne peut apparaître. */
 #define _POSIX_C_SOURCE 200809L
 #include "handles.h"
 
+#include <errno.h>
 #include <pthread.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
+#include "fluluks/archive.h"
 #include "fluluks/blockdev.h"
 #include "fluluks/cache.h"
 #include "cJSON.h"
@@ -33,7 +36,7 @@
 #define CACHE_BLOCK 65536u
 #define CACHE_BLOCKS 256u
 
-enum { T_FREE = 0, T_DISK = 1, T_VOL = 2, T_FILE = 3 };
+enum { T_FREE = 0, T_DISK = 1, T_VOL = 2, T_FILE = 3, T_ARC = 4 };
 
 typedef struct {
   uint32_t gen; /* >= 1 dès la première utilisation */
@@ -71,7 +74,7 @@ static slot *lookup(int64_t h, int type) {
 static int64_t tab_put(int type, int64_t parent, void *obj) {
   pthread_mutex_lock(&g_mu);
   if (parent != 0) {
-    slot *ps = lookup(parent, type - 1); /* T_VOL -> T_DISK, T_FILE -> T_VOL */
+    slot *ps = lookup(parent, type - 1); /* T_VOL -> T_DISK, T_FILE -> T_VOL, T_ARC -> T_FILE */
     if (!ps) {
       pthread_mutex_unlock(&g_mu);
       return FL_EINVAL;
@@ -193,7 +196,7 @@ static void close_children(int64_t parent, int type, destroy_fn fn) {
 int fj_debug_slot(int64_t h, unsigned *refs, bool *closing) {
   int rc = FL_EINVAL;
   pthread_mutex_lock(&g_mu);
-  for (int t = T_DISK; t <= T_FILE && rc != FL_OK; t++) {
+  for (int t = T_DISK; t <= T_ARC && rc != FL_OK; t++) {
     slot *s = lookup(h, t);
     if (!s) continue;
     if (refs) *refs = s->refs;
@@ -244,10 +247,7 @@ typedef struct {
   fl_content kind; /* système de fichiers monté (clé "fs" de fj_statfs) */
 } jvol;
 
-static int file_destroy(void *obj, int64_t h) {
-  (void)h;
-  return fl_file_close(obj); /* fichier écrit : synchronisation */
-}
+static int file_destroy(void *obj, int64_t h); /* ferme d'abord les archives du fichier */
 
 /* Ordre de la phase 1 : fs, déchiffré, luks, tranche. Rend le code du démontage. */
 static int vol_free(jvol *v) {
@@ -575,6 +575,12 @@ static void entry_json(fl_json *j, const char *name, size_t namelen, const fl_st
   fl_json_u64(j, st->size);
   fl_json_key(j, "mtime");
   fl_json_i64(j, st->mtime);
+  fl_json_key(j, "mode"); /* type + droits ; propriétaire : sens réel sur ext4 seulement */
+  fl_json_u64(j, st->mode);
+  fl_json_key(j, "uid");
+  fl_json_u64(j, st->uid);
+  fl_json_key(j, "gid");
+  fl_json_u64(j, st->gid);
   fl_json_obj_end(j);
 }
 
@@ -825,5 +831,281 @@ int fj_format(int64_t disk, const char *json, const void *pass, size_t passlen, 
     pthread_mutex_unlock(&g_mu);
   }
   tab_release(disk, T_DISK);
+  return rc;
+}
+
+/* ---- archives (phase 9) ---- */
+
+/* Une archive sur un fichier du moteur est l'enfant de sa poignée de fichier : elle lit et écrit le fl_file
+ * directement (le fichier ne peut être détruit qu'après elle, file_destroy fermant d'abord ses archives),
+ * et ferme la poignée de fichier avec elle. Sur un descripteur : pas de parent, le descripteur est fermé. */
+typedef struct {
+  int fd;          /* -1 pour un fichier du moteur */
+  fl_file *file;
+  uint64_t pos;    /* écriture : position suivante */
+  fl_arc_in in;
+  fl_arc_out out;
+  fl_arc_reader *r;
+  fl_arc_writer *w;
+  bool commit;     /* fermeture explicite d'un ZIP écrit : terminer plutôt qu'abandonner */
+  pthread_mutex_t mu; /* libarchive : une opération à la fois par archive */
+} jarc;
+
+static int64_t arc_pread(void *ctx, void *buf, size_t len, uint64_t off) {
+  jarc *a = ctx;
+  if (a->file) return fl_file_pread(a->file, buf, len, off);
+  ssize_t n;
+  do n = pread(a->fd, buf, len, (off_t)off);
+  while (n < 0 && errno == EINTR);
+  return n < 0 ? FL_EIO : n;
+}
+
+static int arc_write(void *ctx, const void *buf, size_t len) {
+  jarc *a = ctx;
+  const uint8_t *p = buf;
+  while (len) {
+    int64_t n;
+    if (a->file) {
+      n = fl_file_pwrite(a->file, p, len, a->pos);
+    } else {
+      do n = write(a->fd, p, len);
+      while (n < 0 && errno == EINTR);
+      if (n < 0) n = errno == ENOSPC ? FL_ENOSPC : FL_EIO;
+    }
+    if (n < 0) return (int)n;
+    if (n == 0) return FL_EIO;
+    a->pos += (uint64_t)n;
+    p += n;
+    len -= (size_t)n;
+  }
+  return FL_OK;
+}
+
+/* Libère l'archive ; ferme le descripteur, jamais le fichier (fermé par l'appelant). */
+static int arc_free(jarc *a, bool commit) {
+  int rc = FL_OK;
+  if (a->r) fl_arc_close(a->r);
+  if (a->w) rc = fl_arcw_close(a->w, commit);
+  if (a->fd >= 0) close(a->fd);
+  pthread_mutex_destroy(&a->mu);
+  free(a);
+  return rc;
+}
+
+static int arc_destroy(void *obj, int64_t h) {
+  (void)h;
+  return arc_free(obj, ((jarc *)obj)->commit);
+}
+
+/* Fichier fermé (ou volume, disque) sous l'archive : abandon, sans écrire. */
+static int arc_abandon(void *obj, int64_t h) {
+  (void)h;
+  return arc_free(obj, false);
+}
+
+static int file_destroy(void *obj, int64_t h) {
+  close_children(h, T_ARC, arc_abandon);
+  return fl_file_close(obj); /* fichier écrit : synchronisation */
+}
+
+static jarc *arc_new(int fd) {
+  jarc *a = calloc(1, sizeof *a);
+  if (!a) return NULL;
+  a->fd = fd;
+  a->in = (fl_arc_in){a, 0, arc_pread};
+  a->out = (fl_arc_out){a, arc_write};
+  pthread_mutex_init(&a->mu, NULL);
+  return a;
+}
+
+/* Ouvre le lecteur ou l'écrivain sur `a`, puis l'enregistre (sous `parent` : fichier tenu par l'appelant). */
+static int64_t arc_start(jarc *a, int64_t parent, bool writer) {
+  int rc = writer ? fl_arcw_open(&a->out, &a->w) : fl_arc_open(&a->in, &a->r);
+  if (rc != FL_OK) {
+    arc_free(a, false);
+    return rc;
+  }
+  int64_t h = tab_put(T_ARC, parent, a);
+  if (h < 0) arc_free(a, false);
+  return h;
+}
+
+static int64_t arc_open_fd(int fd, bool writer) {
+  if (fd < 0) return FL_EINVAL;
+  jarc *a = arc_new(fd);
+  if (!a) {
+    close(fd);
+    return FL_ENOMEM;
+  }
+  if (!writer) {
+    off_t size = lseek(fd, 0, SEEK_END);
+    if (size < 0) {
+      arc_free(a, false);
+      return FL_EINVAL;
+    }
+    a->in.size = size;
+  }
+  return arc_start(a, 0, writer);
+}
+
+static int64_t arc_open_file(int64_t file, int64_t size, bool writer) {
+  if (size < 0) {
+    fj_close_file(file);
+    return FL_EINVAL;
+  }
+  fl_file *f = tab_acquire(file, T_FILE);
+  if (!f) return FL_EINVAL;
+  jarc *a = arc_new(-1);
+  int64_t h = FL_ENOMEM;
+  if (a) {
+    a->file = f;
+    a->in.size = size;
+    /* enregistrée sous la référence du fichier : sa fermeture la verra */
+    h = arc_start(a, file, writer);
+  }
+  tab_release(file, T_FILE);
+  if (h < 0) fj_close_file(file);
+  return h;
+}
+
+int64_t fj_arc_open_fd(int fd) { return arc_open_fd(fd, false); }
+int64_t fj_arc_open_file(int64_t file, int64_t size) { return arc_open_file(file, size, false); }
+int64_t fj_arcw_open_fd(int fd) { return arc_open_fd(fd, true); }
+int64_t fj_arcw_open_file(int64_t file) { return arc_open_file(file, 0, true); }
+
+static const char *arc_type_code(fl_arc_type t) {
+  switch (t) {
+    case FL_ARC_FILE: return "f";
+    case FL_ARC_DIR: return "d";
+    case FL_ARC_SYMLINK: return "l";
+    case FL_ARC_HARDLINK: return "h";
+    default: return "o";
+  }
+}
+
+/* Base64 (RFC 4648, avec bourrage) de n octets dans out (au moins 4 * ((n + 2) / 3) + 1 octets). */
+static void base64(const uint8_t *in, size_t n, char *out) {
+  static const char tab[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  size_t o = 0;
+  for (size_t i = 0; i < n; i += 3) {
+    uint32_t v = (uint32_t)in[i] << 16 | (i + 1 < n ? (uint32_t)in[i + 1] << 8 : 0) | (i + 2 < n ? in[i + 2] : 0);
+    out[o++] = tab[v >> 18 & 63];
+    out[o++] = tab[v >> 12 & 63];
+    out[o++] = i + 1 < n ? tab[v >> 6 & 63] : '=';
+    out[o++] = i + 2 < n ? tab[v & 63] : '=';
+  }
+  out[o] = 0;
+}
+
+int fj_arc_next(int64_t arc, fl_json *out) {
+  jarc *a = tab_acquire(arc, T_ARC);
+  if (!a) return FL_EINVAL;
+  fl_arc_entry *e = a->r ? malloc(sizeof *e) : NULL;
+  int rc = !a->r ? FL_EINVAL : !e ? FL_ENOMEM : FL_OK;
+  bool raw = false;
+  if (rc == FL_OK) {
+    pthread_mutex_lock(&a->mu);
+    rc = fl_arc_next(a->r, e);
+    raw = rc == 1 && strcmp(fl_arc_format(a->r), "raw") == 0; /* .gz ou .xz seul : nom « data » de libarchive */
+    pthread_mutex_unlock(&a->mu);
+  }
+  tab_release(arc, T_ARC);
+  if (rc == 1) {
+    char name[4 * ((sizeof e->name + 2) / 3) + 1];
+    base64((const uint8_t *)e->name, e->name_len, name);
+    fl_json_reset(out);
+    fl_json_obj_begin(out);
+    fl_json_key(out, "name");
+    fl_json_cstr(out, name);
+    fl_json_key(out, "type");
+    fl_json_cstr(out, arc_type_code(e->type));
+    fl_json_key(out, "size");
+    fl_json_i64(out, e->size);
+    fl_json_key(out, "mtime");
+    fl_json_i64(out, e->mtime);
+    fl_json_key(out, "encrypted");
+    fl_json_bool(out, e->encrypted);
+    fl_json_key(out, "raw");
+    fl_json_bool(out, raw);
+    fl_json_obj_end(out);
+    if (out->err != FL_OK) rc = out->err;
+  }
+  free(e);
+  return rc;
+}
+
+int64_t fj_arc_read(int64_t arc, void *buf, size_t len) {
+  if (!buf && len) return FL_EINVAL;
+  jarc *a = tab_acquire(arc, T_ARC);
+  if (!a) return FL_EINVAL;
+  if (len > FJ_PREAD_MAX) len = FJ_PREAD_MAX;
+  int64_t r = FL_EINVAL;
+  if (a->r) {
+    pthread_mutex_lock(&a->mu);
+    r = fl_arc_read(a->r, buf, len);
+    pthread_mutex_unlock(&a->mu);
+  }
+  tab_release(arc, T_ARC);
+  return r;
+}
+
+/* Fermeture explicite : l'archive (commit pour un ZIP écrit), puis la poignée de fichier dont elle est l'enfant. */
+static int arc_close(int64_t arc, bool commit) {
+  pthread_mutex_lock(&g_mu);
+  slot *s = lookup(arc, T_ARC);
+  if (!s || s->closing) {
+    pthread_mutex_unlock(&g_mu);
+    return FL_EINVAL;
+  }
+  ((jarc *)s->obj)->commit = commit;
+  int64_t parent = s->parent;
+  s->closing = true;
+  int rc = finish_close_locked(s, arc, arc_destroy);
+  pthread_mutex_unlock(&g_mu);
+  if (parent) {
+    int rf = fj_close_file(parent); /* FL_EINVAL : déjà en fermeture par ailleurs, qui le synchronise */
+    if (rc == FL_OK && rf != FL_EINVAL) rc = rf;
+  }
+  return rc;
+}
+
+int fj_arc_close(int64_t arc) { return arc_close(arc, false); }
+int fj_arcw_close(int64_t arc, bool commit) { return arc_close(arc, commit); }
+
+int fj_arcw_add(int64_t arc, const char *json) {
+  cJSON *o = json ? cJSON_Parse(json) : NULL;
+  const char *name = cJSON_GetStringValue(cJSON_GetObjectItem(o, "name"));
+  const char *type = cJSON_GetStringValue(cJSON_GetObjectItem(o, "type"));
+  const cJSON *size = cJSON_GetObjectItem(o, "size"), *mtime = cJSON_GetObjectItem(o, "mtime"),
+              *store = cJSON_GetObjectItem(o, "store");
+  int rc = FL_EINVAL;
+  if (name && type && (!strcmp(type, "f") || !strcmp(type, "d")) && cJSON_IsNumber(size) && size->valuedouble >= 0 &&
+      size->valuedouble < 9.2e18 && (!mtime || cJSON_IsNumber(mtime)) && (!store || cJSON_IsBool(store))) {
+    jarc *a = tab_acquire(arc, T_ARC);
+    if (a) {
+      if (a->w) {
+        pthread_mutex_lock(&a->mu);
+        rc = fl_arcw_add(a->w, name, *type == 'd' ? FL_ARC_DIR : FL_ARC_FILE, (int64_t)size->valuedouble,
+                         mtime ? (int64_t)mtime->valuedouble : 0, cJSON_IsTrue(store));
+        pthread_mutex_unlock(&a->mu);
+      }
+      tab_release(arc, T_ARC);
+    }
+  }
+  cJSON_Delete(o);
+  return rc;
+}
+
+int fj_arcw_write(int64_t arc, const void *buf, size_t len) {
+  if (!buf && len) return FL_EINVAL;
+  jarc *a = tab_acquire(arc, T_ARC);
+  if (!a) return FL_EINVAL;
+  int rc = FL_EINVAL;
+  if (a->w) {
+    pthread_mutex_lock(&a->mu);
+    rc = fl_arcw_write(a->w, buf, len);
+    pthread_mutex_unlock(&a->mu);
+  }
+  tab_release(arc, T_ARC);
   return rc;
 }

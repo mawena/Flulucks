@@ -34,6 +34,37 @@ interface Engine {
      * protégé. [progress] reçoit un pourcentage croissant depuis le fil appelant. 0 ou fl_err.
      */
     fun format(disk: Long, opts: ByteArray, pass: ByteArray?, progress: FormatProgress?): Int = EngineError.FL_ENOTSUP
+
+    /*
+     * Archives (phase 9) : lecture de ZIP, 7z, RAR, TAR, GZ, XZ et écriture de ZIP. La source (descripteur
+     * ou poignée de fichier) appartient à l'archive dès l'appel, même en cas d'échec ; une archive sur un
+     * fichier du moteur est abandonnée si le fichier, le volume ou le disque est fermé.
+     */
+
+    /** Poignée d'archive en lecture ; FL_ENOTSUP si le fichier n'est pas une archive reconnue. */
+    fun arcOpenFd(fd: Int): Long = EngineError.FL_ENOTSUP.toLong()
+
+    /** [size] : taille du fichier (stat). */
+    fun arcOpenFile(file: Long, size: Long): Long = EngineError.FL_ENOTSUP.toLong()
+
+    /**
+     * JSON UTF-8 de l'entrée suivante ({"name": base64 des octets bruts du nom, "type", "size", "mtime",
+     * "encrypted"}), `{"err":<code>}` en cas d'erreur, null à la fin de l'archive.
+     */
+    fun arcNext(arc: Long): ByteArray? = """{"err":${EngineError.FL_ENOTSUP}}""".toByteArray()
+
+    /** Données de l'entrée courante : octets lus (4 Mio au plus), 0 à la fin de l'entrée, ou fl_err. */
+    fun arcRead(arc: Long, buf: ByteArray, len: Int): Int = EngineError.FL_ENOTSUP
+    fun arcClose(arc: Long): Int = EngineError.FL_ENOTSUP
+    fun arcwOpenFd(fd: Int): Long = EngineError.FL_ENOTSUP.toLong()
+    fun arcwOpenFile(file: Long): Long = EngineError.FL_ENOTSUP.toLong()
+
+    /** `json` : {"name": chemin UTF-8 relatif, "type": "f"|"d", "size", "mtime", "store"}. */
+    fun arcwAdd(arc: Long, json: ByteArray): Int = EngineError.FL_ENOTSUP
+    fun arcwWrite(arc: Long, buf: ByteArray, len: Int): Int = EngineError.FL_ENOTSUP
+
+    /** [commit] : termine le ZIP ; sinon abandon. Ferme la destination dans les deux cas. */
+    fun arcwClose(arc: Long, commit: Boolean): Int = EngineError.FL_ENOTSUP
 }
 
 /** Progression du formatage, appelée par le moteur natif (méthode `onProgress(I)V`). */

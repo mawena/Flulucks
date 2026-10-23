@@ -6,7 +6,9 @@ import '../widgets/disk_card.dart';
 import '../widgets/source_tile.dart';
 import '../widgets/transfer_bar.dart';
 import 'explorer_screen.dart';
+import 'filter_screen.dart';
 import 'settings_screen.dart';
+import 'trash_screen.dart';
 
 /// Accueil : stockages du téléphone, disques USB et favoris.
 class HomeScreen extends StatelessWidget {
@@ -57,12 +59,26 @@ class HomeScreen extends StatelessWidget {
                     ]),
                   ),
                 ),
+              if (local.isNotEmpty && state.allFilesAccess) ...[
+                _Section(Fr.shortcuts),
+                Wrap(spacing: 8, runSpacing: 4, children: [
+                  for (final (id, label, icon) in quickFilters)
+                    ActionChip(
+                      avatar: Icon(icon, size: 18),
+                      label: Text(label),
+                      onPressed: () => Navigator.of(context).push(MaterialPageRoute<void>(
+                        builder: (_) => FilterScreen(state: state, filter: id, title: label),
+                      )),
+                    ),
+                ]),
+              ],
               if (local.isNotEmpty) ...[
                 _Section(Fr.storage),
                 for (final s in local)
                   SourceTile(
                     source: s,
                     onTap: state.allFilesAccess ? () => openExplorer(context, state, s.id) : null,
+                    onTrash: state.allFilesAccess ? () => openTrash(context, state, s.id) : null,
                   ),
               ],
               _Section(Fr.usbDisks),

@@ -51,6 +51,59 @@ class Fr {
   static const copy = 'Copier';
   static const cut = 'Couper';
   static const pasteHere = 'Coller ici';
+  static const compress = 'Compresser';
+  static const archiveName = "Nom de l'archive";
+  static const archiveDefault = 'Archive';
+  static const trash = 'Corbeille';
+  static const trashEmpty = 'La corbeille est vide';
+  static const emptyTrash = 'Vider la corbeille';
+  static const emptyTrashTitle = 'Vider la corbeille ?';
+  static const emptyAction = 'Vider';
+  static const restore = 'Restaurer';
+  static const deletePermanently = 'Supprimer définitivement';
+  static const deleteToTrashBody = 'Les éléments restent 30 jours dans la corbeille de ce stockage.';
+  static const trashNote = 'Les éléments supprimés depuis plus de 30 jours sont effacés.';
+  static const spaceAnalysis = "Analyse de l'espace";
+  static const spaceFolders = 'Dossiers';
+  static const biggestFiles = 'Plus gros fichiers';
+  static const analyzing = 'Analyse en cours…';
+  static const spaceTruncated = "Analyse incomplète : arrêtée, ou trop d'éléments";
+  static const properties = 'Propriétés';
+  static const moreActions = "Plus d'actions";
+  static const location = 'Emplacement';
+  static const typeLabel = 'Type';
+  static const sizeLabel = 'Taille';
+  static const modifiedLabel = 'Modifié le';
+  static const fsLabel = 'Système de fichiers';
+  static const permissionsLabel = 'Droits';
+  static const ownerLabel = 'Propriétaire';
+  static const computing = 'Calcul…';
+  static const computeHash = "Calculer l'empreinte SHA-256";
+  static const hashLabel = 'SHA-256';
+  static const hashCancelled = 'Calcul annulé';
+  static const copyHash = "Copier l'empreinte";
+  static const hashCopied = 'Empreinte copiée';
+  static const modeNumber = 'Numéroter';
+  static const modeReplace = 'Remplacer';
+  static const modePhotoDate = 'Date de prise de vue';
+  static const baseName = 'Nom de base';
+  static const startNumber = 'Premier numéro';
+  static const findLabel = 'Rechercher';
+  static const replaceWith = 'Remplacer par';
+  static const caseSensitive = 'Respecter la casse';
+  static const shortcuts = 'Raccourcis';
+  static const filterPhotos = 'Photos';
+  static const filterVideos = 'Vidéos';
+  static const filterMusic = 'Musique';
+  static const filterDocuments = 'Documents';
+  static const filterArchives = 'Archives';
+  static const filterRecent = 'Récents';
+  static const filterEmpty = 'Aucun fichier';
+  static const filterNote = "Téléphone et cartes SD, d'après l'index d'Android ; 500 fichiers au plus";
+  static const openFolder = 'Ouvrir le dossier';
+  static const photoDateHelp = 'Date de prise de vue des photos (EXIF), sinon date de modification ; extension gardée';
+  static const extractHere = 'Extraire ici';
+  static const extractTo = 'Extraire vers…';
   static const share = 'Partager';
   static const openWith = 'Ouvrir avec…';
   static const emptyFolder = 'Dossier vide';
@@ -83,8 +136,37 @@ class Fr {
   static String deleteMany(int n) => 'Supprimer $n éléments ?';
   static String clipboard(int n, bool move) => '$n élément(s) ${move ? 'à déplacer' : 'à copier'}';
   static String selected(int n) => '$n sélectionné(s)';
-  static String transferLine(bool move, String name, int i, int n, int pct) =>
-      '${move ? 'Déplacement' : 'Copie'} : $name ($i/$n) — $pct %';
+  /// [kind] : `copy`, `move`, `compress` ou `extract`.
+  static String transferLine(String kind, String name, int i, int n, int pct) {
+    // extraction, premier passage : en-têtes lus, aucun fichier encore compté
+    if (kind == 'extract' && n == 0) return "Lecture de l'archive $name…";
+    final what = switch (kind) {
+      'move' => 'Déplacement',
+      'compress' => 'Compression',
+      'extract' => 'Extraction',
+      _ => 'Copie',
+    };
+    return '$what : $name ($i/$n) — $pct %';
+  }
+
+  static String toExtract(String name) => '« $name » à extraire';
+  static String trashSummary(int n, int bytes) => '$n élément(s), ${humanSize(bytes)}';
+  static String emptyTrashBody(int n) => 'Les $n élément(s) seront supprimés définitivement.';
+  static String actionsOf(String name) => 'Actions de $name';
+  static String spaceTotal(int bytes, int files) => '${humanSize(bytes)} — $files fichier(s)';
+  static String spaceOthers(int n) => '… et $n autre(s) élément(s)';
+  static String percent(int p) => '$p %';
+  static String folderSize(int bytes, int files, int dirs, {bool truncated = false}) =>
+      '${truncated ? 'Au moins ' : ''}${humanSize(bytes)} — $files fichier(s), $dirs dossier(s)';
+  static String ownerLine(int uid, int gid) => 'uid $uid, gid $gid';
+  static String batchRenameTitle(int n) => 'Renommer $n éléments';
+  static String filterLine(String source, String folder, int size) => '$source · $folder · ${humanSize(size)}';
+  static String typeName(String type) => switch (type) {
+        'dir' => 'Dossier',
+        'file' => 'Fichier',
+        'link' => 'Lien symbolique',
+        _ => 'Autre',
+      };
   static String transferDone(int n) => 'Terminé : $n fichier(s)';
 
   /// « Terminé : 3 fichier(s), 34 Mo/s » ; sans débit sous 1 s ou sous 1 Mo (chiffre sans intérêt).

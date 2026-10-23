@@ -285,14 +285,27 @@ dans le même commit que le travail.
 - [x] Fusion `feature/formatage` → `develop`
 - [x] Version `v1.1.0`
 
-### Phase 9 — Compression, corbeille et outils du gestionnaire
-- [ ] Plan de la phase 9 écrit *(demande du 2026-10-22 ; spec § 15)*
-- [ ] Compresser en ZIP ; extraire ZIP, 7z, RAR (lecture), TAR, TAR.GZ, TAR.XZ, avec progression et annulation
-- [ ] Corbeille sur le téléphone et sur les disques (récupérable 30 jours)
-- [ ] Analyse de l'espace (dossiers et plus gros fichiers)
-- [ ] Propriétés d'un fichier, avec empreinte SHA-256
-- [ ] Renommage par lot
-- [ ] Filtres rapides sur l'accueil (photos, vidéos, musique, documents, archives, récents)
+### Phase 9 — Compression, corbeille et outils du gestionnaire ([plan](2026-10-22-phase9-compression.md))
+- [x] Plan de la phase 9 écrit *(demande du 2026-10-22 ; spec § 15)*
+- [x] T1 — libarchive 3.8.10 et liblzma 5.8.4 dans le moteur
+- [x] T2 — Lecture d'archives : ZIP, 7z, RAR4, RAR5, TAR, TAR.GZ, TAR.XZ, GZ, XZ
+- [x] T3 — Écriture ZIP (noms UTF-8, ZIP64)
+- [x] T4 — Poignées d'archive par JNI, sur un descripteur ou un fichier du moteur
+- [x] T5 — Compresser et extraire d'un stockage à l'autre, avec progression et annulation
+- [x] T6 — Compresser et extraire depuis l'explorateur
+- [x] T7 — Corbeille sur le téléphone et sur les disques (récupérable 30 jours)
+- [x] T8 — Analyse de l'espace (dossiers et plus gros fichiers)
+- [x] T9 — Propriétés d'un fichier, avec empreinte SHA-256
+- [x] T10 — Renommage par lot
+- [x] T11 — Filtres rapides sur l'accueil (photos, vidéos, musique, documents, archives, récents)
+- [x] Essais instrumentés sur le Pixel : archives 3/3, filtres 1/1, copies 5/5 *(2026-10-23)*
+- [x] *(utilisateur)* T12 — Essais sur le Pixel ([fiche](../research/2026-10-22-essais-phase9/essais.md))
+      *(2026-10-23 : toutes les lignes de la fiche réussies)*
+- [x] T13 — Documentation
+- [x] Relecture finale de toute la branche *(aucun point critique ; 5 importants corrigés : place réelle relue à
+      l'extraction, premier passage borné, .gz/.xz seuls, purge de la corbeille, photos de la même seconde ;
+      11 mineurs reportés)*
+- [ ] Fusion `feature/compression` → `develop`
 - [ ] Version `v1.2.0`
 
 ### Phase 10 — Lecteurs intégrés et stockages distants

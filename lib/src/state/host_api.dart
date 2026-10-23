@@ -21,13 +21,29 @@ abstract class HostApi {
   Future<List<EntryMsg>> listDir(String sourceId, String path, bool showHidden);
   Future<String> createFolder(String sourceId, String parent, String name);
   Future<String> rename(String sourceId, String path, String newName);
-  Future<void> deleteEntries(String sourceId, List<String> paths);
+  Future<void> deleteEntries(String sourceId, List<String> paths, bool permanent);
+  Future<List<TrashItemMsg>> listTrash(String sourceId);
+  Future<void> restoreTrash(String sourceId, List<String> ids);
+  Future<void> purgeTrash(String sourceId, List<String> ids);
+  Future<void> emptyTrash(String sourceId);
   Future<void> openWith(String sourceId, String path);
   Future<void> share(String sourceId, List<String> paths);
   Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);
+  Future<void> startCompress(String srcId, List<String> paths, String dstDir, String name);
+  Future<void> startExtract(String srcId, String archive, String dstId, String dstDir, bool intoNewFolder);
   Future<void> cancelTransfer();
   Future<SearchResultMsg> search(String sourceId, String path, String query, bool showHidden);
   Future<void> cancelSearch();
+  Future<SpaceReportMsg> analyzeSpace(String sourceId, String path);
+  Future<SpaceReportMsg> spaceChildren(String sourceId, String path);
+  Future<void> cancelAnalysis();
+  Future<DetailsMsg> details(String sourceId, String path);
+  Future<FolderSizeMsg> folderSize(String sourceId, String path);
+  Future<String?> sha256(String sourceId, String path);
+  Future<void> cancelHash();
+  Future<List<FilterItemMsg>> quickFilter(String filter);
+  Future<List<RenamePreviewMsg>> previewRename(String sourceId, List<String> paths, RenameRuleMsg rule);
+  Future<void> applyRename(String sourceId, List<String> paths, RenameRuleMsg rule);
   Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx);
   Future<ViewPrefsMsg> getViewPrefs();
   Future<void> setViewPrefs(ViewPrefsMsg prefs);
@@ -81,7 +97,16 @@ class PigeonHostApi implements HostApi {
   @override
   Future<String> rename(String sourceId, String path, String newName) => _api.rename(sourceId, path, newName);
   @override
-  Future<void> deleteEntries(String sourceId, List<String> paths) => _api.deleteEntries(sourceId, paths);
+  Future<void> deleteEntries(String sourceId, List<String> paths, bool permanent) =>
+      _api.deleteEntries(sourceId, paths, permanent);
+  @override
+  Future<List<TrashItemMsg>> listTrash(String sourceId) => _api.listTrash(sourceId);
+  @override
+  Future<void> restoreTrash(String sourceId, List<String> ids) => _api.restoreTrash(sourceId, ids);
+  @override
+  Future<void> purgeTrash(String sourceId, List<String> ids) => _api.purgeTrash(sourceId, ids);
+  @override
+  Future<void> emptyTrash(String sourceId) => _api.emptyTrash(sourceId);
   @override
   Future<void> openWith(String sourceId, String path) => _api.openWith(sourceId, path);
   @override
@@ -90,12 +115,40 @@ class PigeonHostApi implements HostApi {
   Future<void> startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move) =>
       _api.startTransfer(srcId, paths, dstId, dstDir, move);
   @override
+  Future<void> startCompress(String srcId, List<String> paths, String dstDir, String name) =>
+      _api.startCompress(srcId, paths, dstDir, name);
+  @override
+  Future<void> startExtract(String srcId, String archive, String dstId, String dstDir, bool intoNewFolder) =>
+      _api.startExtract(srcId, archive, dstId, dstDir, intoNewFolder);
+  @override
   Future<void> cancelTransfer() => _api.cancelTransfer();
   @override
   Future<SearchResultMsg> search(String sourceId, String path, String query, bool showHidden) =>
       _api.search(sourceId, path, query, showHidden);
   @override
   Future<void> cancelSearch() => _api.cancelSearch();
+  @override
+  Future<SpaceReportMsg> analyzeSpace(String sourceId, String path) => _api.analyzeSpace(sourceId, path);
+  @override
+  Future<SpaceReportMsg> spaceChildren(String sourceId, String path) => _api.spaceChildren(sourceId, path);
+  @override
+  Future<void> cancelAnalysis() => _api.cancelAnalysis();
+  @override
+  Future<DetailsMsg> details(String sourceId, String path) => _api.details(sourceId, path);
+  @override
+  Future<FolderSizeMsg> folderSize(String sourceId, String path) => _api.folderSize(sourceId, path);
+  @override
+  Future<String?> sha256(String sourceId, String path) => _api.sha256(sourceId, path);
+  @override
+  Future<void> cancelHash() => _api.cancelHash();
+  @override
+  Future<List<FilterItemMsg>> quickFilter(String filter) => _api.quickFilter(filter);
+  @override
+  Future<List<RenamePreviewMsg>> previewRename(String sourceId, List<String> paths, RenameRuleMsg rule) =>
+      _api.previewRename(sourceId, paths, rule);
+  @override
+  Future<void> applyRename(String sourceId, List<String> paths, RenameRuleMsg rule) =>
+      _api.applyRename(sourceId, paths, rule);
   @override
   Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx) => _api.thumbnail(sourceId, path, sizePx);
   @override
