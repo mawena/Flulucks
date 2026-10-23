@@ -23,8 +23,9 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
 ### Archives, corbeille et outils (nouveau en 1.2.0)
 
 - **Extraire** une archive ZIP, 7z, RAR (RAR4 et RAR5), TAR, TAR.GZ ou TAR.XZ, ou un fichier `.gz` ou `.xz`
-  seul : touchez-la, puis **Extraire ici** (dans un nouveau dossier au nom de l'archive) ou **Extraire vers…**
-  (ouvrez ensuite le dossier voulu, sur n'importe quel stockage, et touchez **Extraire ici** dans la barre).
+  seul : touchez-la, puis **Extraire ici** (dans un nouveau dossier au nom de l'archive ; un `.gz` ou un `.xz`
+  seul donne simplement le fichier, à côté de l'archive) ou **Extraire vers…** (ouvrez ensuite le dossier voulu,
+  sur n'importe quel stockage, et touchez **Extraire ici** dans la barre).
   Progression et **Annuler**, comme une copie. Les noms des ZIP de Windows sans accents Unicode (page de code
   437) sont lus correctement.
 - **Compresser** une sélection en ZIP : menu **⋮** de la sélection, **Compresser**, nom proposé (celui de
@@ -33,9 +34,10 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
   4 Gio, le ZIP passe en ZIP64.
 - **Archives hostiles** : rien n'est jamais écrit hors du dossier de destination. Les chemins en `../` ou
   absolus, les liens et les fichiers spéciaux sont ignorés et comptés (« 3 élément(s) de l'archive
-  ignoré(s) »). Avant d'écrire, la taille annoncée doit tenir dans la place libre, moins une réserve de 256 Mio
-  (ou 5 % du stockage) ; pendant l'extraction, tout s'arrête au-delà (bombe de décompression, taille
-  mensongère), et le fichier en cours est supprimé.
+  ignoré(s) »). Avant d'écrire, la taille annoncée (au moins 4 Kio par fichier et par dossier) doit tenir dans
+  la place libre, moins une réserve de 256 Mio (ou 5 % du stockage) ; pendant l'extraction, la place réelle est
+  relue avant chaque fichier et tout s'arrête avant d'entamer la réserve (bombe de décompression, taille
+  mensongère, milliers de petits fichiers sur une clé à gros clusters), et le fichier en cours est supprimé.
 - **Corbeille** : **Supprimer** met les éléments dans la corbeille du stockage (dossier caché
   `.Portail-corbeille`, au format freedesktop d'Ubuntu), pendant 30 jours ; **Supprimer définitivement**
   reste proposé. La corbeille s'ouvre depuis la carte du stockage, la tuile d'un volume ouvert ou le menu de
@@ -48,7 +50,8 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
   droits et propriétaire sur ext4 ; **empreinte SHA-256** calculée à la demande, à comparer à `sha256sum`.
 - **Renommage par lot** (**Renommer** sur plusieurs éléments) : numérotation (« Vacances (01).jpg »),
   remplacement d'un texte, ou **date de prise de vue** des photos (« 2024-05-01 12.34.56.jpg »). Aperçu des
-  noms ; le lot est refusé en entier si un nom est pris ou invalide.
+  noms ; les photos de la même seconde (rafale) sont numérotées (« 2024-05-01 12.34.56 (2).jpg ») ; le lot est
+  refusé en entier si un nom est pris par un autre élément ou invalide.
 - **Raccourcis de l'accueil** : Photos, Vidéos, Musique, Documents, Archives et Récents (30 jours), sur le
   téléphone et les cartes SD, d'après l'index d'Android.
 
