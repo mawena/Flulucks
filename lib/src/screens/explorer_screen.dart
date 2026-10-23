@@ -5,6 +5,7 @@ import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../state/sorting.dart';
 import '../strings_fr.dart';
+import '../viewers.dart';
 import '../widgets/clipboard_bar.dart';
 import '../widgets/properties_sheet.dart';
 import '../widgets/thumb.dart';
@@ -178,6 +179,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
       ascending: ascending ?? v.ascending,
       grid: grid ?? v.grid,
       showHidden: showHidden ?? v.showHidden,
+      builtInViewers: v.builtInViewers,
     ));
   }
 
@@ -186,6 +188,11 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (e.type == 'dir') return _go(e.path);
     if (isArchiveName(e.name)) {
       _archiveSheet(e);
+      return;
+    }
+    if (opensInPortail(state, e.name)) {
+      final v = state.viewPrefs;
+      _run(() => openViewer(context, state, widget.sourceId, e, sortEntries(_entries, v.sort, v.ascending)));
       return;
     }
     _run(() => state.api.openWith(widget.sourceId, e.path));
@@ -342,6 +349,13 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
   }
 
   /// Propriétés de l'élément sélectionné (la sélection est quittée).
+  /// Ouvre le fichier sélectionné dans l'éditeur de texte, quelle que soit son extension.
+  Future<void> _editAsText() {
+    final e = _entries.firstWhere((x) => x.path == _selected.single);
+    setState(_selected.clear);
+    return openTextEditor(context, state, widget.sourceId, e);
+  }
+
   Future<void> _properties() {
     final path = _selected.single;
     setState(_selected.clear);
@@ -377,6 +391,8 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     if (_selected.isNotEmpty) {
       final byPath = {for (final e in _entries) e.path: e};
       final hasDir = _selected.any((p) => byPath[p]?.type != 'file');
+      // un seul fichier sélectionné : « Ouvrir avec… » et « Modifier comme texte »
+      final singleFile = _selected.length == 1 && !hasDir ? byPath[_selected.single] : null;
       return AppBar(
         leading: IconButton(icon: const Icon(Icons.close), onPressed: () => setState(_selected.clear)),
         title: Text(Fr.selected(_selected.length)),
@@ -396,9 +412,13 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             onSelected: (a) => switch (a) {
               'rename' => _selected.length == 1 ? _rename() : _batchRename(),
               'compress' => _compress(),
+              'openWith' => _run(() => state.api.openWith(widget.sourceId, _selected.single)),
+              'editText' => _editAsText(),
               _ => _properties(),
             },
             itemBuilder: (_) => [
+              PopupMenuItem(value: 'openWith', enabled: singleFile != null, child: const Text(Fr.openWith)),
+              PopupMenuItem(value: 'editText', enabled: singleFile != null, child: const Text(Fr.editAsText)),
               PopupMenuItem(value: 'rename', enabled: !_readOnly, child: const Text(Fr.rename)),
               PopupMenuItem(value: 'compress', enabled: !_readOnly, child: const Text(Fr.compress)),
               PopupMenuItem(value: 'properties', enabled: _selected.length == 1, child: const Text(Fr.properties)),

@@ -106,6 +106,19 @@ class Fr {
   static const extractTo = 'Extraire vers…';
   static const share = 'Partager';
   static const openWith = 'Ouvrir avec…';
+
+  // Lecteurs de Portail (phase 10)
+  static const builtInViewers = 'Ouvrir dans Portail';
+  static const builtInViewersHelp = "Images, musique, vidéos et textes s'ouvrent dans les lecteurs de Portail";
+  static const editAsText = 'Modifier comme texte';
+  static const save = 'Enregistrer';
+  static const saved = 'Enregistré';
+  static const dontSave = 'Ne pas enregistrer';
+  static const unsavedTitle = 'Modifications non enregistrées';
+  static const unsavedBody = 'Enregistrer les modifications avant de quitter ?';
+  static const textChangedTitle = 'Fichier modifié entre-temps';
+  static const textChangedBody = 'Le fichier a été modifié depuis son ouverture. Le remplacer par votre version ?';
+  static const replace = 'Remplacer';
   static const emptyFolder = 'Dossier vide';
   static const protectedFolder = 'Dossier protégé par Android';
   static const volumeClosed = 'Le disque a été fermé';
@@ -149,6 +162,7 @@ class Fr {
     return '$what : $name ($i/$n) — $pct %';
   }
 
+  static String readOnlyText(String reason) => 'Lecture seule : $reason';
   static String toExtract(String name) => '« $name » à extraire';
   static String trashSummary(int n, int bytes) => '$n élément(s), ${humanSize(bytes)}';
   static String emptyTrashBody(int n) => 'Les $n élément(s) seront supprimés définitivement.';

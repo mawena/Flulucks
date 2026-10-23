@@ -1345,13 +1345,15 @@ class SearchResultMsg {
   }
 }
 
-/// Préférences d'affichage ; `sort` : `name`, `size` ou `date`.
+/// Préférences d'affichage ; `sort` : `name`, `size` ou `date` ; `builtInViewers` : ouvrir images, musique, vidéos et
+/// textes dans les lecteurs de Portail (sinon dans une autre application).
 class ViewPrefsMsg {
   ViewPrefsMsg({
     required this.sort,
     required this.ascending,
     required this.grid,
     required this.showHidden,
+    required this.builtInViewers,
   });
 
   String sort;
@@ -1362,12 +1364,15 @@ class ViewPrefsMsg {
 
   bool showHidden;
 
+  bool builtInViewers;
+
   List<Object?> _toList() {
     return <Object?>[
       sort,
       ascending,
       grid,
       showHidden,
+      builtInViewers,
     ];
   }
 
@@ -1381,6 +1386,7 @@ class ViewPrefsMsg {
       ascending: result[1]! as bool,
       grid: result[2]! as bool,
       showHidden: result[3]! as bool,
+      builtInViewers: result[4]! as bool,
     );
   }
 
@@ -1393,7 +1399,7 @@ class ViewPrefsMsg {
     if (identical(this, other)) {
       return true;
     }
-    return _deepEquals(sort, other.sort) && _deepEquals(ascending, other.ascending) && _deepEquals(grid, other.grid) && _deepEquals(showHidden, other.showHidden);
+    return _deepEquals(sort, other.sort) && _deepEquals(ascending, other.ascending) && _deepEquals(grid, other.grid) && _deepEquals(showHidden, other.showHidden) && _deepEquals(builtInViewers, other.builtInViewers);
   }
 
   @override
@@ -1402,7 +1408,7 @@ class ViewPrefsMsg {
 
   @override
   String toString() {
-    return 'ViewPrefsMsg(sort: $sort, ascending: $ascending, grid: $grid, showHidden: $showHidden)';
+    return 'ViewPrefsMsg(sort: $sort, ascending: $ascending, grid: $grid, showHidden: $showHidden, builtInViewers: $builtInViewers)';
   }
 }
 

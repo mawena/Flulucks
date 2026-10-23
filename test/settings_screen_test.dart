@@ -23,20 +23,30 @@ void main() {
     tester.view.physicalSize = const Size(412, 869); // largeur du Pixel 4 XL : pas de débordement
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final api = FakeHostApi()..viewPrefs = ViewPrefsMsg(sort: 'size', ascending: false, grid: true, showHidden: true);
+    final api = FakeHostApi()..viewPrefs = ViewPrefsMsg(sort: 'size', ascending: false, grid: true, showHidden: true, builtInViewers: true);
     await pumpSettings(tester, api);
     expect(find.text('Affichage des dossiers'), findsOneWidget);
     expect(selected(tester), {true});
   });
 
   testWidgets('displayChoiceCallsApi', (tester) async {
-    final api = FakeHostApi()..viewPrefs = ViewPrefsMsg(sort: 'size', ascending: false, grid: true, showHidden: true);
+    final api = FakeHostApi()..viewPrefs = ViewPrefsMsg(sort: 'size', ascending: false, grid: true, showHidden: true, builtInViewers: true);
     await pumpSettings(tester, api);
     await tester.tap(find.text('Liste'));
     await tester.pump();
     final v = api.viewPrefs;
     expect([v.grid, v.sort, v.ascending, v.showHidden], [false, 'size', false, true]);
     expect(selected(tester), {false});
+  });
+
+  testWidgets('builtInViewersSwitch', (tester) async {
+    final api = FakeHostApi()..viewPrefs = ViewPrefsMsg(sort: 'size', ascending: false, grid: true, showHidden: true, builtInViewers: true);
+    await pumpSettings(tester, api);
+    await tester.scrollUntilVisible(find.text('Ouvrir dans Portail'), 100);
+    await tester.tap(find.text('Ouvrir dans Portail'));
+    await tester.pump();
+    final v = api.viewPrefs;
+    expect([v.builtInViewers, v.grid, v.sort, v.ascending, v.showHidden], [false, true, 'size', false, true]);
   });
 
   testWidgets('explorerOpensInChosenMode', (tester) async {

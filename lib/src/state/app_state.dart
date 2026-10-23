@@ -26,7 +26,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   TransferMsg? _transfer;
   int? _formatProgress;
   int? _hashProgress;
-  ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
+  ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false, builtInViewers: true);
   List<FavoriteMsg> _favorites = const [];
   ClipboardItems? _clipboard;
   PendingExtract? _pendingExtract;

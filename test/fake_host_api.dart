@@ -347,7 +347,7 @@ class FakeHostApi implements HostApi {
     return thumbs[path];
   }
 
-  ViewPrefsMsg viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false);
+  ViewPrefsMsg viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false, builtInViewers: true);
   List<FavoriteMsg> favorites = [];
 
   @override

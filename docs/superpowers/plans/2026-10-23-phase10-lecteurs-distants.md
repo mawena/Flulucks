@@ -150,7 +150,7 @@ Pigeon : `TextFileMsg(text, bom, crlf, mtime, size, readOnlyReason?)`, `TextSave
 suivantes y branchent leur écran) ; `ViewPrefsMsg.builtInViewers` (défaut vrai) ; `TextEditorScreen(state,
 sourceId, path, name)`.
 
-- [ ] **Step 1 : tests** (`text_editor_test`, faux pont) :
+- [x] **Step 1 : tests** (`text_editor_test`, faux pont) :
   - `viewerForExtensions` (casse ignorée, `.tar.gz` → null, sans extension → null) ;
   - `tapTextOpensEditor` ; réglage désactivé → `openWith` ;
   - `editAndSaveKeepsBomAndCrlf` : `writeText` reçoit le texte modifié, `bom` et `crlf` d'origine, mtime et taille
@@ -160,13 +160,13 @@ sourceId, path, name)`.
   - `readOnlyShowsReason` (champ non modifiable, bouton Enregistrer absent) ;
   - `saveFailureKeepsText` : erreur du pont → message, texte toujours à l'écran et marqué modifié ;
   - « Plus d'actions » d'un fichier seul : **Ouvrir avec…** et **Modifier comme texte**.
-- [ ] **Step 2 :** Run `flutter test test/text_editor_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter : champ multiligne en police à chasse fixe, titre avec « • » si modifié, `PopScope`
+- [x] **Step 2 :** Run `flutter test test/text_editor_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter : champ multiligne en police à chasse fixe, titre avec « • » si modifié, `PopScope`
   pour la question ; réglage « Ouvrir dans Portail » dans les Réglages ; `_tap` de l'explorateur passe par
   `openViewer` quand le réglage est actif et le lecteur existe (les autres types restent sur « Ouvrir avec »
   jusqu'à leur tâche).
-- [ ] **Step 4 :** tests verts ; `flutter test`, `flutter analyze` et suite JVM verts.
-- [ ] **Step 5 :** commit `feat(lecteurs): éditeur de texte et ouverture dans Portail`.
+- [x] **Step 4 :** tests verts ; `flutter test`, `flutter analyze` et suite JVM verts.
+- [x] **Step 5 :** commit `feat(lecteurs): éditeur de texte et ouverture dans Portail`.
 
 ### Task 3 : visionneuse d'images (Flutter)
 

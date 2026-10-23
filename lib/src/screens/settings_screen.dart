@@ -5,7 +5,7 @@ import '../state/app_state.dart';
 import '../strings_fr.dart';
 
 /// Réglages : lecture seule des disques, verrouillage automatique, accès aux fichiers, affichage en liste
-/// ou en grille, fichiers cachés par défaut.
+/// ou en grille, fichiers cachés par défaut, ouverture dans les lecteurs de Portail.
 /// Délais proposés (minutes ; 0 = jamais), les mêmes que AutoLock.CHOICES côté Kotlin.
 const autoLockChoices = [0, 5, 15, 30, 60];
 
@@ -58,15 +58,26 @@ class SettingsScreen extends StatelessWidget {
                 ],
                 selected: {v.grid},
                 showSelectedIcon: false,
-                onSelectionChanged: (s) => state.setViewPrefs(
-                    ViewPrefsMsg(sort: v.sort, ascending: v.ascending, grid: s.first, showHidden: v.showHidden)),
+                onSelectionChanged: (s) => state.setViewPrefs(ViewPrefsMsg(
+                    sort: v.sort,
+                    ascending: v.ascending,
+                    grid: s.first,
+                    showHidden: v.showHidden,
+                    builtInViewers: v.builtInViewers)),
               ),
             ),
             SwitchListTile(
               title: const Text(Fr.showHidden),
               value: v.showHidden,
-              onChanged: (on) => state.setViewPrefs(
-                  ViewPrefsMsg(sort: v.sort, ascending: v.ascending, grid: v.grid, showHidden: on)),
+              onChanged: (on) => state.setViewPrefs(ViewPrefsMsg(
+                  sort: v.sort, ascending: v.ascending, grid: v.grid, showHidden: on, builtInViewers: v.builtInViewers)),
+            ),
+            SwitchListTile(
+              title: const Text(Fr.builtInViewers),
+              subtitle: const Text(Fr.builtInViewersHelp),
+              value: v.builtInViewers,
+              onChanged: (on) => state.setViewPrefs(ViewPrefsMsg(
+                  sort: v.sort, ascending: v.ascending, grid: v.grid, showHidden: v.showHidden, builtInViewers: on)),
             ),
           ]);
         },

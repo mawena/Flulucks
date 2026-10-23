@@ -1250,7 +1250,8 @@ data class SearchResultMsg (
 }
 
 /**
- * Préférences d'affichage ; `sort` : `name`, `size` ou `date`.
+ * Préférences d'affichage ; `sort` : `name`, `size` ou `date` ; `builtInViewers` : ouvrir images, musique, vidéos et
+ * textes dans les lecteurs de Portail (sinon dans une autre application).
  *
  * Generated class from Pigeon that represents data sent in messages.
  */
@@ -1258,7 +1259,8 @@ data class ViewPrefsMsg (
   val sort: String,
   val ascending: Boolean,
   val grid: Boolean,
-  val showHidden: Boolean
+  val showHidden: Boolean,
+  val builtInViewers: Boolean
 )
  {
   companion object {
@@ -1267,7 +1269,8 @@ data class ViewPrefsMsg (
       val ascending = pigeonVar_list[1] as Boolean
       val grid = pigeonVar_list[2] as Boolean
       val showHidden = pigeonVar_list[3] as Boolean
-      return ViewPrefsMsg(sort, ascending, grid, showHidden)
+      val builtInViewers = pigeonVar_list[4] as Boolean
+      return ViewPrefsMsg(sort, ascending, grid, showHidden, builtInViewers)
     }
   }
   fun toList(): List<Any?> {
@@ -1276,6 +1279,7 @@ data class ViewPrefsMsg (
       ascending,
       grid,
       showHidden,
+      builtInViewers,
     )
   }
   override fun equals(other: Any?): Boolean {
@@ -1286,7 +1290,7 @@ data class ViewPrefsMsg (
       return true
     }
     val other = other as ViewPrefsMsg
-    return FluLuksApiPigeonUtils.deepEquals(this.sort, other.sort) && FluLuksApiPigeonUtils.deepEquals(this.ascending, other.ascending) && FluLuksApiPigeonUtils.deepEquals(this.grid, other.grid) && FluLuksApiPigeonUtils.deepEquals(this.showHidden, other.showHidden)
+    return FluLuksApiPigeonUtils.deepEquals(this.sort, other.sort) && FluLuksApiPigeonUtils.deepEquals(this.ascending, other.ascending) && FluLuksApiPigeonUtils.deepEquals(this.grid, other.grid) && FluLuksApiPigeonUtils.deepEquals(this.showHidden, other.showHidden) && FluLuksApiPigeonUtils.deepEquals(this.builtInViewers, other.builtInViewers)
   }
 
   override fun hashCode(): Int {
@@ -1295,10 +1299,11 @@ data class ViewPrefsMsg (
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.ascending)
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.grid)
     result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.showHidden)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.builtInViewers)
     return result
   }
   override fun toString(): String {
-    return "ViewPrefsMsg(sort=$sort, ascending=$ascending, grid=$grid, showHidden=$showHidden)"
+    return "ViewPrefsMsg(sort=$sort, ascending=$ascending, grid=$grid, showHidden=$showHidden, builtInViewers=$builtInViewers)"
   }
 }
 

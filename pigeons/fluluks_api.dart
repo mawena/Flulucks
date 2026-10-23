@@ -306,13 +306,21 @@ class SearchResultMsg {
   bool truncated;
 }
 
-/// Préférences d'affichage ; `sort` : `name`, `size` ou `date`.
+/// Préférences d'affichage ; `sort` : `name`, `size` ou `date` ; `builtInViewers` : ouvrir images, musique, vidéos et
+/// textes dans les lecteurs de Portail (sinon dans une autre application).
 class ViewPrefsMsg {
-  ViewPrefsMsg({required this.sort, required this.ascending, required this.grid, required this.showHidden});
+  ViewPrefsMsg({
+    required this.sort,
+    required this.ascending,
+    required this.grid,
+    required this.showHidden,
+    required this.builtInViewers,
+  });
   String sort;
   bool ascending;
   bool grid;
   bool showHidden;
+  bool builtInViewers;
 }
 
 /// Favori ; `sourceId` null si le stockage n'est pas ouvert.

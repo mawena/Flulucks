@@ -402,10 +402,10 @@ class HostApiImpl(
 
     private val viewPrefs by lazy { ViewPrefs(SharedPrefStore(context)) }
 
-    override fun getViewPrefs(): ViewPrefsMsg = viewPrefs.get().let { ViewPrefsMsg(it.sort, it.ascending, it.grid, it.showHidden) }
+    override fun getViewPrefs(): ViewPrefsMsg = viewPrefs.get().let { ViewPrefsMsg(it.sort, it.ascending, it.grid, it.showHidden, it.builtInViewers) }
 
     override fun setViewPrefs(prefs: ViewPrefsMsg) = guarded {
-        viewPrefs.set(ViewSettings(prefs.sort, prefs.ascending, prefs.grid, prefs.showHidden))
+        viewPrefs.set(ViewSettings(prefs.sort, prefs.ascending, prefs.grid, prefs.showHidden, prefs.builtInViewers))
     }
 
     override fun listFavorites(): List<FavoriteMsg> = guardedValue {
