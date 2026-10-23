@@ -288,7 +288,7 @@ dans le même commit que le travail.
 ### Phase 9 — Compression, corbeille et outils du gestionnaire ([plan](2026-10-22-phase9-compression.md))
 - [x] Plan de la phase 9 écrit *(demande du 2026-10-22 ; spec § 15)*
 - [x] T1 — libarchive 3.8.10 et liblzma 5.8.4 dans le moteur
-- [ ] T2 — Lecture d'archives : ZIP, 7z, RAR4, RAR5, TAR, TAR.GZ, TAR.XZ, GZ, XZ
+- [x] T2 — Lecture d'archives : ZIP, 7z, RAR4, RAR5, TAR, TAR.GZ, TAR.XZ, GZ, XZ
 - [ ] T3 — Écriture ZIP (noms UTF-8, ZIP64)
 - [ ] T4 — Poignées d'archive par JNI, sur un descripteur ou un fichier du moteur
 - [ ] T5 — Compresser et extraire d'un stockage à l'autre, avec progression et annulation

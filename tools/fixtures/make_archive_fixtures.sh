@@ -52,8 +52,8 @@ data = open("cp437.zip", "rb").read()
 assert data.count(b"Q.txt") == 2  # en-tête local et répertoire central
 open("cp437.zip", "wb").write(data.replace(b"Q.txt", b"\x82.txt"))
 EOF
-head -c 300 fumee.zip > tronque.zip
-head -c 2000 arbre.tar.gz > tronque.tar.gz
+head -c $(( $(stat -c %s fumee.zip) / 2 )) fumee.zip > tronque.zip
+head -c $(( $(stat -c %s arbre.tar.gz) / 2 )) arbre.tar.gz > tronque.tar.gz
 printf 'pas une archive\n' > texte.txt
 
 # Archives 7z et RAR de libarchive
