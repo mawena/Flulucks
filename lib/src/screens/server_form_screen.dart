@@ -32,10 +32,12 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
   late final _start = TextEditingController(text: widget.server?.startPath ?? '/');
   late bool _remember = widget.server?.remember ?? false;
   late String? _hostKey = widget.server?.hostKey;
+  late String? _keyInfo = widget.server?.keyInfo;
+  final _keyPassphrase = TextEditingController();
 
   @override
   void dispose() {
-    for (final c in [_name, _host, _port, _user, _password, _start]) {
+    for (final c in [_name, _host, _port, _user, _password, _start, _keyPassphrase]) {
       c.dispose();
     }
     super.dispose();
@@ -63,19 +65,35 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
       startPath: _start.text.trim().isEmpty ? '/' : _start.text.trim(),
       remember: _remember,
       hostKey: _hostKey,
-      keyInfo: s?.keyInfo,
+      keyInfo: _keyInfo,
       hasPassword: false,
       connected: false,
     );
     final pw = _password.text.isEmpty ? null : Uint8List.fromList(utf8.encode(_password.text));
+    final kp = _keyPassphrase.text.isEmpty ? null : Uint8List.fromList(utf8.encode(_keyPassphrase.text));
     try {
-      await widget.state.saveServer(msg, pw);
+      await widget.state.saveServer(msg, pw, keyPassphrase: kp);
       if (mounted) Navigator.of(context).pop();
     } on PlatformException catch (e) {
       if (mounted) _snack(e.message ?? Fr.genericError);
     } finally {
       pw?.fillRange(0, pw.length, 0);
+      kp?.fillRange(0, kp.length, 0);
     }
+  }
+
+  Future<void> _importKey() async {
+    try {
+      final info = await widget.state.importPrivateKey(widget.server!.id);
+      if (info != null && mounted) setState(() => _keyInfo = info);
+    } on PlatformException catch (e) {
+      if (mounted) _snack(e.message ?? Fr.genericError);
+    }
+  }
+
+  Future<void> _removeKey() async {
+    await widget.state.forgetPrivateKey(widget.server!.id);
+    if (mounted) setState(() => _keyInfo = null);
   }
 
   Future<void> _forgetHostKey() async {
@@ -157,6 +175,21 @@ class _ServerFormScreenState extends State<ServerFormScreen> {
           onChanged: (v) => setState(() => _remember = v ?? false),
         ),
         _field(_start, Fr.startFolder),
+        if (_protocol == 'sftp' && s == null)
+          Padding(padding: const EdgeInsets.symmetric(vertical: 8), child: Text(Fr.keyAfterSave, style: theme.textTheme.bodySmall)),
+        if (_protocol == 'sftp' && s != null) ...[
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.key),
+            title: const Text(Fr.privateKey),
+            subtitle: SelectableText(_keyInfo ?? Fr.noPrivateKey),
+          ),
+          if (_keyInfo != null) _field(_keyPassphrase, Fr.keyPassphrase, obscure: true, helper: Fr.keyPassphraseHelp),
+          Wrap(spacing: 8, children: [
+            TextButton(onPressed: _importKey, child: const Text(Fr.importKey)),
+            if (_keyInfo != null) TextButton(onPressed: _removeKey, child: const Text(Fr.removeKey)),
+          ]),
+        ],
         if (_hostKey != null) ...[
           ListTile(
             contentPadding: EdgeInsets.zero,

@@ -9,6 +9,7 @@ import android.os.Bundle
 import com.mawena.fluluks.files.Sources
 import com.mawena.fluluks.remote.Remotes
 import com.mawena.fluluks.volumes.VolumeManager
+import com.mawena.fluluks.bridge.FilePicker
 import com.mawena.fluluks.bridge.HostApiImpl
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -33,8 +34,19 @@ class MainActivity : FlutterActivity() {
         VolumeManager.init(this)
         Sources.init(this)
         Remotes.init(this)
+        FilePicker.activity = java.lang.ref.WeakReference(this)
         handleUsbIntent(intent)
         requestNotificationPermission()
+    }
+
+    override fun onDestroy() {
+        if (FilePicker.activity?.get() === this) FilePicker.activity = null
+        super.onDestroy()
+    }
+
+    @Deprecated("Sélecteur de clé privée : API à résultat de l'activité, FlutterActivity n'étant pas un ComponentActivity")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (!FilePicker.deliver(requestCode, resultCode, data)) super.onActivityResult(requestCode, resultCode, data)
     }
 
     /** Un démarrage du service refusé en arrière-plan est retenté au retour au premier plan. */

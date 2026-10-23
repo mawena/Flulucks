@@ -317,8 +317,8 @@ fichier pour la clé), Pigeon (`importPrivateKey(serverId)` → type et empreint
 - [x] **Step 2 :** Run `./gradlew -q :app:testDebugUnitTest --tests '*SftpClientTest'` → FAIL.
 - [ ] **Step 3 :** implémenter (`HostKeyRepository` maison, `get(path, null, offset)`, `put(…, OVERWRITE)`,
   `ServerAliveInterval` 30 s) ; règles R8 ; construction release vérifiée.
-- [ ] **Step 4 :** tests verts ; suite JVM verte ; `flutter build apk --release` (si permis) ou `--debug`.
-- [ ] **Step 5 :** commit `feat(distant): dossiers SFTP`.
+- [x] **Step 4 :** tests verts ; suite JVM verte ; `flutter build apk --release` (si permis) ou `--debug`.
+- [x] **Step 5 :** commit `feat(distant): dossiers SFTP`.
 
 ### Task 9 : lecteur vidéo
 

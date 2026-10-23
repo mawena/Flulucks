@@ -52,6 +52,13 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+
+    // Manifestes OSGi en double (JSch, Bouncy Castle, jspecify) : inutiles sur Android.
+    packaging {
+        resources {
+            excludes += "META-INF/versions/*/OSGI-INF/MANIFEST.MF"
+        }
+    }
 }
 
 dependencies {

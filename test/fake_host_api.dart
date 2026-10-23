@@ -283,6 +283,18 @@ class FakeHostApi implements HostApi {
   @override
   Future<void> forgetHostKey(String serverId) async => calls.add('forgetHostKey $serverId');
 
+  /// Description rendue par importPrivateKey (null : sélecteur fermé sans choix).
+  String? importedKey;
+
+  @override
+  Future<String?> importPrivateKey(String serverId) async {
+    calls.add('importPrivateKey $serverId');
+    return importedKey;
+  }
+
+  @override
+  Future<void> forgetPrivateKey(String serverId) async => calls.add('forgetPrivateKey $serverId');
+
   /// Lecteurs : octets des images et textes par chemin ; une erreur par chemin (message) ; réponse de writeText
   /// (défaut : enregistré, mtime + 1) ; enregistrements reçus (chemin, texte, bom, crlf, mtime, taille, force).
   final images = <String, Uint8List>{};

@@ -149,6 +149,13 @@ class Fr {
   static const ftpClear = "FTP n'est pas chiffré : le mot de passe et les fichiers circulent en clair sur le réseau.";
   static const hostKey = 'Empreinte du serveur acceptée';
   static const forgetHostKey = "Oublier l'empreinte";
+  static const privateKey = 'Clé privée';
+  static const noPrivateKey = 'Aucune : connexion par mot de passe';
+  static const importKey = 'Importer une clé';
+  static const removeKey = 'Retirer la clé';
+  static const keyPassphrase = 'Phrase de la clé';
+  static const keyPassphraseHelp = 'Clé chiffrée : laissez vide pour la saisir à chaque connexion';
+  static const keyAfterSave = 'Enregistrez le serveur pour pouvoir importer une clé privée (OpenSSH : Ed25519, ECDSA ou RSA).';
   static const deleteServer = 'Supprimer le serveur';
   static const connect = 'Se connecter';
   static const wrongPassword = 'Mot de passe refusé';

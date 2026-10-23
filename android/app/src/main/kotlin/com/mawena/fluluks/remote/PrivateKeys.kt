@@ -11,6 +11,8 @@ import java.util.Base64
  * au format d'OpenSSH (« SHA256: » puis base64 sans `=`). Les octets d'une clé ne sortent jamais dans un message.
  */
 object PrivateKeys {
+    const val MSG_UNREADABLE = "Clé privée illisible"
+
     /** [type] : « ssh-ed25519 », « ecdsa-sha2-nistp256 », « ssh-rsa »… ; [fingerprint] : « SHA256:… », vide si illisible sans la phrase (ancien PEM chiffré). */
     data class Info(val type: String, val fingerprint: String, val encrypted: Boolean)
 
@@ -28,11 +30,11 @@ object PrivateKeys {
             val kp = try {
                 KeyPair.load(jsch(), copy, null)
             } catch (e: Exception) {
-                throw IOException("Clé privée illisible")
+                throw IOException(MSG_UNREADABLE)
             }
             try {
                 val type = kp.keyTypeString
-                if (type !in SUPPORTED) throw IOException("Clé privée illisible")
+                if (type !in SUPPORTED) throw IOException(MSG_UNREADABLE)
                 return Info(type, kp.publicKeyBlob?.let(::fingerprint).orEmpty(), kp.isEncrypted)
             } finally {
                 kp.dispose()

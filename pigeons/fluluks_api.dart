@@ -482,6 +482,12 @@ abstract class FluLuksHostApi {
   void trustHostKey(String serverId, String fingerprint);
   void forgetHostKey(String serverId);
 
+  /// Clé privée OpenSSH choisie dans le sélecteur d'Android, scellée pour `serverId` ; rend sa description
+  /// (« ssh-ed25519 SHA256:… »), ou null si rien n'a été choisi.
+  @async
+  String? importPrivateKey(String serverId);
+  void forgetPrivateKey(String serverId);
+
   @async
   Uint8List readImage(String sourceId, String path);
   @async

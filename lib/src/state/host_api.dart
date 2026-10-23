@@ -51,6 +51,8 @@ abstract class HostApi {
   Future<void> disconnectServer(String serverId);
   Future<void> trustHostKey(String serverId, String fingerprint);
   Future<void> forgetHostKey(String serverId);
+  Future<String?> importPrivateKey(String serverId);
+  Future<void> forgetPrivateKey(String serverId);
   Future<Uint8List> readImage(String sourceId, String path);
   Future<TextFileMsg> readText(String sourceId, String path);
   Future<TextSaveMsg> writeText(String sourceId, String path, String text, bool bom, bool crlf, int expectedMtime,
@@ -177,6 +179,10 @@ class PigeonHostApi implements HostApi {
   Future<void> trustHostKey(String serverId, String fingerprint) => _api.trustHostKey(serverId, fingerprint);
   @override
   Future<void> forgetHostKey(String serverId) => _api.forgetHostKey(serverId);
+  @override
+  Future<String?> importPrivateKey(String serverId) => _api.importPrivateKey(serverId);
+  @override
+  Future<void> forgetPrivateKey(String serverId) => _api.forgetPrivateKey(serverId);
   @override
   Future<Uint8List> readImage(String sourceId, String path) => _api.readImage(sourceId, path);
   @override

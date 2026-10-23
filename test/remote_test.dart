@@ -213,4 +213,37 @@ void main() {
     expect(find.byType(LinearProgressIndicator), findsNothing);
     expect(find.byIcon(Icons.cloud_outlined), findsOneWidget);
   });
+
+  testWidgets('sftpKeyImportedAndRemoved', (tester) async {
+    final api = api0()..importedKey = 'ssh-ed25519 SHA256:clé';
+    await pump(tester, api);
+    await showServer(tester);
+    await tester.tap(find.byTooltip('Modifier'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Importer une clé'), 200, scrollable: formScroll);
+    expect(find.text('Aucune : connexion par mot de passe'), findsOneWidget);
+    await tester.tap(find.text('Importer une clé'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('importPrivateKey s1'));
+    expect(find.text('ssh-ed25519 SHA256:clé'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Phrase de la clé'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Retirer la clé'), 200, scrollable: formScroll);
+    await tester.tap(find.text('Retirer la clé'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('forgetPrivateKey s1'));
+    expect(find.text('Aucune : connexion par mot de passe'), findsOneWidget);
+  });
+
+  testWidgets('keySectionOnlyForSavedSftp', (tester) async {
+    final api = api0(s: server(protocol: 'ftp'));
+    await pump(tester, api);
+    await showServer(tester);
+    await tester.tap(find.byTooltip('Modifier'));
+    await tester.pumpAndSettle();
+    expect(find.text('Importer une clé'), findsNothing); // FTP : pas de clé
+    await tester.tap(find.text('SFTP'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text('Importer une clé'), 200, scrollable: formScroll);
+    expect(find.text('Importer une clé'), findsOneWidget);
+  });
 }

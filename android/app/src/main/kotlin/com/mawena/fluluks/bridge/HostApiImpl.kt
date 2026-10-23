@@ -38,6 +38,7 @@ import com.mawena.fluluks.media.VideoActivity
 import com.mawena.fluluks.remote.AuthFailed
 import com.mawena.fluluks.remote.HostKeyChanged
 import com.mawena.fluluks.remote.HostKeyUnknown
+import com.mawena.fluluks.remote.PrivateKeys
 import com.mawena.fluluks.remote.Remotes
 import com.mawena.fluluks.remote.ServerConfig
 import com.mawena.fluluks.volumes.AutoLock
@@ -312,6 +313,34 @@ class HostApiImpl(
 
     override fun forgetHostKey(serverId: String) = guardedValue { Remotes.forgetHostKey(serverId) }
 
+    override fun importPrivateKey(serverId: String, callback: (Result<String?>) -> Unit) =
+        FilePicker.pick { uri ->
+            if (uri == null) return@pick callback(Result.success(null))
+            io(callback) {
+                val key = context.contentResolver.openInputStream(uri)?.use { readKeyFile(it) }
+                    ?: throw java.io.IOException(PrivateKeys.MSG_UNREADABLE)
+                Remotes.importPrivateKey(serverId, key)
+            }
+        }
+
+    /** Fichier de clé : 64 Kio au plus (une clé RSA de 16 384 bits en fait moins de 13). */
+    private fun readKeyFile(input: java.io.InputStream): ByteArray {
+        val buf = ByteArray(MAX_KEY_FILE + 1)
+        var n = 0
+        while (n < buf.size) {
+            val k = input.read(buf, n, buf.size - n)
+            if (k < 0) break
+            n += k
+        }
+        if (n > MAX_KEY_FILE) {
+            buf.fill(0)
+            throw java.io.IOException(PrivateKeys.MSG_UNREADABLE)
+        }
+        return buf.copyOf(n).also { buf.fill(0) }
+    }
+
+    override fun forgetPrivateKey(serverId: String) = guardedValue { Remotes.forgetPrivateKey(serverId) }
+
     override fun getAutoLockMinutes(): Long = AutoLock.readPref(context).toLong()
 
     override fun setAutoLockMinutes(minutes: Long) = guarded { AutoLock.writePref(context, minutes.toInt()) }
@@ -554,6 +583,7 @@ class HostApiImpl(
         }
 
         const val MSG_NO_PARTITION = "Aucune partition reconnue"
+        private const val MAX_KEY_FILE = 64 * 1024
         private const val PREFS = "fluluks"
         private const val PREF_READ_ONLY = "lecture_seule"
 

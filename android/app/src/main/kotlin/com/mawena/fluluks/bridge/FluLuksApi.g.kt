@@ -1784,6 +1784,12 @@ interface FluLuksHostApi {
   fun disconnectServer(serverId: String)
   fun trustHostKey(serverId: String, fingerprint: String)
   fun forgetHostKey(serverId: String)
+  /**
+   * Clé privée OpenSSH choisie dans le sélecteur d'Android, scellée pour `serverId` ; rend sa description
+   * (« ssh-ed25519 SHA256:… »), ou null si rien n'a été choisi.
+   */
+  fun importPrivateKey(serverId: String, callback: (Result<String?>) -> Unit)
+  fun forgetPrivateKey(serverId: String)
   fun readImage(sourceId: String, path: String, callback: (Result<ByteArray>) -> Unit)
   fun readText(sourceId: String, path: String, callback: (Result<TextFileMsg>) -> Unit)
   fun writeText(sourceId: String, path: String, text: String, bom: Boolean, crlf: Boolean, expectedMtime: Long, expectedSize: Long, force: Boolean, callback: (Result<TextSaveMsg>) -> Unit)
@@ -2691,6 +2697,44 @@ interface FluLuksHostApi {
             val serverIdArg = args[0] as String
             val wrapped: List<Any?> = try {
               api.forgetHostKey(serverIdArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.importPrivateKey$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val serverIdArg = args[0] as String
+            api.importPrivateKey(serverIdArg) { result: Result<String?> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                val data = result.getOrNull()
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(data))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.forgetPrivateKey$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val serverIdArg = args[0] as String
+            val wrapped: List<Any?> = try {
+              api.forgetPrivateKey(serverIdArg)
               listOf(null)
             } catch (exception: Throwable) {
               FluLuksApiPigeonUtils.wrapError(exception)

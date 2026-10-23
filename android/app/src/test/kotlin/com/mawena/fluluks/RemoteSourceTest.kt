@@ -135,4 +135,28 @@ class RemoteSourceTest {
         assertTrue(out is com.mawena.fluluks.files.NativeOut.Pipe)
         (out as com.mawena.fluluks.files.NativeOut.Pipe).sink.close()
     }
+
+    @Test fun privateKeyImportedSealedThenForgotten() {
+        val saved = store.save(cfg.copy(id = ""), null, null)
+        Remotes.resetForTests(store, null)
+        val kp = com.jcraft.jsch.KeyPair.genKeyPair(com.jcraft.jsch.JSch(), com.jcraft.jsch.KeyPair.ED25519)
+        val key = java.io.ByteArrayOutputStream().also { kp.writeOpenSSHv1PrivateKey(it, null) }.toByteArray()
+        val keep = key.copyOf()
+        val info = Remotes.importPrivateKey(saved.id, key)
+        assertEquals("ssh-ed25519 ${kp.fingerPrint}", info)
+        assertEquals(info, store.get(saved.id)!!.keyInfo)
+        assertArrayEquals(keep, store.secrets(saved.id)!!.privateKey)
+        assertTrue(key.all { it == 0.toByte() }) // copie reçue remise à zéro
+        // fichier qui n'est pas une clé : refusé, rien de changé
+        try {
+            Remotes.importPrivateKey(saved.id, "pas une clé".toByteArray())
+            throw AssertionError("accepté")
+        } catch (e: java.io.IOException) {
+            assertEquals("Clé privée illisible", e.message)
+        }
+        assertEquals(info, store.get(saved.id)!!.keyInfo)
+        Remotes.forgetPrivateKey(saved.id)
+        assertNull(store.get(saved.id)!!.keyInfo)
+        assertNull(store.secrets(saved.id)?.privateKey)
+    }
 }

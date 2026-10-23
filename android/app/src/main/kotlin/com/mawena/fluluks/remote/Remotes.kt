@@ -83,4 +83,21 @@ object Remotes {
     fun trustHostKey(serverId: String, fingerprint: String) = servers().setHostKey(serverId, fingerprint)
 
     fun forgetHostKey(serverId: String) = servers().setHostKey(serverId, null)
+
+    /**
+     * Clé privée OpenSSH [key] importée pour [serverId], scellée avec ses secrets ; rend sa description (« ssh-ed25519
+     * SHA256:… »). [key] est remise à zéro dans tous les cas ; un fichier qui n'est pas une clé ne change rien.
+     */
+    fun importPrivateKey(serverId: String, key: ByteArray): String {
+        try {
+            val info = PrivateKeys.describe(PrivateKeys.inspect(key))
+            servers().get(serverId) ?: throw FileNotFoundException("Serveur introuvable")
+            servers().setPrivateKey(serverId, key, info)
+            return info
+        } finally {
+            key.fill(0)
+        }
+    }
+
+    fun forgetPrivateKey(serverId: String) = servers().setPrivateKey(serverId, null, null)
 }

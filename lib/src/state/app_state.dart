@@ -174,8 +174,8 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
     await refreshSources();
   }
 
-  Future<RemoteServerMsg> saveServer(RemoteServerMsg s, Uint8List? password) async {
-    final saved = await api.saveServer(s, password, null);
+  Future<RemoteServerMsg> saveServer(RemoteServerMsg s, Uint8List? password, {Uint8List? keyPassphrase}) async {
+    final saved = await api.saveServer(s, password, keyPassphrase);
     await refreshSources();
     return saved;
   }
@@ -189,6 +189,18 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
 
   Future<void> forgetHostKey(String id) async {
     await api.forgetHostKey(id);
+    await refreshSources();
+  }
+
+  /// Clé privée choisie dans le sélecteur d'Android ; sa description, ou null si rien n'a été choisi.
+  Future<String?> importPrivateKey(String id) async {
+    final info = await api.importPrivateKey(id);
+    if (info != null) await refreshSources();
+    return info;
+  }
+
+  Future<void> forgetPrivateKey(String id) async {
+    await api.forgetPrivateKey(id);
     await refreshSources();
   }
 
