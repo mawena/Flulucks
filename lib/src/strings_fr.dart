@@ -187,6 +187,20 @@ class Fr {
   static const trustTitle = 'Serveur inconnu';
   static const trust = 'Faire confiance';
   static const hostKeyChangedTitle = 'Clé du serveur changée';
+
+  // écrans de la phase 10 revus (phase 11)
+  static const hostRequired = 'Saisissez une adresse';
+  static const portInvalid = 'Port de 1 à 65535';
+
+  /// Ligne d'état de l'éditeur : « UTF-8 avec BOM · CRLF · 120 lignes ».
+  static String editorStatus({required bool bom, required bool crlf, required int lines}) =>
+      '${bom ? 'UTF-8 avec BOM' : 'UTF-8'} · ${crlf ? 'CRLF' : 'LF'} · ${count(lines, 'ligne', 'lignes')}';
+
+  /// Libellé TalkBack du lecteur réduit.
+  static String playingNow(String title) => 'Lecture en cours : $title';
+
+  /// Valeur annoncée du curseur de « Lecture en cours » : « Position 1:23 sur 4:05 ».
+  static String positionOf(int posMs, int durMs) => 'Position ${clock(posMs)} sur ${clock(durMs)}';
   static const emptyFolder = 'Dossier vide';
   static const protectedFolder = 'Dossier protégé par Android';
   static const volumeClosed = 'Le disque a été fermé';

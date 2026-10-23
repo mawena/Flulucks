@@ -8,6 +8,7 @@ import '../screens/explorer_screen.dart';
 import '../screens/server_form_screen.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/tokens.dart';
 
 /// Serveur distant enregistré (accueil) : toucher connecte puis ouvre son dossier de départ ; Déconnecter si la
 /// connexion est ouverte ; Modifier ouvre sa fiche.
@@ -20,9 +21,14 @@ class ServerTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = server;
+    final scheme = Theme.of(context).colorScheme;
     return Card(
       child: ListTile(
-        leading: Icon(s.connected ? Icons.cloud_done : Icons.cloud_outlined),
+        // connecté : icône pleine, couleur d'un état actif
+        leading: Icon(
+          s.connected ? Icons.cloud_done_rounded : Icons.cloud_outlined,
+          color: s.connected ? scheme.primary : scheme.onSurfaceVariant,
+        ),
         title: Text(s.name),
         subtitle: Text(Fr.serverLine(s.protocol, s.user, s.host, s.port, s.connected)),
         onTap: () => connectAndOpen(context, state, s),
@@ -30,12 +36,12 @@ class ServerTile extends StatelessWidget {
           if (s.connected)
             IconButton(
               tooltip: Fr.disconnect,
-              icon: const Icon(Icons.link_off),
+              icon: const Icon(Icons.link_off_rounded),
               onPressed: () => state.disconnectServer(s.id),
             ),
           IconButton(
             tooltip: Fr.editServer,
-            icon: const Icon(Icons.edit),
+            icon: const Icon(Icons.edit_rounded),
             onPressed: () => Navigator.of(context)
                 .push(MaterialPageRoute<void>(builder: (_) => ServerFormScreen(state: state, server: s))),
           ),
@@ -110,7 +116,10 @@ class _PasswordDialogState extends State<_PasswordDialog> {
   Widget build(BuildContext context) => AlertDialog(
         title: Text(Fr.passwordFor(widget.name)),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
-          if (widget.wrong) Text(Fr.wrongPassword, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          if (widget.wrong) ...[
+            Text(Fr.wrongPassword, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            const SizedBox(height: Space.m),
+          ],
           TextField(
             controller: _ctrl,
             obscureText: true,

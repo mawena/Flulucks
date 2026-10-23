@@ -8,10 +8,10 @@ import '../state/sorting.dart';
 import '../strings_fr.dart';
 import '../ui/dialogs.dart';
 import '../viewers.dart';
+import '../widgets/bottom_dock.dart';
 import '../widgets/clipboard_bar.dart';
 import '../widgets/properties_sheet.dart';
 import '../widgets/thumb.dart';
-import '../widgets/transfer_bar.dart';
 import 'batch_rename_screen.dart';
 import 'search_screen.dart';
 import 'space_screen.dart';
@@ -549,10 +549,10 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
           Expanded(child: _body()),
         ]),
         // sous le bouton flottant, qui ne les masque pas
-        bottomNavigationBar: Column(mainAxisSize: MainAxisSize.min, children: [
-          ClipboardBar(state: state, canPaste: !_readOnly, onPaste: _paste, onExtract: _extractPending),
-          TransferBar(state: state),
-        ]),
+        bottomNavigationBar: BottomDock(
+          state: state,
+          pending: ClipboardBar(state: state, canPaste: !_readOnly, onPaste: _paste, onExtract: _extractPending),
+        ),
         floatingActionButton: _readOnly || _selected.isNotEmpty
             ? null
             : FloatingActionButton(
