@@ -885,6 +885,72 @@ class RenamePreviewMsg {
   }
 }
 
+/// Fichier d'un filtre rapide de l'accueil : stockage (téléphone, carte SD) et chemin dans ce stockage.
+class FilterItemMsg {
+  FilterItemMsg({
+    required this.sourceId,
+    required this.path,
+    required this.name,
+    required this.size,
+    required this.mtime,
+  });
+
+  String sourceId;
+
+  String path;
+
+  String name;
+
+  int size;
+
+  int mtime;
+
+  List<Object?> _toList() {
+    return <Object?>[
+      sourceId,
+      path,
+      name,
+      size,
+      mtime,
+    ];
+  }
+
+  Object encode() {
+    return _toList();  }
+
+  static FilterItemMsg decode(Object result) {
+    result as List<Object?>;
+    return FilterItemMsg(
+      sourceId: result[0]! as String,
+      path: result[1]! as String,
+      name: result[2]! as String,
+      size: result[3]! as int,
+      mtime: result[4]! as int,
+    );
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  bool operator ==(Object other) {
+    if (other is! FilterItemMsg || other.runtimeType != runtimeType) {
+      return false;
+    }
+    if (identical(this, other)) {
+      return true;
+    }
+    return _deepEquals(sourceId, other.sourceId) && _deepEquals(path, other.path) && _deepEquals(name, other.name) && _deepEquals(size, other.size) && _deepEquals(mtime, other.mtime);
+  }
+
+  @override
+  // ignore: avoid_equals_and_hash_code_on_mutable_classes
+  int get hashCode => _deepHash(<Object?>[runtimeType, ..._toList()]);
+
+  @override
+  String toString() {
+    return 'FilterItemMsg(sourceId: $sourceId, path: $path, name: $name, size: $size, mtime: $mtime)';
+  }
+}
+
 /// Taille d'un dossier et de son contenu ; `truncated` si le calcul s'est arrêté avant la fin.
 class FolderSizeMsg {
   FolderSizeMsg({
@@ -1305,23 +1371,26 @@ class _PigeonCodec extends StandardMessageCodec {
     }    else if (value is RenamePreviewMsg) {
       buffer.putUint8(138);
       writeValue(buffer, value.encode());
-    }    else if (value is FolderSizeMsg) {
+    }    else if (value is FilterItemMsg) {
       buffer.putUint8(139);
       writeValue(buffer, value.encode());
-    }    else if (value is SpaceItemMsg) {
+    }    else if (value is FolderSizeMsg) {
       buffer.putUint8(140);
       writeValue(buffer, value.encode());
-    }    else if (value is SpaceReportMsg) {
+    }    else if (value is SpaceItemMsg) {
       buffer.putUint8(141);
       writeValue(buffer, value.encode());
-    }    else if (value is SearchResultMsg) {
+    }    else if (value is SpaceReportMsg) {
       buffer.putUint8(142);
       writeValue(buffer, value.encode());
-    }    else if (value is ViewPrefsMsg) {
+    }    else if (value is SearchResultMsg) {
       buffer.putUint8(143);
       writeValue(buffer, value.encode());
-    }    else if (value is FavoriteMsg) {
+    }    else if (value is ViewPrefsMsg) {
       buffer.putUint8(144);
+      writeValue(buffer, value.encode());
+    }    else if (value is FavoriteMsg) {
+      buffer.putUint8(145);
       writeValue(buffer, value.encode());
     } else {
       super.writeValue(buffer, value);
@@ -1352,16 +1421,18 @@ class _PigeonCodec extends StandardMessageCodec {
       case 138:
         return RenamePreviewMsg.decode(readValue(buffer)!);
       case 139:
-        return FolderSizeMsg.decode(readValue(buffer)!);
+        return FilterItemMsg.decode(readValue(buffer)!);
       case 140:
-        return SpaceItemMsg.decode(readValue(buffer)!);
+        return FolderSizeMsg.decode(readValue(buffer)!);
       case 141:
-        return SpaceReportMsg.decode(readValue(buffer)!);
+        return SpaceItemMsg.decode(readValue(buffer)!);
       case 142:
-        return SearchResultMsg.decode(readValue(buffer)!);
+        return SpaceReportMsg.decode(readValue(buffer)!);
       case 143:
-        return ViewPrefsMsg.decode(readValue(buffer)!);
+        return SearchResultMsg.decode(readValue(buffer)!);
       case 144:
+        return ViewPrefsMsg.decode(readValue(buffer)!);
+      case 145:
         return FavoriteMsg.decode(readValue(buffer)!);
       default:
         return super.readValueOfType(type, buffer);
@@ -2071,6 +2142,26 @@ class FluLuksHostApi {
         isNullValid: true,
     )
     ;
+  }
+
+  /// Filtre rapide (`photos`, `videos`, `music`, `documents`, `archives`, `recent`) : 500 fichiers au plus, du plus récent.
+  Future<List<FilterItemMsg>> quickFilter(String filter) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.quickFilter$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[filter]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    final Object? pigeonVar_replyValue = _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: false,
+    )
+    ;
+    return (pigeonVar_replyValue! as List<Object?>).cast<FilterItemMsg>();
   }
 
   /// Renommage par lot : aperçu, puis tout ou rien (refusé si un nom est en conflit).

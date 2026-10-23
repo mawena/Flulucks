@@ -211,6 +211,15 @@ class FakeHostApi implements HostApi {
   @override
   Future<void> cancelHash() async => hashCancels++;
 
+  /// Résultats des filtres rapides (vide si absent).
+  final filters = <String, List<FilterItemMsg>>{};
+
+  @override
+  Future<List<FilterItemMsg>> quickFilter(String filter) async {
+    calls.add('quickFilter $filter');
+    return List.of(filters[filter] ?? const <FilterItemMsg>[]);
+  }
+
   /// Aperçu du renommage par lot.
   List<RenamePreviewMsg> Function(List<String> paths, RenameRuleMsg rule)? renamer;
 

@@ -364,13 +364,13 @@ conflict: String?`) ; `BatchRename.apply(src, paths, rule)` ; Pigeon `previewRen
 with sourceId>` sur `MediaStore.Files` (volumes externes) ; Pigeon `quickFilter(String filter) →
 List<FilterItemMsg>` (`sourceId, path, name, size, mtime`).
 
-- [ ] **Step 1 : tests** : `classifyByExtensionAndMime` (photos, vidéos, musique, documents `pdf doc docx odt
+- [x] **Step 1 : tests** : `classifyByExtensionAndMime` (photos, vidéos, musique, documents `pdf doc docx odt
   xls xlsx ods ppt pptx odp txt md epub`, archives = `Archives.isArchive`) ; `recentIs30Days` ;
   instrumenté : un fichier créé dans `Download/portail-tests/` apparaît dans « Récents » et « Documents » ;
   Flutter `homeShowsFilterChips`, `filterScreenOpensFile`.
-- [ ] **Step 2 → 4 :** FAIL, implémenter (chemin MediaStore converti en `sourceId` + chemin de la source :
+- [x] **Step 2 → 4 :** FAIL, implémenter (chemin MediaStore converti en `sourceId` + chemin de la source :
   téléphone ou carte SD), verts.
-- [ ] **Step 5 :** commit `feat(gestionnaire): filtres rapides sur l'accueil`.
+- [x] **Step 5 :** commit `feat(gestionnaire): filtres rapides sur l'accueil`.
 
 ### Task 12 *(utilisateur)* : essais
 

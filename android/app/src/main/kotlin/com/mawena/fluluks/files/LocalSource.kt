@@ -24,7 +24,7 @@ class LocalSource(
     override val id: String,
     override val stableKey: String,
     override val label: String,
-    private val root: File,
+    internal val root: File,
     private val hasAccess: () -> Boolean,
 ) : FileSource {
     override val readOnlyReason: String?

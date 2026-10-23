@@ -218,6 +218,16 @@ class RenamePreviewMsg {
   String? conflict;
 }
 
+/// Fichier d'un filtre rapide de l'accueil : stockage (téléphone, carte SD) et chemin dans ce stockage.
+class FilterItemMsg {
+  FilterItemMsg({required this.sourceId, required this.path, required this.name, required this.size, required this.mtime});
+  String sourceId;
+  String path;
+  String name;
+  int size;
+  int mtime;
+}
+
 /// Taille d'un dossier et de son contenu ; `truncated` si le calcul s'est arrêté avant la fin.
 class FolderSizeMsg {
   FolderSizeMsg({required this.size, required this.files, required this.dirs, required this.truncated});
@@ -356,6 +366,10 @@ abstract class FluLuksHostApi {
   @async
   String? sha256(String sourceId, String path);
   void cancelHash();
+
+  /// Filtre rapide (`photos`, `videos`, `music`, `documents`, `archives`, `recent`) : 500 fichiers au plus, du plus récent.
+  @async
+  List<FilterItemMsg> quickFilter(String filter);
 
   /// Renommage par lot : aperçu, puis tout ou rien (refusé si un nom est en conflit).
   @async

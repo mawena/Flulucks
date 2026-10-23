@@ -91,6 +91,16 @@ class Fr {
   static const findLabel = 'Rechercher';
   static const replaceWith = 'Remplacer par';
   static const caseSensitive = 'Respecter la casse';
+  static const shortcuts = 'Raccourcis';
+  static const filterPhotos = 'Photos';
+  static const filterVideos = 'Vidéos';
+  static const filterMusic = 'Musique';
+  static const filterDocuments = 'Documents';
+  static const filterArchives = 'Archives';
+  static const filterRecent = 'Récents';
+  static const filterEmpty = 'Aucun fichier';
+  static const filterNote = "Téléphone et cartes SD, d'après l'index d'Android ; 500 fichiers au plus";
+  static const openFolder = 'Ouvrir le dossier';
   static const photoDateHelp = 'Date de prise de vue des photos (EXIF), sinon date de modification ; extension gardée';
   static const extractHere = 'Extraire ici';
   static const extractTo = 'Extraire vers…';
@@ -148,6 +158,7 @@ class Fr {
       '${truncated ? 'Au moins ' : ''}${humanSize(bytes)} — $files fichier(s), $dirs dossier(s)';
   static String ownerLine(int uid, int gid) => 'uid $uid, gid $gid';
   static String batchRenameTitle(int n) => 'Renommer $n éléments';
+  static String filterLine(String source, String folder, int size) => '$source · $folder · ${humanSize(size)}';
   static String typeName(String type) => switch (type) {
         'dir' => 'Dossier',
         'file' => 'Fichier',

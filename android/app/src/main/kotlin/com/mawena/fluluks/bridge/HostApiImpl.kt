@@ -17,6 +17,7 @@ import com.mawena.fluluks.files.Entry
 import com.mawena.fluluks.files.FileDetails
 import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.FilesException
+import com.mawena.fluluks.files.QuickFilters
 import com.mawena.fluluks.files.RenameRule
 import com.mawena.fluluks.files.Search
 import com.mawena.fluluks.files.SharedPrefStore
@@ -351,6 +352,13 @@ class HostApiImpl(
         }
 
     override fun cancelHash() = FileDetails.cancel()
+
+    override fun quickFilter(filter: String, callback: (Result<List<FilterItemMsg>>) -> Unit) =
+        io(callback) {
+            Files.guard("queryChildDocuments") {
+                QuickFilters.query(context, filter).map { FilterItemMsg(it.sourceId, it.path, it.name, it.size, it.mtime) }
+            }
+        }
 
     override fun previewRename(sourceId: String, paths: List<String>, rule: RenameRuleMsg, callback: (Result<List<RenamePreviewMsg>>) -> Unit) =
         io(callback) {
