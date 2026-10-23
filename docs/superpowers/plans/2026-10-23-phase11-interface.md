@@ -726,7 +726,7 @@ tests suivent le nom réel, sans changer de comportement.
 - Valeurs de `screen` : `home`, `explorerList`, `explorerGrid`, `filterGrid`, `search`, `globalSearch`, `trash`,
   `space`, `settings`, `about`, `help`, `welcome`, `unlock`, `format`, `editor`, `serverForm`, `nowPlaying`.
 
-- [ ] **Step 1 : tests :**
+- [x] **Step 1 : tests :**
   - `accessibility_test` : pour chaque écran et chaque luminosité, `meetsGuideline(androidTapTargetGuideline)`,
     `labeledTapTargetGuideline` et `textContrastGuideline` ;
   - `adaptive_test` :
@@ -742,13 +742,13 @@ tests suivent le nom réel, sans changer de comportement.
       temporisation de recherche (400 ms) et de la barre d'opération (4 s) ;
   - `goldens_test` (Linux, police de test) : `home_light`, `home_dark`, `explorer_grid_dark`, `unlock_light`,
     `settings_light`, `welcome_light`, à 412 × 869.
-- [ ] **Step 2 :** Run `flutter test test/accessibility_test.dart test/adaptive_test.dart test/source_rules_test.dart` →
+- [x] **Step 2 :** Run `flutter test test/accessibility_test.dart test/adaptive_test.dart test/source_rules_test.dart` →
   noter les échecs.
-- [ ] **Step 3 :** corriger les écrans : `Semantics` manquants, infobulles, `Flexible`/`Wrap` là où cela déborde,
+- [x] **Step 3 :** corriger les écrans : `Semantics` manquants, infobulles, `Flexible`/`Wrap` là où cela déborde,
   libellés de jauge.
-- [ ] **Step 4 :** Run `flutter test --update-goldens test/goldens_test.dart`. Regarder chaque PNG avant de le
+- [x] **Step 4 :** Run `flutter test --update-goldens test/goldens_test.dart`. Regarder chaque PNG avant de le
   garder. Puis `flutter test` complet vert et `flutter analyze` propre.
-- [ ] **Step 5 :** commit `test(interface): accessibilité, grands écrans, règles de style et tests dorés`.
+- [x] **Step 5 :** commit `test(interface): accessibilité, grands écrans, règles de style et tests dorés`.
 
 ### Task 12 : captures et essais instrumentés sur le Pixel 4 XL
 
