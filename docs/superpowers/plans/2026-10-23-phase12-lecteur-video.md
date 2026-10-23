@@ -351,8 +351,8 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
 
 ### Task 7 *(utilisateur)* : essais sur le Pixel
 
-- [ ] Construire et installer l'APK sur le Pixel **avant** de demander l'essai.
-- [ ] Fiche `docs/superpowers/research/2026-10-23-essais-phase12/essais.md` remplie (orientation avec la rotation
+- [x] Construire et installer l'APK sur le Pixel **avant** de demander l'essai.
+- [x] Fiche `docs/superpowers/research/2026-10-23-essais-phase12/essais.md` remplie (orientation avec la rotation
   automatique activée puis coupée, Tourner, cadenas, pistes, glissement, double toucher et série, vidéo distante).
 
 ### Fin de phase
