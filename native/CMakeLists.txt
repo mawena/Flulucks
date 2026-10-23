@@ -240,7 +240,7 @@ if(FL_TESTS)
   fl_add_test(test_json_out)
   target_link_libraries(test_json_out PRIVATE fl_jnicore)
   fl_add_test(test_handles LABELS ecriture)
-  target_link_libraries(test_handles PRIVATE fl_jnicore fl_testsupport)
+  target_link_libraries(test_handles PRIVATE fl_jnicore fl_testsupport ZLIB::ZLIB)
 
   # fluluks-cli n'existe pas sous Android (cible absente) : test_cli est réservé au PC.
   if(NOT ANDROID)

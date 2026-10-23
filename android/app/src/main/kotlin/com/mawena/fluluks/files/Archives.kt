@@ -23,9 +23,12 @@ import org.json.JSONObject
  * Une archive est hostile. Chaque nom passe par [ArchivePaths.safeRelative] ; les dossiers sont tous créés par
  * l'extraction (jamais à travers un lien, jamais dans un dossier qui existait déjà sous la destination) ; liens,
  * liens physiques et fichiers spéciaux ne sont pas extraits (comptés et signalés) ; une entrée chiffrée est
- * refusée. Avant d'écrire, la somme des tailles annoncées doit tenir dans la place libre moins une réserve
- * ([reserve]) ; pendant l'extraction, tout s'arrête dès que ce budget est dépassé (tailles mensongères, flux
- * sans taille). Le fichier en cours porte un nom temporaire, supprimé en cas d'échec ou d'annulation.
+ * refusée. Avant d'écrire, la somme des tailles annoncées, chaque fichier et chaque dossier comptant au moins un bloc
+ * ([cost]), doit tenir dans la place libre moins une réserve ([reserve]) ; le premier passage s'arrête au premier
+ * en-tête qui dépasse ce budget. Pendant l'extraction, tout s'arrête dès que le budget est dépassé (tailles
+ * mensongères, flux sans taille) ou que la place réellement libre, relue avant chaque fichier et chaque dossier
+ * (clusters, métadonnées), passerait sous la réserve. Le fichier en cours porte un nom temporaire, supprimé en cas
+ * d'échec ou d'annulation. Un .gz ou un .xz seul donne un fichier au nom de l'archive sans son extension.
  */
 object Archives {
     const val MSG_ENCRYPTED = "Archive protégée par mot de passe : non prise en charge"
@@ -46,6 +49,12 @@ object Archives {
 
     /** Réserve laissée libre par une extraction : min(256 Mio, 5 % du stockage). */
     fun reserve(total: Long): Long = minOf(256L shl 20, total / 20)
+
+    /** Allocation minimale comptée par fichier et par dossier extraits. */
+    private const val BLOCK = 4096L
+
+    /** Place comptée pour un fichier de [size] octets (-1 : inconnue) : arrondie au bloc, un bloc au moins. */
+    private fun cost(size: Long): Long = maxOf(BLOCK, (maxOf(size, 0L) + BLOCK - 1) / BLOCK * BLOCK)
 
     private fun extension(name: String): String? =
         EXTENSIONS.firstOrNull { name.length > it.length && name.endsWith(it, ignoreCase = true) }
@@ -88,7 +97,8 @@ object Archives {
     fun startExtract(srcId: String, archive: String, dstId: String, dstDir: String, intoNewFolder: Boolean) =
         Transfers.launch("extract", srcId, dstId) { Extract(it, srcId, archive, dstId, dstDir, intoNewFolder).run() }
 
-    private class ArcEntry(val raw: ByteArray, val type: String, val size: Long, val encrypted: Boolean)
+    /** [stream] : unique entrée d'un .gz ou d'un .xz seul, que libarchive nomme « data ». */
+    private class ArcEntry(val raw: ByteArray, val type: String, val size: Long, val encrypted: Boolean, val stream: Boolean)
 
     /** Erreur de lecture du moteur, en message français pour les cas propres aux archives. */
     private fun readError(code: Int): Exception = when (code) {
@@ -102,7 +112,10 @@ object Archives {
         val b = engine.arcNext(h) ?: return null
         val o = JSONObject(String(b, Charsets.UTF_8))
         if (o.has("err")) throw readError(o.getInt("err"))
-        return ArcEntry(Base64.getDecoder().decode(o.getString("name")), o.getString("type"), o.getLong("size"), o.optBoolean("encrypted"))
+        return ArcEntry(
+            Base64.getDecoder().decode(o.getString("name")), o.getString("type"), o.getLong("size"), o.optBoolean("encrypted"),
+            o.optBoolean("raw"),
+        )
     }
 
     /** Ouvre l'archive [path] de [src], passe sa poignée et l'action « activité » de la source à [body], la ferme toujours. */
@@ -135,6 +148,8 @@ object Archives {
         val intoNewFolder: Boolean,
     ) {
         var skipped = 0
+        /** Réserve de la destination, jamais entamée. */
+        var keep = 0L
 
         fun run() {
             val src = Files.sourceOrNull(srcId)
@@ -160,31 +175,53 @@ object Archives {
             val arcName = WriteOps.nameOf(arc)
             val zip = arcName.endsWith(".zip", ignoreCase = true)
             fun relOf(e: ArcEntry) = ArchivePaths.safeRelative(ArchivePaths.decodeName(e.raw, zip))
+            val (free, total) = dst.space()
+            keep = reserve(total)
+            val budget = free - keep
 
-            // premier passage, en-têtes seulement : entrée chiffrée et place vérifiées avant d'écrire quoi que ce soit
+            // premier passage, en-têtes seulement : entrée chiffrée et place vérifiées avant d'écrire quoi que ce soit ;
+            // annoncé à l'interface (« Lecture de l'archive… »), arrêté au premier en-tête qui dépasse le budget
+            c.st = c.st.copy(currentName = arcName)
+            c.publish(force = true)
             var files = 0
             var announced = 0L
+            var need = 0L
+            var stream = false
+            val dirSet = HashSet<String>()
+            fun addDirs(rel: String) {
+                var d = rel
+                while (d.isNotEmpty() && dirSet.add(d)) d = d.substringBeforeLast('/', "")
+            }
+            fun needed() = need + BLOCK * dirSet.size
+            fun noSpace() = FilesException(EngineError.FL_ENOSPC, Transfers.msgNoSpace(needed(), maxOf(0L, budget)))
             withReader(src, arc) { h, activity ->
                 while (true) {
                     c.checkCancel()
                     activity()
                     val e = next(h) ?: break
                     if (e.encrypted) throw FilesException(EngineError.FL_ENOTSUP, MSG_ENCRYPTED)
-                    if (e.type == "f" && relOf(e) != null) {
-                        files++
-                        if (e.size > 0) announced += e.size
+                    if (e.stream) stream = true
+                    val rel = if (e.stream) "" else relOf(e) ?: continue
+                    when (e.type) {
+                        "d" -> addDirs(rel)
+                        "f" -> {
+                            files++
+                            if (e.size > 0) announced += e.size
+                            need += cost(e.size)
+                            addDirs(rel.substringBeforeLast('/', ""))
+                        }
                     }
+                    if (needed() > budget) throw noSpace()
                 }
             }
-            val (free, total) = dst.space()
-            val budget = free - reserve(total)
-            if (announced > budget) throw FilesException(EngineError.FL_ENOSPC, Transfers.msgNoSpace(announced, maxOf(0L, budget)))
+            if (needed() > budget) throw noSpace()
             c.st = c.st.copy(fileCount = files, totalBytes = announced)
             c.publish(force = true)
 
             val restricted = dst.restrictedNames
             fun clean(n: String) = if (restricted) DocNames.sanitize(n) else n
-            val root = if (intoNewFolder) dst.mkdir(dir, clean(stripExtension(arcName))) else dir
+            // un .gz ou un .xz seul : un fichier, à côté de l'archive, sans nouveau dossier
+            val root = if (intoNewFolder && !stream) dst.mkdir(dir, clean(stripExtension(arcName))) else dir
             // dossiers de l'archive (chemin relatif) → dossiers créés par nous sur la destination
             val dirs = HashMap<String, String>()
             fun dirFor(rel: String): String {
@@ -192,6 +229,7 @@ object Archives {
                 dirs[rel]?.let { return it }
                 val parent = dirFor(rel.substringBeforeLast('/', ""))
                 c.checkCancel()
+                ensureRoom(dst, BLOCK)
                 return dst.mkdir(parent, clean(rel.substringAfterLast('/'))).also { dirs[rel] = it }
             }
             var written = 0L
@@ -202,6 +240,10 @@ object Archives {
                     activity()
                     val e = next(h) ?: break
                     if (e.encrypted) throw FilesException(EngineError.FL_ENOTSUP, MSG_ENCRYPTED)
+                    if (e.stream) {
+                        written += extractFile(h, e, dst, root, clean(stripExtension(arcName)), buf, budget - written, activity)
+                        continue
+                    }
                     val rel = relOf(e)
                     when {
                         rel == null || (e.type != "f" && e.type != "d") -> skipped++
@@ -220,6 +262,7 @@ object Archives {
             h: Long, e: ArcEntry, dst: FileSource, parent: String, name: String, buf: ByteArray, budget: Long, activity: () -> Unit,
         ): Long {
             c.checkCancel()
+            ensureRoom(dst, cost(e.size))
             c.st = c.st.copy(currentName = name, fileIndex = c.st.fileIndex + 1)
             c.publish(force = true)
             var created: String? = null
@@ -258,6 +301,11 @@ object Archives {
                 out?.let { runCatching { it.close() } }
                 created?.let { partial -> if (Transfers.alive(dst)) runCatching { dst.delete(partial) } }
             }
+        }
+
+        /** Place réellement libre relue avant chaque fichier et chaque dossier : la réserve n'est jamais entamée. */
+        fun ensureRoom(dst: FileSource, need: Long) {
+            if (dst.space().first - need < keep) throw FilesException(EngineError.FL_ENOSPC, MSG_TOO_BIG)
         }
     }
 

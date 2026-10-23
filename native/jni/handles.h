@@ -94,7 +94,8 @@ int fj_format(int64_t disk, const char *json, const void *pass, size_t passlen, 
 int64_t fj_arc_open_fd(int fd);
 int64_t fj_arc_open_file(int64_t file, int64_t size);
 /* 1 : entrée suivante dans *out, {"name": base64 des octets bruts du nom, "type": "f"|"d"|"l"|"h"|"o",
- * "size": octets (-1 inconnue), "mtime", "encrypted"} ; 0 : fin de l'archive ; < 0 : fl_err. */
+ * "size": octets (-1 inconnue), "mtime", "encrypted", "raw": flux compressé seul (.gz, .xz) dont le nom n'est
+ * pas celui du fichier} ; 0 : fin de l'archive ; < 0 : fl_err. */
 int fj_arc_next(int64_t arc, fl_json *out);
 /* Données de l'entrée courante : octets lus (<= FJ_PREAD_MAX), 0 à la fin de l'entrée, ou fl_err. */
 int64_t fj_arc_read(int64_t arc, void *buf, size_t len);

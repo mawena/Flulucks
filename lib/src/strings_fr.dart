@@ -138,6 +138,8 @@ class Fr {
   static String selected(int n) => '$n sélectionné(s)';
   /// [kind] : `copy`, `move`, `compress` ou `extract`.
   static String transferLine(String kind, String name, int i, int n, int pct) {
+    // extraction, premier passage : en-têtes lus, aucun fichier encore compté
+    if (kind == 'extract' && n == 0) return "Lecture de l'archive $name…";
     final what = switch (kind) {
       'move' => 'Déplacement',
       'compress' => 'Compression',

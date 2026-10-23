@@ -8,6 +8,7 @@
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
+#include <zlib.h>
 
 #include "cJSON.h"
 #include "fluluks/error.h"
@@ -925,6 +926,7 @@ static void relire_exemple(int64_t r) {
     TT_ASSERT_STR_EQ(cJSON_GetObjectItem(e, "type")->valuestring, k ? "f" : "d");
     TT_ASSERT_EQ((int64_t)cJSON_GetObjectItem(e, "size")->valuedouble, k ? 100000 : 0);
     TT_ASSERT(!cJSON_IsTrue(cJSON_GetObjectItem(e, "encrypted")));
+    TT_ASSERT(cJSON_IsFalse(cJSON_GetObjectItem(e, "raw")));
     cJSON_Delete(e);
     int64_t total = 0, n;
     while ((n = fj_arc_read(r, buf + total, sizeof buf - (size_t)total)) > 0) total += n;
@@ -984,6 +986,31 @@ static void test_arc_par_jni(void) {
   TT_ASSERT_EQ(fj_close_disk(d), FL_OK);
   TT_ASSERT_EQ(fj_debug_used(), 0);
   unlink(img);
+}
+
+/* Flux compressé seul (.gz sans nom d'origine, comme gzip -n) : son unique entrée est marquée « raw », pour que
+ * Kotlin la nomme d'après l'archive plutôt que « data ». */
+static void test_arc_flux_brut(void) {
+  char td[4096], gz[4200];
+  TT_ASSERT_EQ(fu_tmpdir(td, sizeof td), 0);
+  snprintf(gz, sizeof gz, "%s/seul.txt.gz", td);
+  gzFile g = gzopen(gz, "wb");
+  TT_ASSERT(g != NULL);
+  TT_ASSERT_EQ(gzwrite(g, "bonjour", 7), 7);
+  TT_ASSERT_EQ(gzclose(g), Z_OK);
+  int64_t r = fj_arc_open_fd(open(gz, O_RDONLY));
+  TT_ASSERT(r > 0);
+  fl_json j;
+  fl_json_init(&j);
+  TT_ASSERT_EQ(fj_arc_next(r, &j), 1);
+  cJSON *e = cJSON_Parse(j.buf);
+  fl_json_free(&j);
+  TT_ASSERT(e != NULL);
+  TT_ASSERT(cJSON_IsTrue(cJSON_GetObjectItem(e, "raw")));
+  cJSON_Delete(e);
+  TT_ASSERT_EQ(fj_arc_close(r), FL_OK);
+  unlink(gz);
+  TT_ASSERT_EQ(fj_debug_used(), 0);
 }
 
 /* Disque fermé (éjecté, arraché) avec une archive ouverte en lecture et une en écriture : fermées avec lui,
@@ -1092,6 +1119,7 @@ int main(void) {
   TT_RUN(test_format_pendant_montage);
   TT_RUN(test_arc_par_jni);
   TT_RUN(test_arc_disque_ferme);
+  TT_RUN(test_arc_flux_brut);
   TT_RUN(test_stat_droits);
   if (!tt_failures && g_saute) return 77; /* SKIP_RETURN_CODE de CTest */
   TT_MAIN_END();

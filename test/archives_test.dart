@@ -4,6 +4,7 @@ import 'package:fluluks/src/app.dart';
 import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/screens/explorer_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
+import 'package:fluluks/src/strings_fr.dart';
 
 import 'fake_host_api.dart';
 
@@ -201,5 +202,12 @@ void main() {
     state.onTransferChanged(t('copy'));
     await tester.pump();
     expect(find.text('Copie : b.txt (1/2) — 50 %'), findsOneWidget);
+  });
+
+  test('extractFirstPassAnnounced', () {
+    // premier passage (en-têtes seulement) : aucun fichier compté encore
+    expect(Fr.transferLine('extract', 'b.tar.xz', 0, 0, 0), "Lecture de l'archive b.tar.xz…");
+    expect(Fr.transferLine('extract', 'a.txt', 1, 2, 50), 'Extraction : a.txt (1/2) — 50 %');
+    expect(Fr.transferLine('copy', 'a.txt', 0, 0, 0), 'Copie : a.txt (0/0) — 0 %');
   });
 }

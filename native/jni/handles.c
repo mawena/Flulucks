@@ -1002,9 +1002,11 @@ int fj_arc_next(int64_t arc, fl_json *out) {
   if (!a) return FL_EINVAL;
   fl_arc_entry *e = a->r ? malloc(sizeof *e) : NULL;
   int rc = !a->r ? FL_EINVAL : !e ? FL_ENOMEM : FL_OK;
+  bool raw = false;
   if (rc == FL_OK) {
     pthread_mutex_lock(&a->mu);
     rc = fl_arc_next(a->r, e);
+    raw = rc == 1 && strcmp(fl_arc_format(a->r), "raw") == 0; /* .gz ou .xz seul : nom « data » de libarchive */
     pthread_mutex_unlock(&a->mu);
   }
   tab_release(arc, T_ARC);
@@ -1023,6 +1025,8 @@ int fj_arc_next(int64_t arc, fl_json *out) {
     fl_json_i64(out, e->mtime);
     fl_json_key(out, "encrypted");
     fl_json_bool(out, e->encrypted);
+    fl_json_key(out, "raw");
+    fl_json_bool(out, raw);
     fl_json_obj_end(out);
     if (out->err != FL_OK) rc = out->err;
   }

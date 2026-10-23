@@ -22,6 +22,7 @@ import org.junit.After
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -36,8 +37,14 @@ import org.junit.rules.TemporaryFolder
 class ArchivesTest {
     @get:Rule val tmp = TemporaryFolder()
 
-    /** Entrée d'archive simulée : nom brut, type (f, d, l, h, o), taille annoncée, données réellement rendues. */
-    private data class Arc(val raw: ByteArray, val type: String, val size: Long, val data: ByteArray = ByteArray(0), val encrypted: Boolean = false)
+    /**
+     * Entrée d'archive simulée : nom brut, type (f, d, l, h, o), taille annoncée, données réellement rendues ;
+     * [stream] : unique entrée d'un .gz ou d'un .xz seul (« raw » du moteur).
+     */
+    private data class Arc(
+        val raw: ByteArray, val type: String, val size: Long, val data: ByteArray = ByteArray(0), val encrypted: Boolean = false,
+        val stream: Boolean = false,
+    )
 
     private fun file(name: String, data: ByteArray) = Arc(name.toByteArray(), "f", data.size.toLong(), data)
     private fun dir(name: String) = Arc(name.toByteArray(), "d", 0)
@@ -51,7 +58,11 @@ class ArchivesTest {
         var onArcRead: (Int) -> Unit = {}
         var onPwrite: (Int) -> Unit = {}
         var onPread: (Int) -> Unit = {}
+        var onNext: (Int) -> Unit = {}
         var arcReads = 0
+        var nexts = 0
+        /** Allocation simulée : chaque élément du volume occupe au moins [cluster] octets de la place libre. */
+        var cluster = 0L
         var pwrites = 0
         var preads = 0
         val fds = HashMap<Int, File>()
@@ -98,6 +109,16 @@ class ArchivesTest {
             return 0
         }
 
+        override fun statfs(vol: Long): ByteArray {
+            val real = free
+            free = real - cluster * (nodes.size - 1)
+            try {
+                return super.statfs(vol)
+            } finally {
+                free = real
+            }
+        }
+
         override fun arcOpenFd(fd: Int): Long = open(fd, -1)
         override fun arcOpenFile(file: Long, size: Long): Long = open(-1, file)
 
@@ -113,11 +134,12 @@ class ArchivesTest {
 
         override fun arcNext(arc: Long): ByteArray? {
             val r = readers[arc] ?: return """{"err":${EngineError.FL_EINVAL}}""".toByteArray()
+            onNext(++nexts)
             r.idx++
             r.pos = 0
             val a = entries.getOrNull(r.idx) ?: return null
             return JSONObject().put("name", Base64.getEncoder().encodeToString(a.raw)).put("type", a.type).put("size", a.size)
-                .put("mtime", 1714564800).put("encrypted", a.encrypted).toString().toByteArray()
+                .put("mtime", 1714564800).put("encrypted", a.encrypted).put("raw", a.stream).toString().toByteArray()
         }
 
         override fun arcRead(arc: Long, buf: ByteArray, len: Int): Int {
@@ -354,6 +376,63 @@ class ArchivesTest {
         assertTrue(s.error, s.error!!.startsWith("Pas assez de place"))
         assertEquals(0, e.arcReads)
         assertEquals(setOf("/"), e.nodes.keys)
+        noLeak()
+    }
+
+    @Test fun manySmallFilesStopAtReserve() {
+        e.free = 3L * mib; e.total = 20L * mib // réserve : 1 Mio
+        e.cluster = 128L shl 10 // clé exFAT : 128 Kio occupés par fichier, même pour 1 Kio de données
+        local("petits.zip")
+        e.entries = (1..100).map { file("f$it.txt", data(1024, it)) }
+        val s = extract("phone", "/petits.zip", volId, "/", newFolder = false)
+        assertNotNull(s.error)
+        assertTrue(s.error, s.error!!.startsWith("Pas assez de place"))
+        val left = e.free - e.cluster * (e.nodes.size - 1)
+        assertTrue("libre : $left", left >= 1L * mib - e.cluster) // au plus un fichier au-delà de la réserve
+        noLeak()
+    }
+
+    @Test fun perEntryCostInPrecheck() {
+        e.free = 3L * mib; e.total = 20L * mib // 2 Mio utilisables
+        local("p.zip")
+        // 600 fichiers d'un octet : 600 o annoncés, mais au moins un bloc de 4 Kio chacun (2,3 Mio)
+        e.entries = (1..600).map { file("f$it", data(1, it)) }
+        val s = extract("phone", "/p.zip", volId, "/", newFolder = true)
+        assertNotNull(s.error)
+        assertTrue(s.error, s.error!!.startsWith("Pas assez de place"))
+        assertEquals(0, e.arcReads)
+        assertEquals(setOf("/"), e.nodes.keys)
+        noLeak()
+    }
+
+    @Test fun oversizedHeaderStopsFirstPass() {
+        local("b.tar.xz")
+        var seen: TransferState? = null
+        e.onNext = { if (it == 1) seen = Transfers.state.value }
+        // en-tête honnête de 1 Tio de zéros : refus dès cet en-tête, sans décompresser la suite
+        e.entries = listOf(Arc("zeros.bin".toByteArray(), "f", 1L shl 40), file("a.txt", data(10)), file("b.txt", data(10)))
+        val s = extract("phone", "/b.tar.xz", "phone", "/", newFolder = true)
+        assertNotNull(s.error)
+        assertTrue(s.error, s.error!!.startsWith("Pas assez de place"))
+        assertEquals(1, e.nexts)
+        assertEquals(0, e.arcReads)
+        // premier passage annoncé : « Lecture de l'archive b.tar.xz… »
+        assertEquals("b.tar.xz", seen!!.currentName)
+        assertEquals(0, seen!!.fileCount)
+        assertEquals(listOf("b.tar.xz"), root.list()!!.toList())
+        noLeak()
+    }
+
+    @Test fun singleStreamNamedAfterArchive() {
+        local("notes.txt.xz")
+        local("notes.txt", "déjà là".toByteArray())
+        val d = data(5000)
+        // libarchive nomme « data » l'unique entrée d'un .xz ou d'un .gz sans nom d'origine
+        e.entries = listOf(Arc("data".toByteArray(), "f", -1, d, stream = true))
+        val s = extract("phone", "/notes.txt.xz", "phone", "/", newFolder = true)
+        assertNull(s.error)
+        assertArrayEquals(d, File(root, "notes (1).txt").readBytes())
+        assertEquals(setOf("notes.txt.xz", "notes.txt", "notes (1).txt"), root.list()!!.toSet())
         noLeak()
     }
 
