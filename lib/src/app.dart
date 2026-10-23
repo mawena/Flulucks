@@ -1,9 +1,13 @@
 import 'package:flutter/material.dart';
 
+import 'bridge/fluluks_api.g.dart';
+import 'licenses.dart';
 import 'screens/home_screen.dart';
+import 'screens/welcome_screen.dart';
 import 'state/app_state.dart';
 import 'strings_fr.dart';
 import 'ui/theme.dart';
+import 'ui/tokens.dart';
 import 'widgets/mini_player.dart';
 
 class FluLuksApp extends StatefulWidget {
@@ -35,7 +39,17 @@ class _FluLuksAppState extends State<FluLuksApp> {
         messengerKey: _messengerKey,
         child: child!,
       ),
-      home: HomeScreen(state: widget.state),
+      localizationsDelegates: const [FrMaterialLocalizations.delegate],
+      // bienvenue tant qu'elle n'a pas été vue, puis l'accueil
+      home: ValueListenableBuilder<UiPrefsMsg>(
+        valueListenable: widget.state.uiPrefsListenable,
+        builder: (context, prefs, _) => AnimatedSwitcher(
+          duration: Motion.of(context, Motion.medium),
+          child: prefs.welcomeSeen
+              ? HomeScreen(key: const ValueKey('home'), state: widget.state)
+              : WelcomeScreen(key: const ValueKey('welcome'), state: widget.state),
+        ),
+      ),
     );
   }
 }

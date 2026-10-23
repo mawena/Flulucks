@@ -44,6 +44,15 @@ class HomeScreen extends StatelessWidget {
             onPressed: () => Navigator.of(context)
                 .push(MaterialPageRoute<void>(builder: (_) => SettingsScreen(state: state))),
           ),
+          PopupMenuButton<void Function()>(
+            tooltip: Fr.moreOptions,
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (open) => open(),
+            itemBuilder: (context) => [
+              PopupMenuItem(value: () => openHelp(context), child: const Text(Fr.help)),
+              PopupMenuItem(value: () => openAbout(context, state), child: const Text(Fr.about)),
+            ],
+          ),
         ],
       ),
       bottomNavigationBar: TransferBar(state: state), // copie en cours ou interrompue, même hors de l'explorateur

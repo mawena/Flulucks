@@ -384,6 +384,16 @@ class UiPrefsMsg {
   bool welcomeSeen;
 }
 
+/// Version de Portail (`versionName`, `versionCode` du paquet) et appareil (`Build.VERSION.RELEASE`, `Build.MODEL`),
+/// pour l'écran « À propos ».
+class AppInfoMsg {
+  AppInfoMsg({required this.versionName, required this.versionCode, required this.androidRelease, required this.device});
+  String versionName;
+  int versionCode;
+  String androidRelease;
+  String device;
+}
+
 /// Favori ; `sourceId` null si le stockage n'est pas ouvert.
 class FavoriteMsg {
   FavoriteMsg({required this.key, required this.path, required this.label, this.sourceId});
@@ -534,6 +544,7 @@ abstract class FluLuksHostApi {
   // --- interface (phase 11)
   UiPrefsMsg getUiPrefs();
   void setUiPrefs(UiPrefsMsg prefs);
+  AppInfoMsg getAppInfo();
 
   // --- formatage (phase 8)
   /// Formate tout le disque : fs parmi fat32, exfat, ext4, ntfs ; passphrase si encrypted (mise à zéro).

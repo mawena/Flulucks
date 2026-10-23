@@ -27,6 +27,14 @@ Future<void> openSettings(WidgetTester tester) async {
   await tester.pumpAndSettle();
 }
 
+/// Fait défiler les Réglages (en sections) jusqu'au réglage [text], entièrement visible ; [delta] négatif pour
+/// remonter.
+Future<void> showSetting(WidgetTester tester, String text, {double delta = 100}) async {
+  await tester.scrollUntilVisible(find.text(text), delta);
+  await tester.ensureVisible(find.text(text));
+  await tester.pumpAndSettle();
+}
+
 SourceMsg src(String id, String kind, String label, {String? key, int free = 16000000000}) => SourceMsg(
       id: id,
       stableKey: key ?? id,
@@ -210,10 +218,12 @@ void main() {
     await pump(tester, api);
     expect(find.text('Ouvrir les disques en lecture seule'), findsNothing); // plus sur l'accueil
     await openSettings(tester);
+    await showSetting(tester, 'Ouvrir les disques en lecture seule'); // section Disques
     expect(find.text("S'applique aux prochaines ouvertures de disques"), findsOneWidget);
     await tester.tap(find.text('Ouvrir les disques en lecture seule'));
     await tester.pump();
     expect(api.readOnlyPreference, isTrue);
+    await showSetting(tester, 'Afficher les fichiers cachés', delta: -100); // section Apparence, plus haut
     await tester.tap(find.text('Afficher les fichiers cachés'));
     await tester.pump();
     expect(api.viewPrefs.showHidden, isTrue);
@@ -281,6 +291,7 @@ void main() {
       ];
     await pump(tester, api);
     await openSettings(tester);
+    await showSetting(tester, 'Ouvrir les disques en lecture seule'); // section Disques
     final sw = find.widgetWithText(SwitchListTile, 'Ouvrir les disques en lecture seule');
     expect(tester.widget<SwitchListTile>(sw).value, isFalse);
     await tester.tap(sw);

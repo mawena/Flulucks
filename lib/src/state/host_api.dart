@@ -68,6 +68,7 @@ abstract class HostApi {
   Future<void> removeFavorite(String key, String path);
   Future<UiPrefsMsg> getUiPrefs();
   Future<void> setUiPrefs(UiPrefsMsg prefs);
+  Future<AppInfoMsg> getAppInfo();
   Future<void> formatDisk(String diskId, String fs, bool encrypted, String label, Uint8List? passphrase);
 }
 
@@ -217,6 +218,8 @@ class PigeonHostApi implements HostApi {
   Future<UiPrefsMsg> getUiPrefs() => _api.getUiPrefs();
   @override
   Future<void> setUiPrefs(UiPrefsMsg prefs) => _api.setUiPrefs(prefs);
+  @override
+  Future<AppInfoMsg> getAppInfo() => _api.getAppInfo();
   @override
   Future<void> formatDisk(String diskId, String fs, bool encrypted, String label, Uint8List? passphrase) =>
       _api.formatDisk(diskId, fs, encrypted, label, passphrase);

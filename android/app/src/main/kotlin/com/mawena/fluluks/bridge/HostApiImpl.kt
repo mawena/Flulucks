@@ -7,6 +7,7 @@ import android.os.Build
 import android.os.storage.StorageManager
 import android.os.storage.StorageVolume
 import android.provider.DocumentsContract
+import androidx.core.content.pm.PackageInfoCompat
 import com.mawena.fluluks.engine.EngineError
 import com.mawena.fluluks.engine.FileType
 import com.mawena.fluluks.files.Archives
@@ -546,6 +547,18 @@ class HostApiImpl(
     override fun getUiPrefs(): UiPrefsMsg = uiPrefs.get().let { UiPrefsMsg(it.theme, it.haptics, it.welcomeSeen) }
 
     override fun setUiPrefs(prefs: UiPrefsMsg) = guarded { uiPrefs.set(UiSettings(prefs.theme, prefs.haptics, prefs.welcomeSeen)) }
+
+    /** Version du paquet et appareil, pour « À propos ». */
+    override fun getAppInfo(): AppInfoMsg = guardedValue {
+        @Suppress("DEPRECATION") // getPackageInfo(String, PackageInfoFlags) n'existe qu'à partir de l'API 33
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        AppInfoMsg(
+            versionName = info.versionName.orEmpty(),
+            versionCode = PackageInfoCompat.getLongVersionCode(info),
+            androidRelease = Build.VERSION.RELEASE.orEmpty(),
+            device = Build.MODEL.orEmpty(),
+        )
+    }
 
     /** Travail du gestionnaire de fichiers hors du fil principal ; réponse sur le fil principal. */
     private fun <T> io(callback: (Result<T>) -> Unit, dispatcher: CoroutineDispatcher = Dispatchers.IO, block: () -> T) {

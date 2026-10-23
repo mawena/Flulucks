@@ -206,6 +206,93 @@ class Fr {
   static const themeSystem = 'Système';
   static const themeLight = 'Clair';
   static const themeDark = 'Sombre';
+
+  // réglages regroupés, « À propos », aide et bienvenue (phase 11)
+  static const sectionAppearance = 'Apparence';
+  static const sectionFiles = 'Fichiers';
+  static const sectionDisks = 'Disques';
+  static const sectionComfort = 'Confort';
+  static const haptics = 'Retours haptiques';
+  static const hapticsHelp = 'Légère vibration à la sélection, au déverrouillage et aux confirmations';
+  static const helpSubtitle = 'Questions courantes';
+  static const aboutSubtitle = 'Version, licences';
+  static const moreOptions = "Plus d'options";
+
+  /// « Version 1.4.0 (11) ».
+  static String version(String name, int code) => 'Version $name ($code)';
+
+  /// « Android 13 · Pixel 4 XL ».
+  static String deviceLine(String android, String device) => 'Android $android · $device';
+  static const aboutTagline = 'Disques chiffrés LUKS et gestionnaire de fichiers, sans root';
+  static const licensesButton = 'Licences des bibliothèques';
+  static const gplNote =
+      "Portail utilise des bibliothèques sous GPL (ntfs-3g, lwext4) : diffusé, il l'est sous GPL, avec ses sources.";
+  static const licensesTitle = 'Licences';
+  static const viewLicenses = 'Voir les licences';
+  static String licensesCount(int n) => count(n, 'licence', 'licences');
+  static const welcomeTitle = 'Bienvenue dans Portail';
+  static const welcomeDisks = 'Vos disques, même chiffrés';
+  static const welcomePrivacy = 'Votre phrase de passe ne quitte jamais la mémoire';
+  static const welcomeAccess =
+      'Accès aux fichiers du téléphone : nécessaire pour parcourir le téléphone et la carte SD, pas pour les '
+      'disques USB';
+  static const start = 'Commencer';
+
+  /// Aide : (question, réponse de trois phrases au plus, tirée du README).
+  static const helpEntries = [
+    (
+      'Ouvrir un disque chiffré',
+      "Branchez le disque, acceptez d'ouvrir Portail, puis autorisez l'accès au périphérique USB. Dans Disques USB, "
+          'touchez Déverrouiller sur la partition chiffrée et saisissez la phrase de passe. Une partition en clair '
+          "s'ouvre avec Ouvrir."
+    ),
+    (
+      "Pourquoi mon disque s'ouvre en lecture seule ?",
+      "Au moindre doute, Portail ouvre le disque en lecture seule et la raison s'affiche sur sa carte : réglage "
+          '« Ouvrir les disques en lecture seule », disque protégé en écriture, journal à rejouer, disque '
+          'mal éjecté. Un disque FAT ou exFAT mal éjecté se vérifie sur un ordinateur (chkdsk sous Windows, fsck sous '
+          'Linux). Un disque NTFS se rebranche sous Windows, arrêté complètement (Maj + Arrêter) plutôt que mis en '
+          'veille ou en démarrage rapide.'
+    ),
+    (
+      'Débrancher sans risque',
+      'Touchez Éjecter, dans Portail ou dans la notification « Disque ouvert », avant de débrancher le '
+          'disque. Si vous avez écrit, attendez la fin de « Écriture des données en attente… ». Un disque '
+          'arraché pendant une écriture peut ensuite s\'ouvrir en lecture seule, le temps de le vérifier.'
+    ),
+    (
+      "Voir le disque dans d'autres applications",
+      "Un volume ouvert apparaît dans l'application Fichiers d'Android et dans le sélecteur de fichiers de toutes les "
+          'applications. Touchez Ouvrir dans Fichiers, ou ouvrez une vidéo dans VLC, un PDF ou une photo dans vos '
+          'applications habituelles. Coupez le réglage « Ouvrir dans Portail » pour que les fichiers '
+          "touchés s'ouvrent dans une autre application."
+    ),
+    (
+      'La corbeille',
+      'Supprimer met les éléments dans la corbeille du stockage pendant 30 jours, et Supprimer définitivement reste '
+          "proposé. La corbeille s'ouvre depuis la carte du stockage ou le menu de l'explorateur : Restaurer, "
+          'supprimer définitivement ou Vider. Sur un disque chiffré, elle reste dans le volume chiffré ; un '
+          "dossier distant n'a pas de corbeille."
+    ),
+    (
+      'Le verrouillage automatique',
+      'Dans les Réglages, les disques chiffrés se verrouillent après 5, 15 ou 30 minutes, ou 1 heure, sans activité '
+          '(« Jamais » par défaut). Une copie en cours ou un fichier lu par une autre application compte '
+          'comme une activité. Une notification annonce le verrouillage.'
+    ),
+    (
+      'Les dossiers distants (FTP, SFTP)',
+      "Ajoutez un serveur dans la section Dossiers distants de l'accueil : il se parcourt ensuite comme les "
+          'autres stockages. En SFTP, comparez l\'empreinte montrée à la première connexion à celle du serveur : '
+          "une clé changée est refusée. FTP n'est pas chiffré : préférez SFTP hors de chez vous."
+    ),
+    (
+      'Formater un disque',
+      'Menu ⋮ de la carte du disque, Formater… : choisissez exFAT, FAT32, ext4 ou NTFS, une étiquette et, '
+          'si vous le voulez, le chiffrement LUKS2. Tout le contenu du disque est effacé : éjectez d\'abord ses '
+          'volumes ouverts, puis tapez son nom pour confirmer. Gardez Portail ouvert jusqu\'à la fin du formatage.'
+    ),
+  ];
   static const addFavorite = 'Ajouter aux favoris';
   static const add = 'Ajouter';
   static const encryptedFavorite = "Le nom de ce dossier restera visible sur l'accueil, même disque verrouillé";

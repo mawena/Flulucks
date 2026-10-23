@@ -1510,6 +1510,60 @@ data class UiPrefsMsg (
 }
 
 /**
+ * Version de Portail (`versionName`, `versionCode` du paquet) et appareil (`Build.VERSION.RELEASE`, `Build.MODEL`),
+ * pour l'écran « À propos ».
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class AppInfoMsg (
+  val versionName: String,
+  val versionCode: Long,
+  val androidRelease: String,
+  val device: String
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): AppInfoMsg {
+      val versionName = pigeonVar_list[0] as String
+      val versionCode = pigeonVar_list[1] as Long
+      val androidRelease = pigeonVar_list[2] as String
+      val device = pigeonVar_list[3] as String
+      return AppInfoMsg(versionName, versionCode, androidRelease, device)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      versionName,
+      versionCode,
+      androidRelease,
+      device,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as AppInfoMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.versionName, other.versionName) && FluLuksApiPigeonUtils.deepEquals(this.versionCode, other.versionCode) && FluLuksApiPigeonUtils.deepEquals(this.androidRelease, other.androidRelease) && FluLuksApiPigeonUtils.deepEquals(this.device, other.device)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.versionName)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.versionCode)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.androidRelease)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.device)
+    return result
+  }
+  override fun toString(): String {
+    return "AppInfoMsg(versionName=$versionName, versionCode=$versionCode, androidRelease=$androidRelease, device=$device)"
+  }
+}
+
+/**
  * Favori ; `sourceId` null si le stockage n'est pas ouvert.
  *
  * Generated class from Pigeon that represents data sent in messages.
@@ -1671,6 +1725,11 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
       }
       150.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
+          AppInfoMsg.fromList(it)
+        }
+      }
+      151.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
           FavoriteMsg.fromList(it)
         }
       }
@@ -1763,8 +1822,12 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
         stream.write(149)
         writeValue(stream, value.toList())
       }
-      is FavoriteMsg -> {
+      is AppInfoMsg -> {
         stream.write(150)
+        writeValue(stream, value.toList())
+      }
+      is FavoriteMsg -> {
+        stream.write(151)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1867,6 +1930,7 @@ interface FluLuksHostApi {
   fun removeFavorite(key: String, path: String)
   fun getUiPrefs(): UiPrefsMsg
   fun setUiPrefs(prefs: UiPrefsMsg)
+  fun getAppInfo(): AppInfoMsg
   /** Formate tout le disque : fs parmi fat32, exfat, ext4, ntfs ; passphrase si encrypted (mise à zéro). */
   fun formatDisk(diskId: String, fs: String, encrypted: Boolean, label: String, passphrase: ByteArray?, callback: (Result<Unit>) -> Unit)
 
@@ -3074,6 +3138,21 @@ interface FluLuksHostApi {
             val wrapped: List<Any?> = try {
               api.setUiPrefs(prefsArg)
               listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.getAppInfo$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getAppInfo())
             } catch (exception: Throwable) {
               FluLuksApiPigeonUtils.wrapError(exception)
             }
