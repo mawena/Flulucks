@@ -116,7 +116,7 @@ class _ListTile extends StatelessWidget {
     final more = parent.onMore;
     // hors sélection, le bouton ⋮ seul : pas d'AnimatedSwitcher par ligne pendant un défilement rapide
     final Widget? trailing = more != null && !selected
-        ? IconButton(tooltip: Fr.actionsOf(e.name), icon: const Icon(Icons.more_vert_rounded), onPressed: () => more(item))
+        ? _MoreButton(label: Fr.actionsOf(e.name), onTap: () => more(item))
         : parent.isSelected == null
             ? null
             : AnimatedSwitcher(
@@ -141,6 +141,31 @@ class _ListTile extends StatelessWidget {
   }
 }
 
+/// Bouton ⋮ d'une ligne : cible de 48 dp et libellé TalkBack, sans l'infobulle d'un IconButton, qui doublait le coût
+/// d'une ligne pendant un défilement rapide (mesuré sur le Pixel, T12).
+class _MoreButton extends StatelessWidget {
+  const _MoreButton({required this.label, required this.onTap});
+
+  final String label;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => Semantics(
+        button: true,
+        label: label,
+        excludeSemantics: true,
+        onTap: onTap,
+        child: InkResponse(
+          onTap: onTap,
+          radius: Layout.minTouch / 2,
+          child: const SizedBox.square(
+            dimension: Layout.minTouch,
+            child: Icon(Icons.more_vert_rounded),
+          ),
+        ),
+      );
+}
+
 class _GridTile extends StatelessWidget {
   const _GridTile({super.key, required this.parent, required this.item, required this.selected});
 
@@ -154,6 +179,60 @@ class _GridTile extends StatelessWidget {
     final s = theme.colorScheme;
     final e = item.entry;
     final radius = BorderRadius.circular(Radii.m);
+    // animations (fond, coche) seulement pendant une sélection : hors sélection, aucune horloge par tuile
+    // pendant un défilement rapide (mesuré sur le Pixel, T12)
+    final selecting = parent.isSelected != null && parent.onMore == null;
+    final thumb = LayoutBuilder(
+      builder: (_, c) => Center(
+        child: EntryThumb(
+          state: parent.state,
+          cache: parent.thumbs,
+          sourceId: item.sourceId,
+          entry: e,
+          size: c.biggest.shortestSide,
+          radius: Radii.m,
+        ),
+      ),
+    );
+    final Widget tile = InkWell(
+      enableFeedback: false,
+      borderRadius: radius,
+      onTap: () => parent.onTap(item),
+      onLongPress: parent.onLongPress == null ? null : () => parent.onLongPress!(item),
+      child: Padding(
+        padding: const EdgeInsets.all(Space.xs),
+        child: Column(children: [
+          Expanded(
+            child: !selecting
+                ? thumb
+                : Stack(children: [
+                    Positioned.fill(child: thumb),
+                    PositionedDirectional(
+                      top: Space.xs,
+                      end: Space.xs,
+                      child: AnimatedScale(
+                        scale: selected ? 1 : 0,
+                        duration: Motion.of(context, Motion.short),
+                        curve: Motion.standard,
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(color: s.surface, shape: BoxShape.circle),
+                          child: Icon(Icons.check_circle_rounded, color: s.primary),
+                        ),
+                      ),
+                    ),
+                  ]),
+          ),
+          const SizedBox(height: Space.xs),
+          Text(
+            e.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodySmall?.copyWith(color: selected ? s.onPrimaryContainer : null),
+          ),
+        ]),
+      ),
+    );
     return Semantics(
       label: entrySemantics(e),
       selected: selected,
@@ -161,61 +240,15 @@ class _GridTile extends StatelessWidget {
       excludeSemantics: true,
       onTap: () => parent.onTap(item),
       onLongPress: parent.onLongPress == null ? null : () => parent.onLongPress!(item),
-      child: AnimatedContainer(
-        duration: Motion.of(context, Motion.short),
-        curve: Motion.standard,
-        decoration: BoxDecoration(color: selected ? s.primaryContainer : s.surface.withValues(alpha: 0), borderRadius: radius),
-        child: InkWell(
-          enableFeedback: false,
-          borderRadius: radius,
-          onTap: () => parent.onTap(item),
-          onLongPress: parent.onLongPress == null ? null : () => parent.onLongPress!(item),
-          child: Padding(
-            padding: const EdgeInsets.all(Space.xs),
-            child: Column(children: [
-              Expanded(
-                child: Stack(children: [
-                  Positioned.fill(
-                    child: LayoutBuilder(
-                      builder: (_, c) => Center(
-                        child: EntryThumb(
-                          state: parent.state,
-                          cache: parent.thumbs,
-                          sourceId: item.sourceId,
-                          entry: e,
-                          size: c.biggest.shortestSide,
-                          radius: Radii.m,
-                        ),
-                      ),
-                    ),
-                  ),
-                  PositionedDirectional(
-                    top: Space.xs,
-                    end: Space.xs,
-                    child: AnimatedScale(
-                      scale: selected ? 1 : 0,
-                      duration: Motion.of(context, Motion.short),
-                      curve: Motion.standard,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(color: s.surface, shape: BoxShape.circle),
-                        child: Icon(Icons.check_circle_rounded, color: s.primary),
-                      ),
-                    ),
-                  ),
-                ]),
-              ),
-              const SizedBox(height: Space.xs),
-              Text(
-                e.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodySmall?.copyWith(color: selected ? s.onPrimaryContainer : null),
-              ),
-            ]),
-          ),
-        ),
-      ),
+      child: !selecting
+          ? tile
+          : AnimatedContainer(
+              duration: Motion.of(context, Motion.short),
+              curve: Motion.standard,
+              decoration: BoxDecoration(
+                  color: selected ? s.primaryContainer : s.surface.withValues(alpha: 0), borderRadius: radius),
+              child: tile,
+            ),
     );
   }
 }

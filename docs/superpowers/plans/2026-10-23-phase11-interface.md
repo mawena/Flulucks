@@ -760,19 +760,19 @@ tests suivent le nom réel, sans changer de comportement.
 **Interfaces :** Consumes : `demoApi()` et `pumpScreen` (T11, importés depuis `../test/`). Aucun disque n'est
 touché : l'application tourne sur le faux pont.
 
-- [ ] **Step 1 :** écrire `ui_tour_test` :
+- [x] **Step 1 :** écrire `ui_tour_test` :
   - `captureTour` : captures (`binding.takeScreenshot`) de chaque écran de `pumpScreen`, en clair et en sombre, puis
     de l'accueil, de l'explorateur et du déverrouillage à 200 % et en paysage ;
   - `scroll2000EntriesSmooth` : `binding.watchPerformance` pendant le défilement d'un dossier de 2 000 éléments, en
     liste puis en grille. Le 90ᵉ centile de construction doit rester ≤ 8 ms, et celui du rendu ≤ 16 ms.
-- [ ] **Step 2 :** vérifier que le téléphone est au repos et sauvegarder l'APK de l'utilisateur
+- [x] **Step 2 :** vérifier que le téléphone est au repos et sauvegarder l'APK de l'utilisateur
   (`adb shell pm path com.mawena.fluluks`, puis `adb pull`). Run
   `flutter drive --profile --driver=test_driver/integration_test.dart --target=integration_test/ui_tour_test.dart -d <Pixel>`.
   Attendu : `All tests passed`, captures écrites dans le dossier ci-dessus.
-- [ ] **Step 3 :** relire les captures (contraste, coupures, alignements). Corriger ce qui doit l'être, avec ses tests
+- [x] **Step 3 :** relire les captures (contraste, coupures, alignements). Corriger ce qui doit l'être, avec ses tests
   Flutter, puis relancer.
-- [ ] **Step 4 :** réinstaller l'APK de l'utilisateur.
-- [ ] **Step 5 :** commit `test(interface): captures et fluidité mesurées sur le Pixel`.
+- [x] **Step 4 :** réinstaller l'APK de l'utilisateur.
+- [x] **Step 5 :** commit `test(interface): captures et fluidité mesurées sur le Pixel`.
 
 ### Task 13 *(utilisateur)* : essais
 

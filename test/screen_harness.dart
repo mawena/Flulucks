@@ -8,7 +8,6 @@ import 'package:fluluks/src/screens/filter_screen.dart';
 import 'package:fluluks/src/screens/format_screen.dart';
 import 'package:fluluks/src/screens/global_search_screen.dart';
 import 'package:fluluks/src/screens/help_screen.dart';
-import 'package:fluluks/src/screens/now_playing_screen.dart';
 import 'package:fluluks/src/screens/search_screen.dart';
 import 'package:fluluks/src/screens/server_form_screen.dart';
 import 'package:fluluks/src/screens/settings_screen.dart';
@@ -17,6 +16,7 @@ import 'package:fluluks/src/screens/text_editor_screen.dart';
 import 'package:fluluks/src/screens/trash_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
 import 'package:fluluks/src/ui/root.dart';
+import 'package:fluluks/src/widgets/mini_player.dart';
 import 'package:fluluks/src/widgets/unlock_dialog.dart';
 
 import 'demo_data.dart';
@@ -89,13 +89,15 @@ Future<void> pumpScreen(
     'format' => FormatScreen(state: state, disk: api.disks.single),
     'editor' => TextEditorScreen(state: state, sourceId: 'phone', path: '/notes-1.txt', name: 'notes-1.txt'),
     'serverForm' => ServerFormScreen(state: state, server: api.servers.single),
-    'nowPlaying' => NowPlayingScreen(state: state),
-    'unlock' => null,
+    'unlock' || 'nowPlaying' => null,
     _ => throw ArgumentError.value(screen, 'screen'),
   };
   final nav = t.state<NavigatorState>(find.byType(Navigator).first);
   if (page != null) {
     nav.push(MaterialPageRoute<void>(builder: (_) => page));
+  } else if (screen == 'nowPlaying') {
+    // comme dans l'application : depuis le lecteur réduit, qui se cache pendant « Lecture en cours »
+    await t.tap(find.descendant(of: find.byType(MiniPlayer), matching: find.text('Morceau 2.mp3')));
   } else if (screen == 'unlock') {
     showDialog<void>(
       context: nav.context,

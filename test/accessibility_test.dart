@@ -15,6 +15,7 @@ import 'package:fluluks/src/screens/space_screen.dart';
 import 'package:fluluks/src/screens/text_editor_screen.dart';
 import 'package:fluluks/src/screens/trash_screen.dart';
 import 'package:fluluks/src/screens/welcome_screen.dart';
+import 'package:fluluks/src/widgets/mini_player.dart';
 import 'package:fluluks/src/widgets/unlock_dialog.dart';
 
 import 'screen_harness.dart';
@@ -35,6 +36,8 @@ void main() {
       expect(find.byType(shown[screen]!), findsOneWidget, reason: screen);
       expect(t.takeException(), isNull, reason: screen);
     }
+    await pumpScreen(t, 'nowPlaying');
+    expect(find.byType(MiniPlayer), findsNothing); // caché sous « Lecture en cours »
     await pumpScreen(t, 'explorerGrid');
     expect(find.byType(SliverGrid), findsOneWidget);
     expect(find.text('IMG_20251001.jpg'), findsOneWidget);

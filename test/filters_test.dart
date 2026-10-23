@@ -76,7 +76,7 @@ void main() {
     await tester.pump();
     expect(api.calls, contains('openWith phone /Download/rapport.pdf'));
     // ouvrir le dossier du fichier, par le menu de l'élément
-    await tester.tap(find.byTooltip(Fr.actionsOf('rapport.pdf')));
+    await tester.tap(find.bySemanticsLabel(Fr.actionsOf('rapport.pdf')));
     await tester.pumpAndSettle();
     await tester.tap(find.text(Fr.openFolder));
     await tester.pumpAndSettle();
@@ -91,6 +91,31 @@ void main() {
         builder: (_) => FilterScreen(state: state, filter: 'music', title: 'Musique')));
     await tester.pumpAndSettle();
     expect(find.text('Aucun fichier'), findsOneWidget);
+  });
+
+  testWidgets('shortcutLabelsNeverSplitWords', (tester) async {
+    // captures du Pixel (T12) : « Documents » coupé en « Document / s » en paysage et à 200 %
+    for (final (size, scale, columns) in [
+      (const Size(412, 869), 1.0, 3),
+      (const Size(412, 869), 2.0, 2),
+      (const Size(869, 412), 1.0, 3), // accueil en deux colonnes : les raccourcis n'ont que la moitié
+      (const Size(1280, 800), 1.0, 6),
+    ]) {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      tester.platformDispatcher.textScaleFactorTestValue = scale;
+      await pumpHome(tester, api0());
+      final grid = find.byType(ShortcutGrid);
+      final top = tester.getTopLeft(find.descendant(of: grid, matching: find.text('Photos'))).dy;
+      final firstRow = ['Photos', 'Vidéos', 'Musique', 'Documents', 'Archives', 'Récents']
+          .where((l) => tester.getTopLeft(find.descendant(of: grid, matching: find.text(l))).dy == top)
+          .length;
+      expect(firstRow, columns, reason: '$size ×$scale');
+      // la coupure elle-même se voit sur les captures du Pixel (T12) : la police de test (Ahem, 1 em par caractère)
+      // n'a pas les largeurs de Roboto
+    }
+    tester.platformDispatcher.clearTextScaleFactorTestValue();
+    tester.view.reset();
   });
 
   // phase 11, T7 : liste ou grille selon le réglage, vignettes et lecteurs de Portail

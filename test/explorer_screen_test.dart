@@ -506,7 +506,7 @@ void main() {
   testWidgets('itemMenuOffersActions', (tester) async {
     final api = api0();
     final state = await pump(tester, api);
-    await tester.tap(find.byTooltip(Fr.actionsOf('b.txt')));
+    await tester.tap(find.bySemanticsLabel(Fr.actionsOf('b.txt')));
     await tester.pumpAndSettle();
     for (final a in [Fr.openWith, Fr.share, Fr.copy, Fr.cut, Fr.rename, Fr.compress, Fr.properties, Fr.delete]) {
       expect(find.widgetWithText(ListTile, a), findsOneWidget, reason: a);
@@ -520,7 +520,7 @@ void main() {
     // lecture seule : écriture désactivée
     final ro = api0()..sources = [src('phone', readOnly: true, roReason: 'Carte protégée')];
     await pump(tester, ro);
-    await tester.tap(find.byTooltip(Fr.actionsOf('b.txt')));
+    await tester.tap(find.bySemanticsLabel(Fr.actionsOf('b.txt')));
     await tester.pumpAndSettle();
     for (final a in [Fr.cut, Fr.rename, Fr.compress, Fr.delete]) {
       expect(tester.widget<ListTile>(find.widgetWithText(ListTile, a)).enabled, isFalse, reason: a);
@@ -603,5 +603,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.viewPrefs.grid, isFalse);
     expect(titles(tester), ['DCIM', 'a.jpg', 'b.txt']);
+  });
+
+  testWidgets('itemMenuButtonLightweight', (tester) async {
+    // T12 : l'infobulle d'un IconButton par ligne doublait le coût du défilement (90e centile 12 → 16 ms sur le Pixel)
+    final handle = tester.ensureSemantics();
+    await pump(tester, api0());
+    final rows = find.byType(SliverPrototypeExtentList);
+    expect(find.descendant(of: rows, matching: find.byType(Tooltip)), findsNothing);
+    final more = find.bySemanticsLabel(Fr.actionsOf('b.txt'));
+    expect(more, findsOneWidget);
+    expect(tester.getSize(more).width, greaterThanOrEqualTo(48));
+    expect(tester.getSize(more).height, greaterThanOrEqualTo(48));
+    handle.dispose();
   });
 }
