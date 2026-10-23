@@ -299,7 +299,8 @@ dans le même commit que le travail.
 - [x] T10 — Renommage par lot
 - [x] T11 — Filtres rapides sur l'accueil (photos, vidéos, musique, documents, archives, récents)
 - [x] Essais instrumentés sur le Pixel : archives 3/3, filtres 1/1, copies 5/5 *(2026-10-23)*
-- [ ] *(utilisateur)* T12 — Essais sur le Pixel ([fiche](../research/2026-10-22-essais-phase9/essais.md))
+- [x] *(utilisateur)* T12 — Essais sur le Pixel ([fiche](../research/2026-10-22-essais-phase9/essais.md))
+      *(2026-10-23 : toutes les lignes de la fiche réussies)*
 - [x] T13 — Documentation
 - [ ] Relecture finale de toute la branche
 - [ ] Fusion `feature/compression` → `develop`

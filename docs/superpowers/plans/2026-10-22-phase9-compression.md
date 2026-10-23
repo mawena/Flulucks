@@ -376,7 +376,7 @@ List<FilterItemMsg>` (`sourceId, path, name, size, mtime`).
 
 **Files :** Create `docs/superpowers/research/2026-10-22-essais-phase9/essais.md`.
 
-- [ ] Fiche d'essais : archives réelles (ZIP de Windows, 7z, RAR5, tar.xz) extraites du téléphone vers un
+- [x] Fiche d'essais : archives réelles (ZIP de Windows, 7z, RAR5, tar.xz) extraites du téléphone vers un
   disque et inversement ; ZIP fait par Portail ouvert sous Windows et Ubuntu ; corbeille (supprimer,
   restaurer, vider) ; analyse de l'espace du téléphone ; propriétés et SHA-256 comparé à `sha256sum` ;
   renommage de photos par date ; filtres de l'accueil. APK installée avant l'essai.
