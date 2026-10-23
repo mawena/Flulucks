@@ -12,7 +12,7 @@ photo dans les applications habituelles.
 Elle est née d'un besoin simple : utiliser sur un téléphone non rooté (un Pixel 4 XL) le disque
 LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permettait.
 
-> **État actuel : version 1.4.0 ; gestionnaire de fichiers (interface claire ou sombre et accessible, recherche dans
+> **État actuel : version 1.5.0 ; gestionnaire de fichiers (interface claire ou sombre et accessible, recherche dans
 > tous les stockages, lecteurs intégrés de photos, musique, vidéos et textes, dossiers distants FTP et SFTP, archives
 > ZIP, 7z, RAR et TAR, corbeille, analyse de l'espace, renommage par lot), lecture et écriture sur ext4, FAT, exFAT
 > et NTFS, formatage des disques USB, en clair ou chiffrés.** L'écriture a été vérifiée sur PC (batteries de
@@ -22,7 +22,7 @@ LUKS2/ext4 qu'on utilise sous Ubuntu. Aucune application existante ne le permett
 > Une sauvegarde reste recommandée avant d'écrire sur un disque qui compte. Voir les
 > [limites](#limites-actuelles).
 
-## Ce que fait la version 1.4.0
+## Ce que fait la version 1.5.0
 
 ### Interface (nouveau en 1.4.0)
 
@@ -505,7 +505,7 @@ Le dépôt suit git flow :
 | 9 | Compression et décompression (ZIP, 7z, RAR, TAR), corbeille, analyse de l'espace, propriétés et SHA-256, renommage par lot, filtres | **v1.2.0** |
 | 10 | Visionneuse d'images, lecteurs de musique et de vidéo, éditeur de texte, dossiers distants FTP puis SFTP | **v1.3.0** |
 | 11 | Interface complète et professionnelle : thèmes clair et sombre, accessibilité, grands écrans, liste ou grille partout, recherche dans tous les stockages, aide, à propos et licences | **v1.4.0** |
-| 12 | Lecteur vidéo : portrait par défaut, rotation et verrou, pistes audio et sous-titres, gestes comme VLC | v1.5.0 |
+| 12 | Lecteur vidéo : portrait par défaut, rotation et verrou, pistes audio et sous-titres, gestes comme VLC | **v1.5.0** |
 | 13 | Connexions SSH : terminal, sessions en arrière-plan, clés, commandes enregistrées, tunnels | v1.6.0 |
 | 14 | Chiffrement de fichiers et de dossiers, coffres de fichiers, chacun avec son mot de passe | v1.7.0 |
 | 15 | Vérification et réparation des disques : e2fsck, ntfsfix, fsck.fat, fsck.exfat, en-têtes LUKS | v1.8.0 |
