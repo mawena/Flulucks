@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/feedback.dart';
 import '../ui/states.dart';
 import '../ui/tokens.dart';
 import '../ui/widgets.dart';
@@ -89,8 +90,6 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
     }
   }
 
-  void _snack(String m) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(m)));
-
   /// Enregistre ; vrai si c'est fait. Fichier changé entre-temps : demande avant de le remplacer.
   Future<bool> _save({bool force = false}) async {
     final d = _doc!;
@@ -107,10 +106,10 @@ class _TextEditorScreenState extends State<TextEditorScreen> {
         _doc = TextFileMsg(text: text, bom: d.bom, crlf: d.crlf, mtime: r.mtime, size: r.size);
         _saved = text;
       });
-      _snack(Fr.saved);
+      showMessage(context, Fr.saved, kind: MessageKind.success);
       return true;
     } on PlatformException catch (e) {
-      if (mounted) _snack(e.message ?? Fr.genericError);
+      if (mounted) showMessage(context, e.message ?? Fr.genericError, kind: MessageKind.error);
       return false;
     } finally {
       if (mounted) setState(() => _saving = false);

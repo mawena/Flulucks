@@ -4,6 +4,7 @@ import '../bridge/fluluks_api.g.dart';
 import '../screens/now_playing_screen.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/feedback.dart';
 import '../ui/tokens.dart';
 import 'bottom_dock.dart';
 import 'transfer_bar.dart';
@@ -85,11 +86,10 @@ class MiniPlayer extends StatelessWidget {
 /// Le dock s'efface quand le clavier est ouvert : il serait dessous, et l'écran perdrait sa hauteur en plus de
 /// celle du clavier.
 class PlayerFrame extends StatefulWidget {
-  const PlayerFrame({super.key, required this.state, required this.navigatorKey, required this.messengerKey, required this.child});
+  const PlayerFrame({super.key, required this.state, required this.navigatorKey, required this.child});
 
   final AppState state;
   final GlobalKey<NavigatorState> navigatorKey;
-  final GlobalKey<ScaffoldMessengerState> messengerKey;
   final Widget child;
 
   @override
@@ -116,7 +116,8 @@ class _PlayerFrameState extends State<PlayerFrame> {
 
   void _changed() {
     final m = widget.state.takePlayerMessage();
-    if (m != null) widget.messengerKey.currentState?.showSnackBar(SnackBar(content: Text(m)));
+    // le cadre est sous le ScaffoldMessenger de l'application : le message s'affiche sur l'écran courant
+    if (m != null && mounted) showMessage(context, m);
     if (mounted) _entry.markNeedsBuild();
   }
 

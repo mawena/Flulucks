@@ -21,7 +21,6 @@ class FluLuksApp extends StatefulWidget {
 
 class _FluLuksAppState extends State<FluLuksApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
-  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
 
   @override
   Widget build(BuildContext context) {
@@ -31,12 +30,10 @@ class _FluLuksAppState extends State<FluLuksApp> {
       darkTheme: portailTheme(Brightness.dark, haptics: widget.state.uiPrefs.haptics),
       themeMode: themeModeOf(widget.state.uiPrefs.theme),
       navigatorKey: _navigatorKey,
-      scaffoldMessengerKey: _messengerKey,
       // musique en cours : barre réduite sous tous les écrans
       builder: (context, child) => PlayerFrame(
         state: widget.state,
         navigatorKey: _navigatorKey,
-        messengerKey: _messengerKey,
         child: child!,
       ),
       localizationsDelegates: const [FrMaterialLocalizations.delegate],
