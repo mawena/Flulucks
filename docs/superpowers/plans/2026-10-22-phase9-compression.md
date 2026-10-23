@@ -386,6 +386,6 @@ List<FilterItemMsg>` (`sourceId, path, name, size, mtime`).
 - [x] README (archives, corbeille, outils, limites : archives chiffrées non prises en charge, RAR en lecture
   seule, filtres sans les disques USB), feuille de route cochée ; commit `docs: compression et outils du
   gestionnaire`.
-- [ ] Relecture finale de toute la branche, puis fusion `feature/compression` → `develop` (après la
+- [x] Relecture finale de toute la branche, puis fusion `feature/compression` → `develop` (après la
   phase 8), `release/1.2.0` (pubspec `1.2.0+9`), `main`, étiquette signée `v1.2.0`. Pas de push sans
   l'accord de l'utilisateur.
