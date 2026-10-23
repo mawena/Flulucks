@@ -257,7 +257,7 @@ int fl_arcw_close(fl_arc_writer *w, bool commit);  /* commit faux : abandon, rie
   `Transfers.copyFile`) ; doublon d'entrée → nom unique. Compression : parcours borné de la sélection
   (comme `Transfers.scan`), fichier ZIP écrit sous un nom temporaire, renommé à la fin, supprimé en cas
   d'échec ou d'annulation ; l'archive en cours d'écriture n'est jamais ajoutée à elle-même.
-- [ ] **Step 4 :** tests JVM verts ; test instrumenté (compresser un dossier d'une image de disque,
+- [x] **Step 4 :** tests JVM verts ; test instrumenté (compresser un dossier d'une image de disque,
   extraire sur une autre image, comparer ; extraire les fixtures 7z et RAR5) vert sur le Pixel.
 - [x] **Step 5 :** commit `feat(archives): compresser et extraire d'un stockage à l'autre`.
 

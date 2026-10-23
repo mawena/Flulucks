@@ -291,7 +291,7 @@ dans le même commit que le travail.
 - [x] T2 — Lecture d'archives : ZIP, 7z, RAR4, RAR5, TAR, TAR.GZ, TAR.XZ, GZ, XZ
 - [x] T3 — Écriture ZIP (noms UTF-8, ZIP64)
 - [x] T4 — Poignées d'archive par JNI, sur un descripteur ou un fichier du moteur
-- [ ] T5 — Compresser et extraire d'un stockage à l'autre, avec progression et annulation
+- [x] T5 — Compresser et extraire d'un stockage à l'autre, avec progression et annulation
 - [x] T6 — Compresser et extraire depuis l'explorateur
 - [ ] T7 — Corbeille sur le téléphone et sur les disques (récupérable 30 jours)
 - [ ] T8 — Analyse de l'espace (dossiers et plus gros fichiers)
