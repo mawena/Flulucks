@@ -233,6 +233,8 @@ class ArchivesTest {
     private inner class RemoteLike(val inner: LocalSource) : FileSource by inner {
         override val id = "remote"
         var closedWith: Boolean? = null
+        var unknownSpace = false
+        override fun space() = if (unknownSpace) -1L to -1L else inner.space()
         override fun openNative(path: String): NativeIn =
             NativeIn.Proxy(inner.stat(path)!!.size) { e.openFd(File(remoteRoot, path.substring(1)), false) }
         override fun createNative(parent: String, name: String): Pair<String, NativeOut> {
@@ -512,6 +514,21 @@ class ArchivesTest {
         assertTrue(s.cancelled)
         assertEquals(setOf("gros.bin"), remoteRoot.list()!!.toSet())
         assertEquals(false, remote.closedWith)
+        noLeak()
+    }
+
+    @Test fun extractFromRemoteAndCompressToRemote() {
+        remote.unknownSpace = true // place libre inconnue d'un serveur : pas de vérification
+        File(remoteRoot, "a.zip").writeBytes("archive".toByteArray())
+        val b = data(2 * mib + 1)
+        e.entries = listOf(file("d/b.bin", b))
+        File(remoteRoot, "out").mkdir()
+        assertNull(extract("remote", "/a.zip", "remote", "/out", newFolder = false).error)
+        assertArrayEquals(b, File(remoteRoot, "out/d/b.bin").readBytes())
+        val s = compress("remote", listOf("/out"), "/", "lot")
+        assertNull(s.error)
+        assertArrayEquals(ZIP, File(remoteRoot, "lot.zip").readBytes())
+        assertEquals(true, remote.closedWith)
         noLeak()
     }
 

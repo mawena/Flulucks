@@ -274,7 +274,7 @@ Pigeon : `RemoteServerMsg`, `listServers`, `saveServer(msg, password?, keyPassph
 `explorer_screen.dart`, `source_tile.dart`, `strings_fr.dart` ; tests `RemoteFilesTest.kt` (faux client),
 `test/remote_test.dart`.
 
-- [ ] **Step 1 : tests** :
+- [x] **Step 1 : tests** :
   - `deleteOnRemoteIsPermanent` (pas de `.Portail-corbeille` créé) ; boîte de suppression « définitive » pour une
     source `remote` ; pas de bouton Corbeille ;
   - `copyBothWaysWithRemote` (téléphone → distant → disque en mémoire, octets égaux, annulation : partiel distant
@@ -282,10 +282,10 @@ Pigeon : `RemoteServerMsg`, `listServers`, `saveServer(msg, password?, keyPassph
   - `extractFromRemoteAndCompressToRemote` (via `NativeIn.Proxy` / `NativeOut.Pipe`, moteur simulé) ;
   - `remoteThumbnailsImagesOnly` (vidéo : aucune ; image > 8 Mio : aucune) ;
   - tuile d'un serveur connecté : « Espace inconnu ».
-- [ ] **Step 2 :** tests → FAIL.
-- [ ] **Step 3 :** implémenter.
-- [ ] **Step 4 :** tests verts ; suites vertes.
-- [ ] **Step 5 :** commit `feat(distant): dossiers distants dans le gestionnaire`.
+- [x] **Step 2 :** tests → FAIL.
+- [x] **Step 3 :** implémenter.
+- [x] **Step 4 :** tests verts ; suites vertes.
+- [x] **Step 5 :** commit `feat(distant): dossiers distants dans le gestionnaire`.
 
 ### Task 7 : FTP
 

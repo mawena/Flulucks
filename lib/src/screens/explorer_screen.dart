@@ -296,15 +296,19 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
     });
   }
 
-  /// Supprimer : à la corbeille du stockage, ou définitivement au choix ; dans la corbeille, toujours définitif.
+  /// Dossier distant : pas de corbeille, suppression toujours définitive.
+  bool get _remote => _source?.kind == 'remote';
+
+  /// Supprimer : à la corbeille du stockage, ou définitivement au choix ; dans la corbeille ou sur un dossier distant,
+  /// toujours définitif.
   Future<void> _delete() async {
     final paths = _selected.toList();
-    final inTrash = isInTrash(_path);
+    final inTrash = isInTrash(_path) || _remote;
     final permanent = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(paths.length == 1 ? Fr.deleteOne(nameOf(paths.single)) : Fr.deleteMany(paths.length)),
-        content: Text(inTrash ? Fr.deleteBody : Fr.deleteToTrashBody),
+        content: Text(_remote ? Fr.deleteRemoteBody : (inTrash ? Fr.deleteBody : Fr.deleteToTrashBody)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text(Fr.cancel)),
           if (!inTrash) TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text(Fr.deletePermanently)),
@@ -472,7 +476,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
             CheckedPopupMenuItem(value: 'hidden', checked: v.showHidden, child: const Text(Fr.showHidden)),
             if (_path == '/') ...[
               const PopupMenuDivider(),
-              const PopupMenuItem(value: 'trash', child: Text(Fr.trash)),
+              if (!_remote) const PopupMenuItem(value: 'trash', child: Text(Fr.trash)),
               const PopupMenuItem(value: 'space', child: Text(Fr.spaceAnalysis)),
             ],
           ],

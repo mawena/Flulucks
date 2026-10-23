@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.annotation.VisibleForTesting
 import com.mawena.fluluks.engine.FileType
 import com.mawena.fluluks.provider.MimeTypes
+import com.mawena.fluluks.remote.RemoteSource
 import com.mawena.fluluks.volumes.VolumeManager
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.Semaphore
@@ -26,6 +27,7 @@ interface ThumbDecoder {
  */
 object Thumbnails {
     const val MAX_PX = 256
+    const val REMOTE_IMAGE_MAX = 8L shl 20
     const val CACHE_BYTES = 32 shl 20
     const val PARALLEL = 3
     const val QUALITY = 80
@@ -53,6 +55,8 @@ object Thumbnails {
             val mime = MimeTypes.forName(e.name)
             val video = mime.startsWith("video/")
             if (!video && !mime.startsWith("image/")) return null
+            // dossier distant : chaque vignette est un téléchargement ; pas de vidéo, images de 8 Mio au plus
+            if (src is RemoteSource && (video || e.size > REMOTE_IMAGE_MAX)) return null
             val key = "$sourceId|${e.path}|${e.size}|${e.mtime}|$px"
             synchronized(cache) { cache[key] }?.let { return it }
             permits.acquire()

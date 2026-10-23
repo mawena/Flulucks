@@ -8,6 +8,7 @@ import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/screens/explorer_screen.dart';
 import 'package:fluluks/src/screens/server_form_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
+import 'package:fluluks/src/widgets/source_tile.dart';
 
 import 'fake_host_api.dart';
 
@@ -179,5 +180,37 @@ void main() {
     await tester.tap(find.text('Supprimer'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('deleteServer s1'));
+  });
+
+  testWidgets('remoteDeleteIsPermanentAndNoTrash', (tester) async {
+    final api = api0(s: server()..startPath = '/')
+      ..connect = ((id, pw) => remoteSrc())
+      ..sources = [remoteSrc()];
+    api.dirs['remote:s1']!['/'] = [EntryMsg(name: 'a.txt', path: '/a.txt', type: 'file', size: 1, mtime: 0)];
+    await pump(tester, api);
+    await showServer(tester);
+    await tester.tap(find.text('Maison'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Trier par'));
+    await tester.pumpAndSettle();
+    expect(find.text('Corbeille'), findsNothing); // pas de corbeille distante
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    await tester.longPress(find.text('a.txt'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Supprimer'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Pas de corbeille sur un dossier distant'), findsOneWidget);
+    expect(find.text('Supprimer définitivement'), findsNothing);
+    await tester.tap(find.widgetWithText(FilledButton, 'Supprimer'));
+    await tester.pumpAndSettle();
+    expect(api.calls, contains('delete remote:s1 /a.txt'));
+  });
+
+  testWidgets('remoteTileUnknownSpace', (tester) async {
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SourceTile(source: remoteSrc(), onTap: null))));
+    expect(find.text('Espace inconnu'), findsOneWidget);
+    expect(find.byType(LinearProgressIndicator), findsNothing);
+    expect(find.byIcon(Icons.cloud_outlined), findsOneWidget);
   });
 }

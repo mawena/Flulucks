@@ -48,6 +48,8 @@ class Fr {
   static const newName = 'Nouveau nom';
   static const delete = 'Supprimer';
   static const deleteBody = 'La suppression est définitive.';
+  static const deleteRemoteBody = "Pas de corbeille sur un dossier distant : la suppression est définitive.";
+  static const unknownSpace = 'Espace inconnu';
   static const copy = 'Copier';
   static const cut = 'Couper';
   static const pasteHere = 'Coller ici';

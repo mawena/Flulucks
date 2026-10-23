@@ -196,6 +196,7 @@ object Archives {
         var skipped = 0
         /** Réserve de la destination, jamais entamée. */
         var keep = 0L
+        var known = true
 
         fun run() {
             val src = Files.sourceOrNull(srcId)
@@ -222,8 +223,9 @@ object Archives {
             val zip = arcName.endsWith(".zip", ignoreCase = true)
             fun relOf(e: ArcEntry) = ArchivePaths.safeRelative(ArchivePaths.decodeName(e.raw, zip))
             val (free, total) = dst.space()
+            known = free >= 0 // place inconnue (dossier distant) : ni budget ni réserve
             keep = reserve(total)
-            val budget = free - keep
+            val budget = if (known) free - keep else Long.MAX_VALUE
 
             // premier passage, en-têtes seulement : entrée chiffrée et place vérifiées avant d'écrire quoi que ce soit ;
             // annoncé à l'interface (« Lecture de l'archive… »), arrêté au premier en-tête qui dépasse le budget
@@ -351,7 +353,7 @@ object Archives {
 
         /** Place réellement libre relue avant chaque fichier et chaque dossier : la réserve n'est jamais entamée. */
         fun ensureRoom(dst: FileSource, need: Long) {
-            if (dst.space().first - need < keep) throw FilesException(EngineError.FL_ENOSPC, MSG_TOO_BIG)
+            if (known && dst.space().first - need < keep) throw FilesException(EngineError.FL_ENOSPC, MSG_TOO_BIG)
         }
     }
 
@@ -398,7 +400,7 @@ object Archives {
             val files = plans.sumOf { p -> p.count { it.type == FileType.FILE } }
             val total = plans.sumOf { p -> p.filter { it.type == FileType.FILE }.sumOf { it.size } }
             val (free, _) = s.space()
-            if (total > free) throw FilesException(EngineError.FL_ENOSPC, Transfers.msgNoSpace(total, free))
+            if (free >= 0 && total > free) throw FilesException(EngineError.FL_ENOSPC, Transfers.msgNoSpace(total, free))
             c.st = c.st.copy(fileCount = files, totalBytes = total)
             c.publish(force = true)
 

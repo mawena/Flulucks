@@ -19,6 +19,10 @@ class FakeRemoteClient(private val root: File) : RemoteClient {
     val calls = ArrayList<String>()
     var closed = false
 
+    /** Appelé à chaque écriture d'un envoi, avec son rang (annulation pendant une copie vers le serveur). */
+    var onWrite: (Int) -> Unit = {}
+    private var writes = 0
+
     private fun f(path: String) = if (path == "/") root else File(root, path.removePrefix("/"))
 
     private fun entry(path: String, x: File) =
@@ -46,7 +50,12 @@ class FakeRemoteClient(private val root: File) : RemoteClient {
 
     override fun create(parent: String, name: String): OutputStream {
         calls += "create $parent $name"
-        return FileOutputStream(File(f(parent), name))
+        return object : java.io.FilterOutputStream(FileOutputStream(File(f(parent), name))) {
+            override fun write(b: ByteArray, off: Int, len: Int) {
+                onWrite(++writes)
+                out.write(b, off, len)
+            }
+        }
     }
 
     override fun mkdir(parent: String, name: String) {

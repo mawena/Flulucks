@@ -92,10 +92,13 @@ object Files {
     }
 
     /** Supprime chaque élément (récursif) ; un disque n'est synchronisé qu'une fois pour tout le lot. */
-    /** [permanent] : supprime ; sinon met à la corbeille du stockage ([Trash], définitif pour ce qui y est déjà). */
+    /**
+     * [permanent] : supprime ; sinon met à la corbeille du stockage ([Trash], définitif pour ce qui y est déjà). Sans
+     * corbeille (dossier distant), toujours définitif.
+     */
     fun delete(sourceId: String, paths: List<String>, permanent: Boolean) = guard("deleteDocument") {
         val src = source(sourceId)
-        if (permanent) src.deleteAll(paths) else Trash.moveToTrash(src, paths)
+        if (permanent || !src.hasTrash) src.deleteAll(paths) else Trash.moveToTrash(src, paths)
     }
 
     /** ACTION_VIEW sur l'URI de contenu, dans un sélecteur « Ouvrir avec… ». */

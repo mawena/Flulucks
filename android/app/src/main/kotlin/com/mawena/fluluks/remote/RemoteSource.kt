@@ -28,6 +28,7 @@ class RemoteSource(val server: ServerConfig, val client: RemoteClient) : FileSou
     override val readOnlyReason: String? = null
     override val caseInsensitive = false
     override val restrictedNames = false
+    override val hasTrash = false
 
     override fun list(path: String): List<Entry> {
         val p = PathRules.require(path)

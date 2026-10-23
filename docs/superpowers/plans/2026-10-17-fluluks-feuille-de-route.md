@@ -316,7 +316,7 @@ dans le même commit que le travail.
 - [x] T3 — Visionneuse d'images (glisser d'une photo à l'autre, zoom)
 - [x] T4 — Lecture à accès aléatoire et fournisseur de flux
 - [x] T5 — Serveurs enregistrés et sources distantes (secrets chiffrés par le Keystore)
-- [ ] T6 — Dossiers distants dans le gestionnaire
+- [x] T6 — Dossiers distants dans le gestionnaire
 - [ ] T7 — Dossiers distants par FTP
 - [ ] T8 — Dossiers distants par SFTP (empreinte du serveur, clé privée)
 - [ ] T9 — Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)

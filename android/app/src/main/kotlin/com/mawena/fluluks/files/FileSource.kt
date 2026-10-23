@@ -44,6 +44,9 @@ interface FileSource {
     /** Noms limités comme sur FAT et NTFS (`: * ? " < > | \`…) : les copies y assainissent les noms. */
     val restrictedNames: Boolean
 
+    /** Corbeille possible ([Trash]) ; faux pour un dossier distant, où la suppression est définitive. */
+    val hasTrash: Boolean get() = true
+
     fun list(path: String): List<Entry>
     fun stat(path: String): Entry?
 
