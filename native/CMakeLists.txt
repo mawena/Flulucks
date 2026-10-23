@@ -59,6 +59,7 @@ set(FL_SOURCES
   src/format/luks2_format.c
   src/format/format.c
   src/archive/reader.c
+  src/archive/writer.c
 )
 # Transport usbdevfs : Linux et Android seulement.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" OR ANDROID)
@@ -174,6 +175,10 @@ if(FL_TESTS)
   endfunction()
   fl_add_arc_test(test_arc_fumee)
   fl_add_arc_test(test_archive_read)
+  fl_add_arc_test(test_archive_write)
+  target_link_libraries(test_archive_write PRIVATE fl_testsupport)
+  add_test(NAME test_archive_write_lent COMMAND test_archive_write lent)
+  set_tests_properties(test_archive_write_lent PROPERTIES LABELS lent TIMEOUT 1800)
   fl_add_test(test_cache)
   fl_add_test(test_crc32c)
   add_test(NAME test_crc32c_debit COMMAND test_crc32c debit)
