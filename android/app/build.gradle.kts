@@ -61,7 +61,12 @@ dependencies {
     implementation("androidx.media3:media3-ui:1.11.1")
     implementation("androidx.media3:media3-session:1.11.1")
     implementation("commons-net:commons-net:3.13.0")
+    // SFTP : JSch (fork mwiede) ; Bouncy Castle pour Ed25519 et Curve25519 sur Android.
+    implementation("com.github.mwiede:jsch:2.28.8")
+    implementation("org.bouncycastle:bcprov-jdk18on:1.86")
     testImplementation("junit:junit:4.13.2")
+    testImplementation("org.apache.sshd:sshd-core:2.20.0")
+    testImplementation("org.apache.sshd:sshd-sftp:2.20.0")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.10.2")
     testImplementation("org.json:json:20240303")
     testImplementation("org.apache.ftpserver:ftpserver-core:1.2.1")

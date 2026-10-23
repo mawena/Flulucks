@@ -310,11 +310,11 @@ Pigeon : `RemoteServerMsg`, `listServers`, `saveServer(msg, password?, keyPassph
 `org.apache.sshd:sshd-core:2.20.0`, `sshd-sftp:2.20.0`), `proguard-rules.pro`, `MainActivity.kt` (sélecteur de
 fichier pour la clé), Pigeon (`importPrivateKey(serverId)` → type et empreinte), `server_form_screen.dart`.
 
-- [ ] **Step 1 : tests** (`SftpClientTest`, serveur MINA SSHD embarqué) : `unknownHostKeyAskedOnce` (empreinte
+- [x] **Step 1 : tests** (`SftpClientTest`, serveur MINA SSHD embarqué) : `unknownHostKeyAskedOnce` (empreinte
   `SHA256:…` rendue, puis connexion après `trust`) ; `changedHostKeyRefused` (même port, autre clé de serveur) ;
   `passwordAuth` ; `ed25519KeyAuth` et `encryptedKeyNeedsPassphrase` ; `readAtOffsets` ; `uploadRenameDelete` ;
   `symlinkListedNotFollowed` ; `badCredentialsMessage` ; `channelsNeverExceedThree` ; `secretsNotInMessages`.
-- [ ] **Step 2 :** Run `./gradlew -q :app:testDebugUnitTest --tests '*SftpClientTest'` → FAIL.
+- [x] **Step 2 :** Run `./gradlew -q :app:testDebugUnitTest --tests '*SftpClientTest'` → FAIL.
 - [ ] **Step 3 :** implémenter (`HostKeyRepository` maison, `get(path, null, offset)`, `put(…, OVERWRITE)`,
   `ServerAliveInterval` 30 s) ; règles R8 ; construction release vérifiée.
 - [ ] **Step 4 :** tests verts ; suite JVM verte ; `flutter build apk --release` (si permis) ou `--debug`.

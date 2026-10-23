@@ -22,6 +22,7 @@ object Remotes {
     @Volatile private var factory: Factory = Factory { s, sec ->
         when (s.protocol) {
             "ftp" -> FtpClient(s, sec)
+            "sftp" -> SftpClient.connect(s, sec)
             else -> throw FilesException(EngineError.FL_ENOTSUP, "Protocole ${s.protocol.uppercase()} pas encore pris en charge")
         }
     }
