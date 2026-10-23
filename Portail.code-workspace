@@ -1,0 +1,13 @@
+{
+	"folders": [
+		{
+			"name": "FluLuks",
+			"path": "../FluLuks"
+		},
+		{
+			"name": "Portail",
+			"path": "."
+		}
+	],
+	"settings": {}
+}
