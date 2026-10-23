@@ -343,8 +343,10 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
   - `activityStartsInUserOrientationAndLocks` : `VideoActivity` lancée sur la vidéo → `requestedOrientation` =
     `SCREEN_ORIENTATION_USER` ; clic sur le cadenas → `LOCKED` ; clic sur Tourner → `USER_LANDSCAPE` ou
     `USER_PORTRAIT` ; re-clic sur le cadenas → `USER`.
-- [ ] **Step 3 *(téléphone)* :** pousser la fixture (`adb push … /data/local/tmp/fluluks/fixtures/`), lancer
-  `connectedDebugAndroidTest` filtré sur `VideoPlayerInstrumentedTest` et `ReadersInstrumentedTest` → verts ;
+- [x] **Step 3 *(téléphone)* :** pousser la fixture (`adb push … /data/local/tmp/fluluks/fixtures/`), installer
+  l'APK de débogage et l'APK de test par `adb install -r -t`, lancer `am instrument -w -r -e class …` sur
+  `VideoPlayerInstrumentedTest` et `ReadersInstrumentedTest` → verts, puis désinstaller seulement
+  `com.mawena.fluluks.test` (jamais `connectedDebugAndroidTest`, qui désinstalle l'application et ses données) ;
   commit `test(video): essais instrumentés de la phase 12 sur le Pixel`.
 
 ### Task 7 *(utilisateur)* : essais sur le Pixel
