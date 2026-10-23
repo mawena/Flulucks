@@ -221,7 +221,7 @@ void main() {
     await tester.tap(find.byTooltip('Modifier'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('Importer une clé'), 200, scrollable: formScroll);
-    expect(find.text('Aucune : connexion par mot de passe'), findsOneWidget);
+    expect(find.text('Aucune\u00A0: connexion par mot de passe'), findsOneWidget);
     await tester.tap(find.text('Importer une clé'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('importPrivateKey s1'));
@@ -231,7 +231,7 @@ void main() {
     await tester.tap(find.text('Retirer la clé'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('forgetPrivateKey s1'));
-    expect(find.text('Aucune : connexion par mot de passe'), findsOneWidget);
+    expect(find.text('Aucune\u00A0: connexion par mot de passe'), findsOneWidget);
   });
 
   testWidgets('keySectionOnlyForSavedSftp', (tester) async {
