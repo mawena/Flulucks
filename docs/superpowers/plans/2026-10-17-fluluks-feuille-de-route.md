@@ -331,7 +331,7 @@ dans le même commit que le travail.
 ### Phase 11 — Interface complète et professionnelle ([plan](2026-10-23-phase11-interface.md))
 - [x] Plan de la phase 11 écrit *(demande du 2026-10-23 ; spec § 19 ; choix de conception à valider par l'utilisateur)*
 - [x] T1 — Système de design : couleurs du logo, thèmes clair et sombre, choix du thème
-- [ ] T2 — Composants communs (états vides, erreurs, chargements, confirmations, feuilles d'actions)
+- [x] T2 — Composants communs (états vides, erreurs, chargements, confirmations, feuilles d'actions)
 - [x] T3 — Textes français (pluriels, unités, dates relatives)
 - [ ] T4 — Accueil revu et logo
 - [ ] T5 — Déverrouillage, formatage et saisies sensibles

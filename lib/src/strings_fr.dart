@@ -204,6 +204,16 @@ class Fr {
   static const transferCancelled = 'Opération annulée';
   static const ok = 'OK';
 
+  // composants communs (phase 11)
+  static const retry = 'Réessayer';
+  static const undo = 'Annuler';
+  static const nameEmpty = 'Saisissez un nom';
+  static const nameSlash = 'Le nom ne peut pas contenir «\u00A0/\u00A0»';
+  static const nameReserved = 'Nom réservé';
+  static const nameTooLong = 'Nom trop long';
+  static const nameBadChar = 'Caractère interdit dans le nom';
+  static String usedPercent(int p) => '$p\u202F% utilisés';
+
   static String freeOf(int free, int total) => '${humanSize(free)} libres sur ${humanSize(total)}';
   static String deleteOne(String name) => 'Supprimer «\u00A0$name\u00A0»\u202F?';
   static String trackOf(int i, int n) => 'Morceau $i sur $n';

@@ -4,6 +4,11 @@ import 'package:flutter/services.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/dialogs.dart';
+import '../ui/feedback.dart';
+import '../ui/states.dart';
+import '../ui/tokens.dart';
+import '../ui/widgets.dart';
 
 /// Dossier de la corbeille à la racine de chaque stockage (côté Kotlin : Trash.DIR).
 const trashDir = '/.Portail-corbeille';
@@ -80,28 +85,29 @@ class _TrashScreenState extends State<TrashScreen> {
     }
   }
 
+  void _retry() {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    _load();
+  }
+
   Future<void> _run(Future<void> Function() action) async {
     try {
       await action();
     } on PlatformException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? Fr.genericError)));
+      if (mounted) showMessage(context, e.message ?? Fr.genericError, kind: MessageKind.error);
     }
     await _load();
   }
 
-  Future<bool> _confirm(String title, String body, String action) async =>
-      await showDialog<bool>(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: Text(title),
-          content: Text(body),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text(Fr.cancel)),
-            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: Text(action)),
-          ],
-        ),
-      ) ==
-      true;
+  /// Suppression définitive : bouton rouge, retour haptique d'avertissement une fois confirmée.
+  Future<bool> _confirm(String title, String body, String action) async {
+    final ok = await confirmAction(context, title: title, body: body, confirmLabel: action, destructive: true);
+    if (ok) AppHaptics.warning(state);
+    return ok;
+  }
 
   Future<void> _act(TrashItemMsg item, String action) async {
     if (action == 'restore') return _run(() => state.api.restoreTrash(widget.sourceId, [item.id]));
@@ -118,7 +124,7 @@ class _TrashScreenState extends State<TrashScreen> {
     final date = item.deletedAt > 0 ? ' · ${Fr.friendlyDate(item.deletedAt ~/ 1000)}' : '';
     return ListTile(
       key: ValueKey(item.id),
-      leading: Icon(item.isDir ? Icons.folder : Icons.insert_drive_file),
+      leading: Icon(item.isDir ? Icons.folder_rounded : Icons.insert_drive_file_rounded),
       title: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis),
       subtitle: Text('${item.originalPath}$date', maxLines: 2, overflow: TextOverflow.ellipsis),
       trailing: PopupMenuButton<String>(
@@ -134,9 +140,9 @@ class _TrashScreenState extends State<TrashScreen> {
   }
 
   Widget _body() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(32), child: Text(_error!)));
-    if (_items.isEmpty) return const Center(child: Text(Fr.trashEmpty));
+    if (_loading) return const DelayedProgress();
+    if (_error != null) return ErrorState(message: _error!, onRetry: _retry);
+    if (_items.isEmpty) return const EmptyState(icon: Icons.delete_outline_rounded, title: Fr.trashEmpty, message: Fr.trashNote);
     final total = _items.fold<int>(0, (s, i) => s + i.size);
     return ListView(children: [
       ListTile(title: Text(Fr.trashSummary(_items.length, total)), subtitle: const Text(Fr.trashNote)),
@@ -154,15 +160,18 @@ class _TrashScreenState extends State<TrashScreen> {
         actions: [
           IconButton(
             tooltip: Fr.emptyTrash,
-            icon: const Icon(Icons.delete_forever),
+            icon: const Icon(Icons.delete_forever_rounded),
             onPressed: _items.isEmpty || _readOnly ? null : _empty,
           ),
         ],
       ),
       body: Column(children: [
         if (src != null && src.readOnly)
-          MaterialBanner(content: Text(Fr.readOnly(src.roReason)), actions: const [SizedBox.shrink()]),
-        Expanded(child: RefreshIndicator(onRefresh: _load, child: _body())),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(Space.l, Space.s, Space.l, 0),
+            child: StatusBanner(icon: Icons.lock_rounded, text: Fr.readOnly(src.roReason)),
+          ),
+        Expanded(child: RefreshIndicator(onRefresh: _load, child: StateSwitcher(child: _body()))),
       ]),
     );
   }

@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/feedback.dart';
+import '../ui/states.dart';
 import 'explorer_screen.dart';
 
 /// Filtres rapides de l'accueil : (identifiant côté Kotlin, libellé, icône).
@@ -64,14 +66,22 @@ class _FilterScreenState extends State<FilterScreen> {
     try {
       await state.api.openWith(i.sourceId, i.path);
     } on PlatformException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message ?? Fr.genericError)));
+      if (mounted) showMessage(context, e.message ?? Fr.genericError, kind: MessageKind.error);
     }
   }
 
+  void _retry() {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    _load();
+  }
+
   Widget _body() {
-    if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_error != null) return Center(child: Padding(padding: const EdgeInsets.all(32), child: Text(_error!)));
-    if (_items.isEmpty) return const Center(child: Text(Fr.filterEmpty));
+    if (_loading) return const DelayedProgress();
+    if (_error != null) return ErrorState(message: _error!, onRetry: _retry);
+    if (_items.isEmpty) return const EmptyState(icon: Icons.search_off_rounded, title: Fr.filterEmpty, message: Fr.filterNote);
     return ListView(children: [
       const ListTile(dense: true, subtitle: Text(Fr.filterNote)),
       for (final i in _items)
@@ -86,7 +96,7 @@ class _FilterScreenState extends State<FilterScreen> {
           onTap: () => _open(i),
           trailing: IconButton(
             tooltip: Fr.openFolder,
-            icon: const Icon(Icons.folder_open),
+            icon: const Icon(Icons.folder_open_rounded),
             onPressed: () => openExplorer(context, state, i.sourceId, path: parentOf(i.path)),
           ),
         ),
@@ -96,6 +106,6 @@ class _FilterScreenState extends State<FilterScreen> {
   @override
   Widget build(BuildContext context) => Scaffold(
         appBar: AppBar(title: Text(widget.title)),
-        body: RefreshIndicator(onRefresh: _load, child: _body()),
+        body: RefreshIndicator(onRefresh: _load, child: StateSwitcher(child: _body())),
       );
 }

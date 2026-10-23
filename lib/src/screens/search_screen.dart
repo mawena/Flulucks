@@ -6,6 +6,10 @@ import 'package:flutter/services.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
+import '../ui/feedback.dart';
+import '../ui/states.dart';
+import '../ui/tokens.dart';
+import '../ui/widgets.dart';
 import '../widgets/thumb.dart';
 import 'explorer_screen.dart';
 
@@ -80,9 +84,7 @@ class _SearchScreenState extends State<SearchScreen> {
       openExplorer(context, widget.state, widget.sourceId, path: e.path);
     } else {
       widget.state.api.openWith(widget.sourceId, e.path).catchError((Object err) {
-        if (mounted && err is PlatformException) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(err.message ?? Fr.genericError)));
-        }
+        if (mounted && err is PlatformException) showMessage(context, err.message ?? Fr.genericError, kind: MessageKind.error);
       });
     }
   }
@@ -105,14 +107,17 @@ class _SearchScreenState extends State<SearchScreen> {
       body: Column(children: [
         if (_running) const LinearProgressIndicator(),
         if (r != null && r.truncated)
-          MaterialBanner(content: const Text(Fr.tooManyResults), actions: const [SizedBox.shrink()]),
+          const Padding(
+            padding: EdgeInsets.fromLTRB(Space.l, Space.s, Space.l, 0),
+            child: StatusBanner(icon: Icons.info_outline_rounded, text: Fr.tooManyResults, tone: ChipTone.neutral),
+          ),
         Expanded(
           child: _error != null
-              ? Center(child: Text(_error!))
+              ? ErrorState(message: _error!, onRetry: () => _search(_query))
               : r == null
                   ? const SizedBox.shrink()
                   : r.entries.isEmpty && !_running && _query.isNotEmpty
-                      ? const Center(child: Text(Fr.noResult))
+                      ? const EmptyState(icon: Icons.search_off_rounded, title: Fr.noResult)
                       : ListView.builder(
                           itemCount: r.entries.length,
                           itemBuilder: (_, i) {

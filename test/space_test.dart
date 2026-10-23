@@ -107,7 +107,7 @@ void main() {
     tester.state<NavigatorState>(find.byType(Navigator))
         .push(MaterialPageRoute<void>(builder: (_) => SpaceScreen(state: state, sourceId: 'phone')));
     await tester.pump();
-    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 200)); // indicateur affiché après 200 ms (DelayedProgress)
     expect(find.text('Analyse en cours…'), findsOneWidget);
     await tester.tap(find.text('Annuler'));
     await tester.pump();

@@ -120,7 +120,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.calls, contains('emptyTrash phone'));
     expect(find.text('La corbeille est vide'), findsOneWidget);
-    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.delete_forever)).onPressed, isNull);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.delete_forever_rounded)).onPressed, isNull);
   });
 
   testWidgets('trashOpenedFromExplorerRootAndHome', (tester) async {

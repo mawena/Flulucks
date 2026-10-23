@@ -284,7 +284,7 @@ class AdaptiveBody extends StatelessWidget { const AdaptiveBody({required Widget
   pas contenir « / » », `nameReserved` « Nom réservé », `nameTooLong` « Nom trop long », `undo` « Annuler »,
   `usedPercent(int p)` « $p % utilisés ».
 
-- [ ] **Step 1 : tests** (`ui_components_test`) :
+- [x] **Step 1 : tests** (`ui_components_test`) :
   - `emptyStateShowsTitleMessageAction` ;
   - `errorStateRetryCalls` ;
   - `delayedProgressHiddenFirst200ms` (rien à 199 ms, indicateur à 200 ms) ;
@@ -297,14 +297,14 @@ class AdaptiveBody extends StatelessWidget { const AdaptiveBody({required Widget
     `haptics` est faux ;
   - `usageBarSemanticsAndDanger` (valeur « 92 % utilisés », couleur `error`) ;
   - `stateSwitcherNoAnimationWhenDisabled` (`disableAnimations` → durée nulle).
-- [ ] **Step 2 :** Run `flutter test test/ui_components_test.dart` → FAIL.
-- [ ] **Step 3 :** implémenter.
+- [x] **Step 2 :** Run `flutter test test/ui_components_test.dart` → FAIL.
+- [x] **Step 3 :** implémenter.
   - Corbeille, analyse, raccourcis, recherche et propriétés utilisent `DelayedProgress`, `ErrorState` (avec
     Réessayer), `EmptyState` et `showMessage`.
   - « Vider la corbeille » et « Supprimer définitivement » utilisent `confirmAction(destructive: true)`.
-- [ ] **Step 4 :** tests verts ; les suites existantes sont vertes (attentes ajustées seulement si un texte a
+- [x] **Step 4 :** tests verts ; les suites existantes sont vertes (attentes ajustées seulement si un texte a
   changé).
-- [ ] **Step 5 :** commit `feat(interface): états vides, chargements, erreurs, confirmations et feuilles communs`.
+- [x] **Step 5 :** commit `feat(interface): états vides, chargements, erreurs, confirmations et feuilles communs`.
 
 ### Task 3 : textes français
 
