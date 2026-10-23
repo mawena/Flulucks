@@ -292,16 +292,16 @@ Pigeon : `RemoteServerMsg`, `listServers`, `saveServer(msg, password?, keyPassph
 **Files :** Create `remote/FtpClient.kt`, `FtpClientTest.kt` ; Modify `build.gradle.kts` (`commons-net:commons-net:
 3.13.0`, test `org.apache.ftpserver:ftpserver-core:1.2.1`), `Remotes.kt`.
 
-- [ ] **Step 1 : tests** (`FtpClientTest`, Apache FtpServer embarqué sur 127.0.0.1, port libre, utilisateur enfermé
+- [x] **Step 1 : tests** (`FtpClientTest`, Apache FtpServer embarqué sur 127.0.0.1, port libre, utilisateur enfermé
   dans un dossier temporaire) : `listsWithAccents` (UTF-8) ; `latin1ListingDecoded` (serveur sans `UTF8` dans
   `FEAT`) ; `readAtOffsets` ; `uploadThenRename` ; `mkdirAndRecursiveDelete` ; `anonymousLogin` ; `badPasswordMessage`
   (« Identifiant ou mot de passe refusé ») ; `connectionDropMidRead` (serveur arrêté → « Connexion perdue »,
   connexion rendue) ; `poolNeverExceedsThree`.
-- [ ] **Step 2 :** Run `./gradlew -q :app:testDebugUnitTest --tests '*FtpClientTest'` → FAIL.
-- [ ] **Step 3 :** implémenter (`REST` + `retrieveFileStream`, `completePendingCommand` à la fermeture ;
+- [x] **Step 2 :** Run `./gradlew -q :app:testDebugUnitTest --tests '*FtpClientTest'` → FAIL.
+- [x] **Step 3 :** implémenter (`REST` + `retrieveFileStream`, `completePendingCommand` à la fermeture ;
   `storeFileStream` ; `MLSD`/`LIST`).
-- [ ] **Step 4 :** tests verts ; suite JVM verte.
-- [ ] **Step 5 :** commit `feat(distant): dossiers FTP`.
+- [x] **Step 4 :** tests verts ; suite JVM verte.
+- [x] **Step 5 :** commit `feat(distant): dossiers FTP`.
 
 ### Task 8 : SFTP
 

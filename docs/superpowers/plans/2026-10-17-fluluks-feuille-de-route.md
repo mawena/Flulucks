@@ -317,7 +317,7 @@ dans le même commit que le travail.
 - [x] T4 — Lecture à accès aléatoire et fournisseur de flux
 - [x] T5 — Serveurs enregistrés et sources distantes (secrets chiffrés par le Keystore)
 - [x] T6 — Dossiers distants dans le gestionnaire
-- [ ] T7 — Dossiers distants par FTP
+- [x] T7 — Dossiers distants par FTP
 - [ ] T8 — Dossiers distants par SFTP (empreinte du serveur, clé privée)
 - [x] T9 — Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)
 - [ ] T10 — Lecteur de musique (lecture en arrière-plan, file d'attente du dossier)

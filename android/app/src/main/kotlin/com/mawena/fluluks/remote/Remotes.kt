@@ -19,8 +19,11 @@ object Remotes {
     }
 
     @Volatile private var store: RemoteServers? = null
-    @Volatile private var factory: Factory = Factory { s, _ ->
-        throw FilesException(EngineError.FL_ENOTSUP, "Protocole ${s.protocol.uppercase()} pas encore pris en charge")
+    @Volatile private var factory: Factory = Factory { s, sec ->
+        when (s.protocol) {
+            "ftp" -> FtpClient(s, sec)
+            else -> throw FilesException(EngineError.FL_ENOTSUP, "Protocole ${s.protocol.uppercase()} pas encore pris en charge")
+        }
     }
     private val open = ConcurrentHashMap<String, Pair<RemoteSource, Secrets>>()
 
