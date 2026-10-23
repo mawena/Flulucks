@@ -1461,6 +1461,55 @@ data class ViewPrefsMsg (
 }
 
 /**
+ * Préférences d'interface (phase 11) ; `theme` : `system`, `light` ou `dark`.
+ *
+ * Generated class from Pigeon that represents data sent in messages.
+ */
+data class UiPrefsMsg (
+  val theme: String,
+  val haptics: Boolean,
+  val welcomeSeen: Boolean
+)
+ {
+  companion object {
+    fun fromList(pigeonVar_list: List<Any?>): UiPrefsMsg {
+      val theme = pigeonVar_list[0] as String
+      val haptics = pigeonVar_list[1] as Boolean
+      val welcomeSeen = pigeonVar_list[2] as Boolean
+      return UiPrefsMsg(theme, haptics, welcomeSeen)
+    }
+  }
+  fun toList(): List<Any?> {
+    return listOf(
+      theme,
+      haptics,
+      welcomeSeen,
+    )
+  }
+  override fun equals(other: Any?): Boolean {
+    if (other == null || other.javaClass != javaClass) {
+      return false
+    }
+    if (this === other) {
+      return true
+    }
+    val other = other as UiPrefsMsg
+    return FluLuksApiPigeonUtils.deepEquals(this.theme, other.theme) && FluLuksApiPigeonUtils.deepEquals(this.haptics, other.haptics) && FluLuksApiPigeonUtils.deepEquals(this.welcomeSeen, other.welcomeSeen)
+  }
+
+  override fun hashCode(): Int {
+    var result = javaClass.hashCode()
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.theme)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.haptics)
+    result = 31 * result + FluLuksApiPigeonUtils.deepHash(this.welcomeSeen)
+    return result
+  }
+  override fun toString(): String {
+    return "UiPrefsMsg(theme=$theme, haptics=$haptics, welcomeSeen=$welcomeSeen)"
+  }
+}
+
+/**
  * Favori ; `sourceId` null si le stockage n'est pas ouvert.
  *
  * Generated class from Pigeon that represents data sent in messages.
@@ -1617,6 +1666,11 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
       }
       149.toByte() -> {
         return (readValue(buffer) as? List<Any?>)?.let {
+          UiPrefsMsg.fromList(it)
+        }
+      }
+      150.toByte() -> {
+        return (readValue(buffer) as? List<Any?>)?.let {
           FavoriteMsg.fromList(it)
         }
       }
@@ -1705,8 +1759,12 @@ private open class FluLuksApiPigeonCodec : StandardMessageCodec() {
         stream.write(148)
         writeValue(stream, value.toList())
       }
-      is FavoriteMsg -> {
+      is UiPrefsMsg -> {
         stream.write(149)
+        writeValue(stream, value.toList())
+      }
+      is FavoriteMsg -> {
+        stream.write(150)
         writeValue(stream, value.toList())
       }
       else -> super.writeValue(stream, value)
@@ -1807,6 +1865,8 @@ interface FluLuksHostApi {
   fun listFavorites(): List<FavoriteMsg>
   fun addFavorite(sourceId: String, path: String, label: String)
   fun removeFavorite(key: String, path: String)
+  fun getUiPrefs(): UiPrefsMsg
+  fun setUiPrefs(prefs: UiPrefsMsg)
   /** Formate tout le disque : fs parmi fat32, exfat, ext4, ntfs ; passphrase si encrypted (mise à zéro). */
   fun formatDisk(diskId: String, fs: String, encrypted: Boolean, label: String, passphrase: ByteArray?, callback: (Result<Unit>) -> Unit)
 
@@ -2980,6 +3040,39 @@ interface FluLuksHostApi {
             val pathArg = args[1] as String
             val wrapped: List<Any?> = try {
               api.removeFavorite(keyArg, pathArg)
+              listOf(null)
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.getUiPrefs$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { _, reply ->
+            val wrapped: List<Any?> = try {
+              listOf(api.getUiPrefs())
+            } catch (exception: Throwable) {
+              FluLuksApiPigeonUtils.wrapError(exception)
+            }
+            reply.reply(wrapped)
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.setUiPrefs$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val prefsArg = args[0] as UiPrefsMsg
+            val wrapped: List<Any?> = try {
+              api.setUiPrefs(prefsArg)
               listOf(null)
             } catch (exception: Throwable) {
               FluLuksApiPigeonUtils.wrapError(exception)

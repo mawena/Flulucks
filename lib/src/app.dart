@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'screens/home_screen.dart';
 import 'state/app_state.dart';
 import 'strings_fr.dart';
+import 'ui/theme.dart';
 import 'widgets/mini_player.dart';
 
 class FluLuksApp extends StatefulWidget {
@@ -22,13 +23,9 @@ class _FluLuksAppState extends State<FluLuksApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: Fr.title,
-      theme: ThemeData(colorSchemeSeed: Colors.indigo, useMaterial3: true),
-      darkTheme: ThemeData(
-        colorSchemeSeed: Colors.indigo,
-        brightness: Brightness.dark,
-        useMaterial3: true,
-      ),
-      themeMode: ThemeMode.system,
+      theme: portailTheme(Brightness.light, haptics: widget.state.uiPrefs.haptics),
+      darkTheme: portailTheme(Brightness.dark, haptics: widget.state.uiPrefs.haptics),
+      themeMode: themeModeOf(widget.state.uiPrefs.theme),
       navigatorKey: _navigatorKey,
       scaffoldMessengerKey: _messengerKey,
       // musique en cours : barre réduite sous tous les écrans

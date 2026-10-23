@@ -215,7 +215,7 @@ UiPrefsMsg get uiPrefs; Future<void> setUiPrefs(UiPrefsMsg prefs);   // chargé 
   - `pageTransitionsTheme` (Android : `FadeForwardsPageTransitionsBuilder`) ;
   - textes en graisse 600 (direction visuelle).
 
-- [ ] **Step 1 : tests.**
+- [x] **Step 1 : tests.**
   - `theme_test` :
     - `schemeContrastAA` : pour les deux luminosités, ratio ≥ 4,5 pour les paires `onPrimary`/`primary`,
       `onSurface`/`surface`, `onSurfaceVariant`/`surface`, `onSurfaceVariant`/`surfaceContainerLow`,
@@ -231,9 +231,9 @@ UiPrefsMsg get uiPrefs; Future<void> setUiPrefs(UiPrefsMsg prefs);   // chargé 
     - `copyWithKeepsOtherFields` pour les deux extensions.
   - `UiPrefsTest` (JVM) : `uiPrefsDefaultsWhenAbsent` ; `badThemeFallsBackToSystem` (`ui_theme = "violet"`) ;
     `roundTrip`.
-- [ ] **Step 2 :** Run `flutter test test/theme_test.dart` et
+- [x] **Step 2 :** Run `flutter test test/theme_test.dart` et
   `cd android && ./gradlew -q :app:testDebugUnitTest --tests '*UiPrefsTest'` → FAIL (symboles absents).
-- [ ] **Step 3 :** implémenter.
+- [x] **Step 3 :** implémenter.
   - `FluLuksApp` écoute `state` pour `themeMode` et enveloppe l'application dans
     `MediaQuery.withClampedTextScaling(maxScaleFactor: 2.0)`. `main` passe en `SystemUiMode.edgeToEdge`.
   - Les Réglages reçoivent un `SegmentedButton<String>` « Thème » : Système, Clair, Sombre.
@@ -244,8 +244,8 @@ UiPrefsMsg get uiPrefs; Future<void> setUiPrefs(UiPrefsMsg prefs);   // chargé 
     - `values-v31` : `android:windowSplashScreenBackground` `@color/portail_terracotta` et
       `android:windowSplashScreenAnimatedIcon` `@drawable/ic_launcher_avant`.
   - `ViewPrefsMsg(…)` n'est plus construit à la main dans les écrans : ils passent par `copyWith`.
-- [ ] **Step 4 :** tests verts ; `flutter test`, `flutter analyze` et la suite JVM verts.
-- [ ] **Step 5 :** commit `feat(interface): charte terracotta, thèmes clair et sombre, choix du thème`.
+- [x] **Step 4 :** tests verts ; `flutter test`, `flutter analyze` et la suite JVM verts.
+- [x] **Step 5 :** commit `feat(interface): charte terracotta, thèmes clair et sombre, choix du thème`.
 
 ### Task 2 : composants communs
 

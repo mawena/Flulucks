@@ -376,6 +376,14 @@ class ViewPrefsMsg {
   bool builtInViewers;
 }
 
+/// Préférences d'interface (phase 11) ; `theme` : `system`, `light` ou `dark`.
+class UiPrefsMsg {
+  UiPrefsMsg({required this.theme, required this.haptics, required this.welcomeSeen});
+  String theme;
+  bool haptics;
+  bool welcomeSeen;
+}
+
 /// Favori ; `sourceId` null si le stockage n'est pas ouvert.
 class FavoriteMsg {
   FavoriteMsg({required this.key, required this.path, required this.label, this.sourceId});
@@ -522,6 +530,10 @@ abstract class FluLuksHostApi {
   List<FavoriteMsg> listFavorites();
   void addFavorite(String sourceId, String path, String label);
   void removeFavorite(String key, String path);
+
+  // --- interface (phase 11)
+  UiPrefsMsg getUiPrefs();
+  void setUiPrefs(UiPrefsMsg prefs);
 
   // --- formatage (phase 8)
   /// Formate tout le disque : fs parmi fat32, exfat, ext4, ntfs ; passphrase si encrypted (mise à zéro).

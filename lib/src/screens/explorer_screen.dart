@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
+import '../state/prefs.dart';
 import '../state/sorting.dart';
 import '../strings_fr.dart';
 import '../viewers.dart';
@@ -175,14 +176,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
   }
 
   void _setPrefs({String? sort, bool? ascending, bool? grid, bool? showHidden}) {
-    final v = state.viewPrefs;
-    state.setViewPrefs(ViewPrefsMsg(
-      sort: sort ?? v.sort,
-      ascending: ascending ?? v.ascending,
-      grid: grid ?? v.grid,
-      showHidden: showHidden ?? v.showHidden,
-      builtInViewers: v.builtInViewers,
-    ));
+    state.setViewPrefs(state.viewPrefs.copyWith(sort: sort, ascending: ascending, grid: grid, showHidden: showHidden));
   }
 
   void _tap(EntryMsg e) {

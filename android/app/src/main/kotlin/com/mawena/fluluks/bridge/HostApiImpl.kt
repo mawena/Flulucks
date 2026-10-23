@@ -23,6 +23,8 @@ import com.mawena.fluluks.files.QuickFilters
 import com.mawena.fluluks.files.RenameRule
 import com.mawena.fluluks.files.Search
 import com.mawena.fluluks.files.SharedPrefStore
+import com.mawena.fluluks.files.UiPrefs
+import com.mawena.fluluks.files.UiSettings
 import com.mawena.fluluks.files.Sources
 import com.mawena.fluluks.files.SpaceAnalysis
 import com.mawena.fluluks.files.SpaceReport
@@ -538,6 +540,12 @@ class HostApiImpl(
     override fun addFavorite(sourceId: String, path: String, label: String) = guarded { viewPrefs.add(sourceId, path, label) }
 
     override fun removeFavorite(key: String, path: String) = guarded { viewPrefs.remove(key, path) }
+
+    private val uiPrefs by lazy { UiPrefs(SharedPrefStore(context)) }
+
+    override fun getUiPrefs(): UiPrefsMsg = uiPrefs.get().let { UiPrefsMsg(it.theme, it.haptics, it.welcomeSeen) }
+
+    override fun setUiPrefs(prefs: UiPrefsMsg) = guarded { uiPrefs.set(UiSettings(prefs.theme, prefs.haptics, prefs.welcomeSeen)) }
 
     /** Travail du gestionnaire de fichiers hors du fil principal ; réponse sur le fil principal. */
     private fun <T> io(callback: (Result<T>) -> Unit, dispatcher: CoroutineDispatcher = Dispatchers.IO, block: () -> T) {

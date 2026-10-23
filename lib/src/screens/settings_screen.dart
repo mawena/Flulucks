@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 
-import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
+import '../state/prefs.dart';
 import '../strings_fr.dart';
+import '../ui/tokens.dart';
 
-/// Réglages : lecture seule des disques, verrouillage automatique, accès aux fichiers, affichage en liste
-/// ou en grille, fichiers cachés par défaut, ouverture dans les lecteurs de Portail.
+/// Réglages : lecture seule des disques, verrouillage automatique, accès aux fichiers, thème, affichage en
+/// liste ou en grille, fichiers cachés par défaut, ouverture dans les lecteurs de Portail.
 /// Délais proposés (minutes ; 0 = jamais), les mêmes que AutoLock.CHOICES côté Kotlin.
 const autoLockChoices = [0, 5, 15, 30, 60];
 
@@ -58,26 +59,36 @@ class SettingsScreen extends StatelessWidget {
                 ],
                 selected: {v.grid},
                 showSelectedIcon: false,
-                onSelectionChanged: (s) => state.setViewPrefs(ViewPrefsMsg(
-                    sort: v.sort,
-                    ascending: v.ascending,
-                    grid: s.first,
-                    showHidden: v.showHidden,
-                    builtInViewers: v.builtInViewers)),
+                onSelectionChanged: (s) => state.setViewPrefs(v.copyWith(grid: s.first)),
+              ),
+            ),
+            ListTile(
+              title: const Text(Fr.theme),
+              // sous le titre : trois segments ne tiennent pas à droite sur 412 dp
+              subtitle: Padding(
+                padding: const EdgeInsets.only(top: Space.s),
+                child: SegmentedButton<String>(
+                  segments: const [
+                    ButtonSegment(value: 'system', icon: Icon(Icons.brightness_auto_rounded), label: Text(Fr.themeSystem)),
+                    ButtonSegment(value: 'light', icon: Icon(Icons.light_mode_rounded), label: Text(Fr.themeLight)),
+                    ButtonSegment(value: 'dark', icon: Icon(Icons.dark_mode_rounded), label: Text(Fr.themeDark)),
+                  ],
+                  selected: {state.uiPrefs.theme},
+                  showSelectedIcon: false,
+                  onSelectionChanged: (s) => state.setUiPrefs(state.uiPrefs.copyWith(theme: s.first)),
+                ),
               ),
             ),
             SwitchListTile(
               title: const Text(Fr.showHidden),
               value: v.showHidden,
-              onChanged: (on) => state.setViewPrefs(ViewPrefsMsg(
-                  sort: v.sort, ascending: v.ascending, grid: v.grid, showHidden: on, builtInViewers: v.builtInViewers)),
+              onChanged: (on) => state.setViewPrefs(v.copyWith(showHidden: on)),
             ),
             SwitchListTile(
               title: const Text(Fr.builtInViewers),
               subtitle: const Text(Fr.builtInViewersHelp),
               value: v.builtInViewers,
-              onChanged: (on) => state.setViewPrefs(ViewPrefsMsg(
-                  sort: v.sort, ascending: v.ascending, grid: v.grid, showHidden: v.showHidden, builtInViewers: on)),
+              onChanged: (on) => state.setViewPrefs(v.copyWith(builtInViewers: on)),
             ),
           ]);
         },

@@ -450,6 +450,15 @@ class FakeHostApi implements HostApi {
   @override
   Future<void> setViewPrefs(ViewPrefsMsg prefs) async => viewPrefs = prefs;
 
+  /// Préférences d'interface ; bienvenue déjà vue : les écrans s'ouvrent sur l'accueil.
+  UiPrefsMsg uiPrefs = UiPrefsMsg(theme: 'system', haptics: true, welcomeSeen: true);
+
+  @override
+  Future<UiPrefsMsg> getUiPrefs() async => uiPrefs;
+
+  @override
+  Future<void> setUiPrefs(UiPrefsMsg prefs) async => uiPrefs = prefs;
+
   @override
   Future<List<FavoriteMsg>> listFavorites() async => favorites;
 

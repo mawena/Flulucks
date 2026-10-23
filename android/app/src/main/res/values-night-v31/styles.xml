@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12 et plus (mode sombre) : écran de démarrage du système, terracotta avec l'avant-plan de l'icône. -->
+    <style name="LaunchTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@drawable/launch_background</item>
+        <item name="android:windowSplashScreenBackground">@color/portail_terracotta</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_avant</item>
+    </style>
+    <!-- Fenêtre derrière l'interface Flutter : même couleur que la surface du thème. -->
+    <style name="NormalTheme" parent="@android:style/Theme.Black.NoTitleBar">
+        <item name="android:windowBackground">@color/portail_fond</item>
+    </style>
+</resources>

@@ -178,6 +178,10 @@ class Fr {
   static const grid = 'Grille';
   static const list = 'Liste';
   static const showHidden = 'Afficher les fichiers cachés';
+  static const theme = 'Thème';
+  static const themeSystem = 'Système';
+  static const themeLight = 'Clair';
+  static const themeDark = 'Sombre';
   static const addFavorite = 'Ajouter aux favoris';
   static const add = 'Ajouter';
   static const encryptedFavorite = "Le nom de ce dossier restera visible sur l'accueil, même disque verrouillé";

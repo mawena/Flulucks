@@ -30,6 +30,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   PlayerMsg? _player;
   String? _playerMessage;
   ViewPrefsMsg _viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: false, showHidden: false, builtInViewers: true);
+  final _uiPrefs = ValueNotifier(UiPrefsMsg(theme: 'system', haptics: true, welcomeSeen: false));
   List<FavoriteMsg> _favorites = const [];
   ClipboardItems? _clipboard;
   PendingExtract? _pendingExtract;
@@ -47,6 +48,13 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
 
   /// Tri, grille et fichiers cachés (persistés côté Kotlin).
   ViewPrefsMsg get viewPrefs => _viewPrefs;
+
+  /// Thème, retours haptiques et bienvenue vue (phase 11, persistés côté Kotlin).
+  UiPrefsMsg get uiPrefs => _uiPrefs.value;
+
+  /// Prévient seulement des changements de [uiPrefs] : la racine de l'application ne se reconstruit pas à chaque
+  /// progression de copie.
+  ValueListenable<UiPrefsMsg> get uiPrefsListenable => _uiPrefs;
 
   /// Favoris, résolus vers les stockages ouverts (`sourceId` null sinon).
   List<FavoriteMsg> get favorites => _favorites;
@@ -153,6 +161,7 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
       _sources = await api.listSources();
       _allFilesAccess = await api.hasAllFilesAccess();
       _viewPrefs = await api.getViewPrefs();
+      _uiPrefs.value = await api.getUiPrefs();
       _favorites = await api.listFavorites();
       _servers = await api.listServers();
       notifyListeners();
@@ -326,6 +335,12 @@ class AppState extends ChangeNotifier implements FluLuksEventsApi {
   Future<void> setViewPrefs(ViewPrefsMsg prefs) => _guard(() async {
         await api.setViewPrefs(prefs);
         _viewPrefs = prefs;
+        notifyListeners();
+      });
+
+  Future<void> setUiPrefs(UiPrefsMsg prefs) => _guard(() async {
+        await api.setUiPrefs(prefs);
+        _uiPrefs.value = prefs;
         notifyListeners();
       });
 
