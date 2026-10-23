@@ -1,6 +1,7 @@
 # Essais de la phase 11 (interface complète et professionnelle) sur le Pixel 4 XL
 
-APK release de la branche `feature/interface`, installée avant l'essai. Le numéro affiché reste 1.3.0 jusqu'à la
+APK de la branche `feature/interface` en mode profile (compilée comme une release, même signature : vos données
+sont gardées), installée avant l'essai. Le numéro affiché reste 1.3.0 jusqu'à la
 v1.4.0. Cochez chaque ligne réussie et notez ce qui ne va pas sous la ligne : texte coupé ou qui se chevauche,
 couleur peu lisible, bouton introuvable, animation saccadée.
 
@@ -11,9 +12,10 @@ ne se montre qu'une fois.
 une sauvegarde, jamais le vrai disque sans sauvegarde. Sur le vrai disque, cochez « Ouvrir en lecture seule » au
 déverrouillage : cette fiche n'a pas besoin d'y écrire.
 
-**Fichiers d'essai** : les suppressions se font sur le téléphone, dans un dossier `Download/Essai` créé pour
-l'occasion (bouton rond « Nouveau dossier » en bas de l'explorateur). Mettez-y quelques photos, un `.txt` et deux
-ou trois morceaux de musique.
+**Fichiers d'essai** : un dossier est prêt sur le téléphone, `Download/portail-tests/phase11/Essai`. Il contient
+12 photos (`Photos`), une grande photo de 6 Mo (pour les copies), `notes.txt` (12 lignes, LF), `windows.txt` (CRLF),
+trois morceaux de musique, un PDF, une archive `.zip`, un dossier `Vide` et un dossier `2000-fichiers`. Les
+suppressions se font dans ce dossier. Une copie de cette fiche est à côté : `Download/portail-tests/phase11/essais.md`.
 
 ## 1. Premier lancement et bienvenue
 
@@ -83,13 +85,13 @@ ou trois morceaux de musique.
 
 ## 4. Explorateur
 
-Sur le téléphone, dans `Download/Essai`.
+Sur le téléphone, dans `Download/portail-tests/phase11/Essai`.
 
 - [ ] Le bouton de la barre de titre (infobulle « Afficher en grille ») passe en grille : 3 colonnes en portrait,
       vignettes arrondies, noms sur deux lignes au plus. Le même bouton revient en liste.
-- [ ] Hors de la racine, le fil d'Ariane apparaît sous le titre : une maison, puis « Download › Essai ». Toucher
-      « Download » remonte directement à ce dossier, la maison à la racine. Sur un chemin long, le fil montre la
-      fin.
+- [ ] Hors de la racine, le fil d'Ariane apparaît sous le titre : une maison, puis « Download › portail-tests ›
+      phase11 › Essai », le fil défilé jusqu'à la fin. Toucher « Download » remonte directement à ce dossier, la
+      maison à la racine.
 - [ ] En liste, toucher ⋮ à droite d'un fichier : une feuille s'ouvre, avec une poignée en haut, et propose
       Ouvrir avec…, Partager, Copier, Couper, Renommer, Compresser, Propriétés et Supprimer (en rouge).
 - [ ] **Renommer** depuis ce menu : le nom sans l'extension est présélectionné. Taper `a/b` : le message
@@ -101,7 +103,9 @@ Sur le téléphone, dans `Download/Essai`.
       flottant « 1 élément mis à la corbeille » propose **Annuler**. Le toucher : le fichier revient à sa place.
 - [ ] Recommencer en laissant passer le message : le fichier est dans la **Corbeille** (menu ⋮ de la tuile
       Téléphone), et **Restaurer** le remet.
-- [ ] Un dossier vide montre une icône et « Dossier vide ». Tirer la liste vers le bas la recharge.
+- [ ] Ouvrir `2000-fichiers` et faire défiler vite, en liste puis en grille, de haut en bas et retour : pas
+      d'à-coups visibles, les lignes ne sautent pas.
+- [ ] Le dossier `Vide` montre une icône et « Dossier vide ». Tirer la liste vers le bas la recharge.
 - [ ] Passer d'un dossier à l'autre : les changements d'écran sont des fondus courts, sans saut ni éclair.
 
 ## 5. Raccourcis et recherche en grille (votre demande du 23 octobre)
@@ -144,8 +148,8 @@ Déverrouiller le vrai disque (en lecture seule) avant cette section.
 ## 7. Texte à 200 % et TalkBack
 
 Android 13 limite la taille de police à 130 % environ. Pour l'essai à 200 %, sur le PC :
-`adb shell settings put system font_scale 2.0` ; pour revenir, `adb shell settings put system font_scale 1.0`
-(ou la valeur d'avant, lue par `adb shell settings get system font_scale`).
+`adb shell settings put system font_scale 2.0` ; pour revenir à votre réglage actuel,
+`adb shell settings put system font_scale 0.85`.
 
 - [ ] Paramètres Android → Accessibilité → Taille d'affichage et texte → **Taille de la police** au maximum.
       Accueil, explorateur, Réglages, bienvenue (si refaite) : rien de coupé ni de superposé.
@@ -206,15 +210,15 @@ Le retour haptique d'Android doit être actif (Paramètres → Son et vibration 
 
 ## 11. Musique, lecteurs et dossiers distants
 
-- [ ] Toucher un morceau de `Download/Essai` : le lecteur réduit apparaît en bas, sur une surface commune avec un
+- [ ] Toucher un morceau de `Essai` : le lecteur réduit apparaît en bas, sur une surface commune avec un
       trait au-dessus. Il reste en bas de l'accueil, de l'explorateur et des Réglages.
 - [ ] Sélectionner un fichier → **Copier** : la barre « 1 élément à copier » (Annuler, Coller ici) s'affiche
       **au-dessus** du lecteur réduit. Coller sur la clé de test : la barre de la copie (« Copie de … — 1 sur 1 ·
       34 % », Annuler) s'affiche **sous** le lecteur.
 - [ ] Toucher le lecteur réduit : l'écran **Lecture en cours** montre une pochette de remplacement (icône sur fond
       teinté, coins arrondis) et les temps, dont les chiffres ne tremblent pas pendant la lecture.
-- [ ] Ouvrir le `.txt` : en bas, la ligne d'état « UTF-8 · LF · 12 lignes » (ou CRLF pour un fichier de
-      Windows). Ouvrir une photo : fond noir, et compteur « 3 / 5 » sous le nom, en haut.
+- [ ] Ouvrir `notes.txt` : en bas, la ligne d'état « UTF-8 · LF · 12 lignes ». `windows.txt` : « CRLF ». Ouvrir
+      une photo de `Photos` : fond noir, et compteur « 3 / 12 » sous le nom, en haut.
 - [ ] Accueil → **Dossiers distants** → **Ajouter un serveur** → **FTP** : le bandeau d'avertissement « FTP n'est
       pas chiffré… » s'affiche. Port `0`, puis `70000` : « Port de 1 à 65535 ». Adresse vide : « Saisissez une
       adresse ». **Enregistrer** ne passe pas tant que ces champs sont faux. Annuler sans enregistrer.
