@@ -498,8 +498,9 @@ Le dépôt suit git flow :
 | 11 | Interface complète et professionnelle : thèmes clair et sombre, accessibilité, grands écrans, liste ou grille partout, recherche dans tous les stockages, aide, à propos et licences | **v1.4.0** |
 | 12 | Lecteur vidéo : portrait par défaut, rotation et verrou, pistes audio et sous-titres, gestes comme VLC | v1.5.0 |
 | 13 | Connexions SSH : terminal, sessions en arrière-plan, clés, commandes enregistrées, tunnels | v1.6.0 |
-| 14 | Vérification et réparation des disques : e2fsck, ntfsfix, fsck.fat, fsck.exfat, en-têtes LUKS | v1.7.0 |
-| 15 | Gestion des partitions comme GParted : taille au formatage, créer, supprimer, redimensionner | v1.8.0 |
+| 14 | Chiffrement de fichiers et de dossiers, coffres de fichiers, chacun avec son mot de passe | v1.7.0 |
+| 15 | Vérification et réparation des disques : e2fsck, ntfsfix, fsck.fat, fsck.exfat, en-têtes LUKS | v1.8.0 |
+| 16 | Gestion des partitions comme GParted : taille au formatage, créer, supprimer, redimensionner | v1.9.0 |
 
 Suivi détaillé, étape par étape : [docs/superpowers/plans/2026-10-17-fluluks-feuille-de-route.md](docs/superpowers/plans/2026-10-17-fluluks-feuille-de-route.md).
 Conception : [docs/superpowers/specs/2026-10-17-fluluks-design.md](docs/superpowers/specs/2026-10-17-fluluks-design.md).

@@ -380,24 +380,28 @@ dans le même commit que le travail.
 - [ ] Fusion `feature/ssh` → `develop`
 - [ ] Version `v1.6.0`
 
-### Phase 14 — Vérification et réparation des disques
-- [ ] Plan de la phase 14 écrit *(demande du 2026-10-22 ; spec § 16 ; phase 11, puis 12, puis 13, jusqu'au 2026-10-23)*
+### Phase 14 — Chiffrement de fichiers, de dossiers et coffres ([plan](2026-10-23-phase14-chiffrement.md))
+- [ ] Plan de la phase 14 écrit *(demande du 2026-10-23 ; spec § 22)*
+- [ ] Version `v1.7.0`
+
+### Phase 15 — Vérification et réparation des disques
+- [ ] Plan de la phase 15 écrit *(demande du 2026-10-22 ; spec § 16 ; phase 11, puis 12, 13 et 14, jusqu'au 2026-10-23)*
 - [ ] Vérification en lecture seule avec rapport, pour chaque système de fichiers
 - [ ] Réparation ext4 par e2fsck (e2fsprogs, sur l'accès USB du moteur)
 - [ ] Réparation NTFS par ntfsfix (ntfs-3g)
 - [ ] Réparation FAT32 et exFAT par fsck.fat et fsck.exfat
 - [ ] LUKS : vérification des deux en-têtes, sauvegarde et restauration de l'en-tête
-- [ ] Version `v1.7.0`
+- [ ] Version `v1.8.0`
 
-### Phase 15 — Gestion des partitions, comme GParted
-- [ ] Plan de la phase 15 écrit *(demande du 2026-10-22 ; spec § 17 ; phase 12, puis 13, puis 14, jusqu'au 2026-10-23)*
+### Phase 16 — Gestion des partitions, comme GParted
+- [ ] Plan de la phase 16 écrit *(demande du 2026-10-22 ; spec § 17 ; phase 12, puis 13, 14 et 15, jusqu'au 2026-10-23)*
 - [ ] Vue du disque : partitions et espace libre à l'échelle, système de fichiers, étiquette, taille, place occupée
 - [ ] Taille choisie au formatage ; créer une partition dans un espace libre, en supprimer une, formater une seule partition
 - [ ] Changer l'étiquette d'une partition ; nouvelle table MBR ou GPT
 - [ ] Redimensionner (agrandir, réduire) : ext4 par resize2fs, NTFS par ntfsresize, système de fichiers dans LUKS2 ; FAT32 et exFAT à étudier
 - [ ] Déplacer une partition, si le plan sait le rendre sûr
 - [ ] Opérations préparées, résumées, puis appliquées après confirmation
-- [ ] Version `v1.8.0`
+- [ ] Version `v1.9.0`
 
 ---
 

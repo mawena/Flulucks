@@ -353,7 +353,7 @@ fonctions choisies par le planificateur ; les lecteurs et stockages distants pas
 
 ## 16. Évolution du 2026-10-22 (suite) : vérification et réparation
 
-Décision de l'utilisateur : la **phase 14** (v1.7.0 ; numérotée 11, puis 12, puis 13, avant le 2026-10-23, voir § 19, § 20 et § 21) apporte la **réparation des disques** dans
+Décision de l'utilisateur : la **phase 15** (v1.8.0 ; numérotée 11, puis 12, 13 et 14, avant le 2026-10-23, voir § 19 à § 22) apporte la **réparation des disques** dans
 l'application, avec les outils de référence de Linux intégrés au moteur natif.
 - **Vérifier d'abord, en lecture seule**, et montrer un rapport en français ; réparer seulement après
   confirmation, avec le conseil de sauvegarder les données importantes avant.
@@ -368,7 +368,7 @@ l'application, avec les outils de référence de Linux intégrés au moteur nati
 
 ## 17. Évolution du 2026-10-22 (suite) : gestion des partitions
 
-Décision de l'utilisateur : la **phase 15** (v1.8.0 ; numérotée 12, puis 13, puis 14, avant le 2026-10-23, voir § 19, § 20 et § 21) apporte la **gestion des partitions** d'un disque USB,
+Décision de l'utilisateur : la **phase 16** (v1.9.0 ; numérotée 12, puis 13, 14 et 15, avant le 2026-10-23, voir § 19 à § 22) apporte la **gestion des partitions** d'un disque USB,
 à la manière de GParted, et le choix de la **taille** au formatage.
 - **Choisir la taille** : formater une partition de la taille voulue au lieu de tout le disque ; le reste
   reste libre.
@@ -379,7 +379,7 @@ Décision de l'utilisateur : la **phase 15** (v1.8.0 ; numérotée 12, puis 13, 
   étiquette), **supprimer** une partition, **formater une seule partition**, changer son **étiquette**,
   créer une **nouvelle table** (MBR ou GPT).
 - **Redimensionner** une partition et son système de fichiers, agrandir ou réduire :
-  - ext4 par `resize2fs` (e2fsprogs, déjà intégré en phase 14) ;
+  - ext4 par `resize2fs` (e2fsprogs, déjà intégré en phase 15) ;
   - NTFS par `ntfsresize` (ntfs-3g) ;
   - dans un volume LUKS2, le système de fichiers intérieur (la taille du segment LUKS2 suit la
     partition) ;
@@ -392,7 +392,7 @@ Décision de l'utilisateur : la **phase 15** (v1.8.0 ; numérotée 12, puis 13, 
   - comme dans GParted, les opérations sont préparées, résumées, puis appliquées après confirmation, une
     à la fois ;
   - jamais sur un volume ouvert ;
-  - le système de fichiers est vérifié (outils de la phase 14) avant un redimensionnement ;
+  - le système de fichiers est vérifié (outils de la phase 15) avant un redimensionnement ;
   - avertissement : un débranchement pendant un redimensionnement ou un déplacement peut rendre la
     partition illisible, sauvegardez d'abord ;
   - toutes les opérations sont jugées sur des images par les outils de référence (`sfdisk`, `sgdisk`,
