@@ -328,24 +328,28 @@ dans le même commit que le travail.
 - [ ] Fusion `feature/lecteurs-distants` → `develop`
 - [ ] Version `v1.3.0`
 
-### Phase 11 — Vérification et réparation des disques
-- [ ] Plan de la phase 11 écrit *(demande du 2026-10-22 ; spec § 16)*
+### Phase 11 — Interface complète et professionnelle
+- [ ] Plan de la phase 11 écrit *(demande du 2026-10-23 ; spec § 19 ; contenu arrêté avec l'utilisateur)*
+- [ ] Version `v1.4.0`
+
+### Phase 12 — Vérification et réparation des disques
+- [ ] Plan de la phase 12 écrit *(demande du 2026-10-22 ; spec § 16 ; phase 11 jusqu'au 2026-10-23)*
 - [ ] Vérification en lecture seule avec rapport, pour chaque système de fichiers
 - [ ] Réparation ext4 par e2fsck (e2fsprogs, sur l'accès USB du moteur)
 - [ ] Réparation NTFS par ntfsfix (ntfs-3g)
 - [ ] Réparation FAT32 et exFAT par fsck.fat et fsck.exfat
 - [ ] LUKS : vérification des deux en-têtes, sauvegarde et restauration de l'en-tête
-- [ ] Version `v1.4.0`
+- [ ] Version `v1.5.0`
 
-### Phase 12 — Gestion des partitions, comme GParted
-- [ ] Plan de la phase 12 écrit *(demande du 2026-10-22 ; spec § 17)*
+### Phase 13 — Gestion des partitions, comme GParted
+- [ ] Plan de la phase 13 écrit *(demande du 2026-10-22 ; spec § 17 ; phase 12 jusqu'au 2026-10-23)*
 - [ ] Vue du disque : partitions et espace libre à l'échelle, système de fichiers, étiquette, taille, place occupée
 - [ ] Taille choisie au formatage ; créer une partition dans un espace libre, en supprimer une, formater une seule partition
 - [ ] Changer l'étiquette d'une partition ; nouvelle table MBR ou GPT
 - [ ] Redimensionner (agrandir, réduire) : ext4 par resize2fs, NTFS par ntfsresize, système de fichiers dans LUKS2 ; FAT32 et exFAT à étudier
 - [ ] Déplacer une partition, si le plan sait le rendre sûr
 - [ ] Opérations préparées, résumées, puis appliquées après confirmation
-- [ ] Version `v1.5.0`
+- [ ] Version `v1.6.0`
 
 ---
 
