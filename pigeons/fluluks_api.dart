@@ -405,6 +405,10 @@ abstract class FluLuksHostApi {
   void emptyTrash(String sourceId);
   @async
   void openWith(String sourceId, String path);
+
+  /// Lecteur vidéo de Portail (plein écran, sous-titres `.srt` à côté de la vidéo).
+  @async
+  void playVideo(String sourceId, String path);
   @async
   void share(String sourceId, List<String> paths);
   void startTransfer(String srcId, List<String> paths, String dstId, String dstDir, bool move);

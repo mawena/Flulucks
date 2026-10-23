@@ -326,15 +326,15 @@ fichier pour la clé), Pigeon (`importPrivateKey(serverId)` → type et empreint
 `build.gradle.kts` (`media3-exoplayer`, `media3-ui` 1.11.1), `AndroidManifest.xml`, Pigeon (`playVideo(sourceId,
 path)`), `viewers.dart`.
 
-- [ ] **Step 1 : tests** : `SubtitlesTest` : `findsSameNameAndLanguages` (`film.srt`, `film.fr.srt`,
+- [x] **Step 1 : tests** : `SubtitlesTest` : `findsSameNameAndLanguages` (`film.srt`, `film.fr.srt`,
   `film.eng.srt`, casse ignorée, `autre.srt` exclu) ; `windows1252Decoded` ; `dataUriRoundTrip` ; Flutter :
   toucher une vidéo appelle `playVideo`.
-- [ ] **Step 2 :** tests → FAIL.
-- [ ] **Step 3 :** implémenter : activité plein écran paysage-capteur, `PlayerView` (recul et avance 10 s, bouton
+- [x] **Step 2 :** tests → FAIL.
+- [x] **Step 3 :** implémenter : activité plein écran paysage-capteur, `PlayerView` (recul et avance 10 s, bouton
   des sous-titres), écran gardé allumé pendant la lecture ; erreur de lecture ou stockage fermé → message et
   fermeture.
-- [ ] **Step 4 :** tests verts ; suites vertes.
-- [ ] **Step 5 :** commit `feat(lecteurs): lecteur vidéo avec sous-titres`.
+- [x] **Step 4 :** tests verts ; suites vertes.
+- [x] **Step 5 :** commit `feat(lecteurs): lecteur vidéo avec sous-titres`.
 
 ### Task 10 : lecteur de musique
 

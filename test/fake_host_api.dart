@@ -370,6 +370,9 @@ class FakeHostApi implements HostApi {
   Future<void> openWith(String sourceId, String path) async => calls.add('openWith $sourceId $path');
 
   @override
+  Future<void> playVideo(String sourceId, String path) async => calls.add('playVideo $sourceId $path');
+
+  @override
   Future<void> share(String sourceId, List<String> paths) async => calls.add('share $sourceId ${paths.join(',')}');
 
   final transfers = <(String, List<String>, String, String, bool)>[];

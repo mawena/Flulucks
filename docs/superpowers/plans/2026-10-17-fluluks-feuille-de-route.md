@@ -319,7 +319,7 @@ dans le même commit que le travail.
 - [x] T6 — Dossiers distants dans le gestionnaire
 - [ ] T7 — Dossiers distants par FTP
 - [ ] T8 — Dossiers distants par SFTP (empreinte du serveur, clé privée)
-- [ ] T9 — Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)
+- [x] T9 — Lecteur vidéo intégré (avance rapide, sous-titres `.srt` à côté de la vidéo)
 - [ ] T10 — Lecteur de musique (lecture en arrière-plan, file d'attente du dossier)
 - [ ] T11 — Essais instrumentés sur le Pixel
 - [ ] *(utilisateur)* T12 — Essais sur le Pixel

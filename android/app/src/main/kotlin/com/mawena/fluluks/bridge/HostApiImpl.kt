@@ -32,6 +32,7 @@ import com.mawena.fluluks.files.Trash
 import com.mawena.fluluks.files.Transfers
 import com.mawena.fluluks.files.ViewPrefs
 import com.mawena.fluluks.files.ViewSettings
+import com.mawena.fluluks.media.VideoActivity
 import com.mawena.fluluks.remote.AuthFailed
 import com.mawena.fluluks.remote.HostKeyChanged
 import com.mawena.fluluks.remote.HostKeyUnknown
@@ -339,6 +340,12 @@ class HostApiImpl(
             val chooser = Files.viewIntent(sourceId, path)
             if (!Files.hasViewer(context, chooser)) throw FlutterError(EngineError.FL_ENOTSUP.toString(), Files.MSG_NO_VIEWER)
             chooser
+        }
+
+    override fun playVideo(sourceId: String, path: String, callback: (Result<Unit>) -> Unit) =
+        startPrepared(callback) {
+            Files.guard("openDocument") { Files.source(sourceId).stat(path) ?: throw java.io.FileNotFoundException("Document introuvable") }
+            VideoActivity.intent(context, sourceId, path)
         }
 
     override fun share(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit) =

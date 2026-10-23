@@ -129,6 +129,15 @@ void main() {
     expect(api.calls, contains('openWith phone /b.txt'));
   });
 
+  testWidgets('tapVideoPlaysInPortail', (tester) async {
+    final api = api0();
+    await pump(tester, api, source: 'v1');
+    await tester.tap(find.text('film.mkv'));
+    await tester.pump();
+    expect(api.calls, contains('playVideo v1 /film.mkv'));
+    expect(api.calls, isNot(contains('openWith v1 /film.mkv')));
+  });
+
   testWidgets('selectionCopyPasteStartsTransfer', (tester) async {
     final api = api0();
     final state = await pump(tester, api);

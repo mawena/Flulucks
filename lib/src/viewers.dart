@@ -16,7 +16,7 @@ const _text = {
 };
 
 /// Lecteurs déjà présents dans Portail ; les autres types s'ouvrent encore dans une autre application.
-const _available = {'image', 'text'};
+const _available = {'image', 'text', 'video'};
 
 /// Lecteur de Portail pour [name] : `image`, `audio`, `video`, `text`, ou null (autre application). « .gitignore »
 /// compte comme l'extension « gitignore ».
@@ -46,6 +46,8 @@ Future<void> openViewer(BuildContext context, AppState state, String sourceId, E
           builder: (_) => ImageViewerScreen(state: state, sourceId: sourceId, images: images, initialIndex: i < 0 ? 0 : i)));
     case 'text':
       await openTextEditor(context, state, sourceId, e);
+    case 'video':
+      await state.api.playVideo(sourceId, e.path);
     default:
       await state.api.openWith(sourceId, e.path);
   }

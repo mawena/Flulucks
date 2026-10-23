@@ -2139,6 +2139,25 @@ class FluLuksHostApi {
     ;
   }
 
+  /// Lecteur vidéo de Portail (plein écran, sous-titres `.srt` à côté de la vidéo).
+  Future<void> playVideo(String sourceId, String path) async {
+    final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.playVideo$pigeonVar_messageChannelSuffix';
+    final pigeonVar_channel = BasicMessageChannel<Object?>(
+      pigeonVar_channelName,
+      pigeonChannelCodec,
+      binaryMessenger: pigeonVar_binaryMessenger,
+    );
+    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[sourceId, path]);
+    final pigeonVar_replyList = await pigeonVar_sendFuture as List<Object?>?;
+
+    _extractReplyValueOrThrow(
+        pigeonVar_replyList,
+        pigeonVar_channelName,
+        isNullValid: true,
+    )
+    ;
+  }
+
   Future<void> share(String sourceId, List<String> paths) async {
     final pigeonVar_channelName = 'dev.flutter.pigeon.fluluks.FluLuksHostApi.share$pigeonVar_messageChannelSuffix';
     final pigeonVar_channel = BasicMessageChannel<Object?>(

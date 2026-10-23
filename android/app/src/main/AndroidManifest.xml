@@ -46,6 +46,13 @@
                 android:name="android.hardware.usb.action.USB_DEVICE_ATTACHED"
                 android:resource="@xml/usb_device_filter" />
         </activity>
+        <!-- Lecteur vidéo de Portail (phase 10). -->
+        <activity
+            android:name=".media.VideoActivity"
+            android:exported="false"
+            android:screenOrientation="sensorLandscape"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden"
+            android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen" />
         <service
             android:name=".service.VolumeService"
             android:exported="false"

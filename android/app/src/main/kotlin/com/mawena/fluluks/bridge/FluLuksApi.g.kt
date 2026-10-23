@@ -1667,6 +1667,8 @@ interface FluLuksHostApi {
   fun purgeTrash(sourceId: String, ids: List<String>, callback: (Result<Unit>) -> Unit)
   fun emptyTrash(sourceId: String, callback: (Result<Unit>) -> Unit)
   fun openWith(sourceId: String, path: String, callback: (Result<Unit>) -> Unit)
+  /** Lecteur vidéo de Portail (plein écran, sous-titres `.srt` à côté de la vidéo). */
+  fun playVideo(sourceId: String, path: String, callback: (Result<Unit>) -> Unit)
   fun share(sourceId: String, paths: List<String>, callback: (Result<Unit>) -> Unit)
   fun startTransfer(srcId: String, paths: List<String>, dstId: String, dstDir: String, move: Boolean)
   /** Compresse `paths` dans un ZIP `name` sous `dstDir` (même stockage) ; même créneau que les copies. */
@@ -2144,6 +2146,26 @@ interface FluLuksHostApi {
             val sourceIdArg = args[0] as String
             val pathArg = args[1] as String
             api.openWith(sourceIdArg, pathArg) { result: Result<Unit> ->
+              val error = result.exceptionOrNull()
+              if (error != null) {
+                reply.reply(FluLuksApiPigeonUtils.wrapError(error))
+              } else {
+                reply.reply(FluLuksApiPigeonUtils.wrapResult(null))
+              }
+            }
+          }
+        } else {
+          channel.setMessageHandler(null)
+        }
+      }
+      run {
+        val channel = BasicMessageChannel<Any?>(binaryMessenger, "dev.flutter.pigeon.fluluks.FluLuksHostApi.playVideo$separatedMessageChannelSuffix", codec)
+        if (api != null) {
+          channel.setMessageHandler { message, reply ->
+            val args = message as List<Any?>
+            val sourceIdArg = args[0] as String
+            val pathArg = args[1] as String
+            api.playVideo(sourceIdArg, pathArg) { result: Result<Unit> ->
               val error = result.exceptionOrNull()
               if (error != null) {
                 reply.reply(FluLuksApiPigeonUtils.wrapError(error))
