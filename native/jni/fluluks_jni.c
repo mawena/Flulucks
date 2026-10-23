@@ -41,14 +41,15 @@ static jbyteArray json_result(JNIEnv *env, int rc, fl_json *j) {
   return a;
 }
 
-/* Copie un byte[] en chaîne C terminée par NUL (malloc). NULL et *err si absent, trop long ou avec un NUL. */
-static char *cstr_from(JNIEnv *env, jbyteArray a, int *err) {
+/* Copie un byte[] d'au plus max octets en chaîne C terminée par NUL (malloc). NULL et *err si absent, trop
+ * long ou avec un NUL. */
+static char *cstr_from_max(JNIEnv *env, jbyteArray a, jsize max, int *err) {
   if (!a) {
     *err = FL_EINVAL;
     return NULL;
   }
   jsize n = (*env)->GetArrayLength(env, a);
-  if (n < 0 || n > PATH_BYTES) {
+  if (n < 0 || n > max) {
     *err = FL_EINVAL;
     return NULL;
   }
@@ -66,6 +67,8 @@ static char *cstr_from(JNIEnv *env, jbyteArray a, int *err) {
   }
   return s;
 }
+
+static char *cstr_from(JNIEnv *env, jbyteArray a, int *err) { return cstr_from_max(env, a, PATH_BYTES, err); }
 
 static void zero_array(JNIEnv *env, jbyteArray a, jsize n) {
   static const jbyte zeros[4096];
@@ -321,4 +324,92 @@ JNIEXPORT jint JNICALL JNI_FN(format)(JNIEnv *env, jobject thiz, jlong disk, jby
   free(o);
   fl_secure_free(p, alloc);
   return err;
+}
+
+/* ---- archives (phase 9) ---- */
+
+#define ARC_JSON_BYTES 32768 /* fj_arcw_add : nom de 4095 octets échappé, et le reste */
+
+JNIEXPORT jlong JNICALL JNI_FN(arcOpenFd)(JNIEnv *env, jobject thiz, jint fd) {
+  (void)env;
+  (void)thiz;
+  return fj_arc_open_fd(fd);
+}
+
+JNIEXPORT jlong JNICALL JNI_FN(arcOpenFile)(JNIEnv *env, jobject thiz, jlong file, jlong size) {
+  (void)env;
+  (void)thiz;
+  return fj_arc_open_file(file, size);
+}
+
+/* JSON de l'entrée, {"err":rc}, ou null à la fin. */
+JNIEXPORT jbyteArray JNICALL JNI_FN(arcNext)(JNIEnv *env, jobject thiz, jlong arc) {
+  (void)thiz;
+  fl_json j;
+  fl_json_init(&j);
+  int rc = fj_arc_next(arc, &j);
+  if (rc == 0) {
+    fl_json_free(&j);
+    return NULL;
+  }
+  return json_result(env, rc == 1 ? FL_OK : rc, &j);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(arcRead)(JNIEnv *env, jobject thiz, jlong arc, jbyteArray buf, jint len) {
+  (void)thiz;
+  if (!buf || len < 0 || len > (*env)->GetArrayLength(env, buf)) return FL_EINVAL;
+  size_t n = (size_t)len < FJ_PREAD_MAX ? (size_t)len : FJ_PREAD_MAX;
+  uint8_t one;
+  uint8_t *tmp = n ? malloc(n) : &one; /* len 0 : valide quand même la poignée */
+  if (!tmp) return FL_ENOMEM;
+  int64_t r = fj_arc_read(arc, tmp, n);
+  if (r > 0) (*env)->SetByteArrayRegion(env, buf, 0, (jsize)r, (const jbyte *)tmp);
+  if (n) free(tmp);
+  return (jint)r; /* r <= FJ_PREAD_MAX ou fl_err */
+}
+
+JNIEXPORT jint JNICALL JNI_FN(arcClose)(JNIEnv *env, jobject thiz, jlong arc) {
+  (void)env;
+  (void)thiz;
+  return fj_arc_close(arc);
+}
+
+JNIEXPORT jlong JNICALL JNI_FN(arcwOpenFd)(JNIEnv *env, jobject thiz, jint fd) {
+  (void)env;
+  (void)thiz;
+  return fj_arcw_open_fd(fd);
+}
+
+JNIEXPORT jlong JNICALL JNI_FN(arcwOpenFile)(JNIEnv *env, jobject thiz, jlong file) {
+  (void)env;
+  (void)thiz;
+  return fj_arcw_open_file(file);
+}
+
+JNIEXPORT jint JNICALL JNI_FN(arcwAdd)(JNIEnv *env, jobject thiz, jlong arc, jbyteArray json) {
+  (void)thiz;
+  int err = FL_OK;
+  char *s = cstr_from_max(env, json, ARC_JSON_BYTES, &err);
+  if (!s) return err;
+  int rc = fj_arcw_add(arc, s);
+  free(s);
+  return rc;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(arcwWrite)(JNIEnv *env, jobject thiz, jlong arc, jbyteArray buf, jint len) {
+  (void)thiz;
+  if (!buf || len < 0 || len > (*env)->GetArrayLength(env, buf) || (size_t)len > FJ_PREAD_MAX) return FL_EINVAL;
+  uint8_t one;
+  uint8_t *tmp = len ? malloc((size_t)len) : &one;
+  if (!tmp) return FL_ENOMEM;
+  if (len) (*env)->GetByteArrayRegion(env, buf, 0, len, (jbyte *)tmp);
+  int rc = fj_arcw_write(arc, tmp, (size_t)len);
+  if (len) free(tmp);
+  return rc;
+}
+
+JNIEXPORT jint JNICALL JNI_FN(arcwClose)(JNIEnv *env, jobject thiz, jlong arc, jboolean commit) {
+  (void)env;
+  (void)thiz;
+  return fj_arcw_close(arc, commit == JNI_TRUE);
 }

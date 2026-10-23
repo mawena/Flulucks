@@ -2,6 +2,8 @@ package com.mawena.fluluks
 
 import com.mawena.fluluks.engine.FileType
 import com.mawena.fluluks.files.LocalSource
+import com.mawena.fluluks.files.NativeIn
+import com.mawena.fluluks.files.NativeOut
 import com.mawena.fluluks.files.ProtectedDirException
 import com.mawena.fluluks.files.Sources
 import java.io.File
@@ -95,6 +97,22 @@ class LocalSourceTest {
         val (free, total) = s.space()
         assertTrue(free in 1..total)
         assertEquals(null, s.readOnlyReason)
+    }
+
+    /** Archives (phase 9) : le moteur lit et écrit le fichier par un descripteur, sous les mêmes règles de chemin. */
+    @Test fun openNativeReadsSameBytes() {
+        val s = src()
+        val data = ByteArray(70_000) { (it * 7).toByte() }
+        File(root, "a.zip").writeBytes(data)
+        val src = s.openNative("/a.zip") as NativeIn.Fd
+        assertArrayEquals(s.openRead("/a.zip").use { it.readBytes() }, src.file.readBytes())
+        refused<FileNotFoundException> { s.openNative("/") }
+        refused<FileNotFoundException> { s.openNative("/../x") }
+        refused<FileNotFoundException> { src(access = false).openNative("/a.zip") }
+        val (path, out) = s.createNative("/", "a.zip")
+        assertEquals("/a (1).zip", path)
+        assertEquals(0L, (out as NativeOut.Fd).file.length())
+        assertEquals(File(root, "a (1).zip").canonicalFile, out.file.canonicalFile)
     }
 
     /** Relecture finale : Android 11 et plus renvoie souvent une liste vide (et non null) pour ces dossiers. */

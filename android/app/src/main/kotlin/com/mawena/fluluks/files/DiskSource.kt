@@ -5,6 +5,7 @@ import android.provider.DocumentsContract
 import com.mawena.fluluks.engine.DirEntry
 import com.mawena.fluluks.engine.Engine
 import com.mawena.fluluks.engine.EngineError
+import com.mawena.fluluks.engine.FileType
 import com.mawena.fluluks.engine.NativeEngine
 import com.mawena.fluluks.engine.OpenFlags
 import com.mawena.fluluks.engine.VolumeStat
@@ -139,6 +140,28 @@ class DiskSource(override val id: String, private val engine: Engine = NativeEng
             created to EngineError.check(engine.openFile(h, b(created), OpenFlags.RDWR or OpenFlags.TRUNC))
         }
         return path to EngineOutputStream(engine, f, onChunk = ::touch) {
+            VolumeManager.noteWrite(id)
+            VolumeManager.notifyChanged(id, p)
+        }
+    }
+
+    override fun openNative(path: String): NativeIn {
+        val p = PathRules.require(path)
+        val h = handle()
+        val st = WriteOps(engine, h).statOrNull(p) ?: throw FileNotFoundException("Document introuvable")
+        if (st.type != FileType.FILE) throw FileNotFoundException("Ce n'est pas un fichier ordinaire")
+        val f = EngineError.check(engine.openFile(h, b(p), OpenFlags.RDONLY))
+        return NativeIn.EngineFile(f, st.size) { touch() }
+    }
+
+    override fun createNative(parent: String, name: String): Pair<String, NativeOut> {
+        val p = PathRules.require(parent)
+        val h = handle()
+        val (path, f) = write(p) { w ->
+            val created = w.create(p, name, dir = false)
+            created to EngineError.check(engine.openFile(h, b(created), OpenFlags.RDWR or OpenFlags.TRUNC))
+        }
+        return path to NativeOut.EngineFile(f) {
             VolumeManager.noteWrite(id)
             VolumeManager.notifyChanged(id, p)
         }

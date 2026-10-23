@@ -91,4 +91,16 @@ object NativeEngine : Engine {
 
     /** Formate tout le disque (phase 8, fj_format) ; la phrase de passe est mise à zéro par le natif. */
     external override fun format(disk: Long, opts: ByteArray, pass: ByteArray?, progress: FormatProgress?): Int
+
+    /** Archives (phase 9, fj_arc_* et fj_arcw_*) : voir [Engine]. */
+    external override fun arcOpenFd(fd: Int): Long
+    external override fun arcOpenFile(file: Long, size: Long): Long
+    external override fun arcNext(arc: Long): ByteArray?
+    external override fun arcRead(arc: Long, buf: ByteArray, len: Int): Int
+    external override fun arcClose(arc: Long): Int
+    external override fun arcwOpenFd(fd: Int): Long
+    external override fun arcwOpenFile(file: Long): Long
+    external override fun arcwAdd(arc: Long, json: ByteArray): Int
+    external override fun arcwWrite(arc: Long, buf: ByteArray, len: Int): Int
+    external override fun arcwClose(arc: Long, commit: Boolean): Int
 }
