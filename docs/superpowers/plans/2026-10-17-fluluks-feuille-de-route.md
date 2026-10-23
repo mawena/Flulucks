@@ -332,7 +332,7 @@ dans le même commit que le travail.
 - [x] Plan de la phase 11 écrit *(demande du 2026-10-23 ; spec § 19 ; choix de conception à valider par l'utilisateur)*
 - [x] T1 — Système de design : couleurs du logo, thèmes clair et sombre, choix du thème
 - [ ] T2 — Composants communs (états vides, erreurs, chargements, confirmations, feuilles d'actions)
-- [ ] T3 — Textes français (pluriels, unités, dates relatives)
+- [x] T3 — Textes français (pluriels, unités, dates relatives)
 - [ ] T4 — Accueil revu et logo
 - [ ] T5 — Déverrouillage, formatage et saisies sensibles
 - [ ] T6 — Collection d'éléments et explorateur revu (fil d'Ariane, tout sélectionner, annuler la mise à la corbeille)

@@ -122,7 +122,7 @@ void main() {
   testWidgets('liste vide', (tester) async {
     await pump(tester, FakeHostApi());
     expect(find.text('Portail'), findsOneWidget);
-    expect(find.text('Branchez un disque USB-C'), findsOneWidget);
+    expect(find.text(Fr.noDiskTitle), findsOneWidget);
   });
 
   testWidgets('disque LUKS2 : bouton Déverrouiller', (tester) async {
@@ -204,7 +204,7 @@ void main() {
         ..disks = [disk([part(volumeId: 'v1')])]
         ..volumes = [volume(readOnly: true, roReason: 'journal à rejouer : branchez le disque sous Ubuntu')],
     );
-    expect(find.text('Lecture seule : journal à rejouer : branchez le disque sous Ubuntu'), findsOneWidget);
+    expect(find.text(Fr.readOnly('journal à rejouer : branchez le disque sous Ubuntu')), findsOneWidget);
     expect(find.text("Ouvert — visible dans l'application Fichiers"), findsOneWidget);
   });
 
@@ -283,7 +283,7 @@ void main() {
         ..volumes = [v],
     );
     expect(
-      find.text("Le volume n'a pas été démonté proprement : contenu possiblement incomplet"),
+      find.text(Fr.needsRecovery),
       findsOneWidget,
     );
   });

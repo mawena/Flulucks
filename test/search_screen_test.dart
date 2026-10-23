@@ -7,6 +7,7 @@ import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/screens/explorer_screen.dart';
 import 'package:fluluks/src/screens/search_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
+import 'package:fluluks/src/strings_fr.dart';
 
 import 'explorer_screen_test.dart' show d, f, src;
 import 'fake_host_api.dart';
@@ -73,7 +74,7 @@ void main() {
     await pump(tester, api: api);
     await tester.enterText(find.byType(TextField), 'f');
     await tester.pumpAndSettle(const Duration(milliseconds: 500));
-    expect(find.text('Plus de 500 résultats : précisez la recherche'), findsOneWidget);
+    expect(find.text(Fr.tooManyResults), findsOneWidget);
   });
 
   testWidgets('tapFolderOpensExplorer', (tester) async {

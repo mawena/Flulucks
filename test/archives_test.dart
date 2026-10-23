@@ -79,7 +79,7 @@ void main() {
     await tester.pumpAndSettle();
     final (s, paths, dir, name) = api.compresses.single;
     expect([s, ...paths, dir, name], ['phone', '/b.txt', '/', 'sauvegarde.zip']);
-    expect(find.text('1 sélectionné(s)'), findsNothing); // sélection quittée
+    expect(find.text('1 sélectionné'), findsNothing); // sélection quittée
 
     // plusieurs éléments : « Archive » proposé ; une extension .zip déjà tapée est gardée
     await tester.longPress(find.text('DCIM'));
@@ -150,16 +150,16 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Extraire vers…'));
     await tester.pumpAndSettle();
-    expect(find.text('« photos.tar.gz » à extraire'), findsOneWidget);
+    expect(find.text(Fr.toExtract('photos.tar.gz')), findsOneWidget);
     // la barre suit dans un autre stockage, où « Extraire ici » lance l'extraction
     await openExplorerOn(tester, state, 'v1');
-    expect(find.text('« photos.tar.gz » à extraire'), findsOneWidget);
+    expect(find.text(Fr.toExtract('photos.tar.gz')), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Extraire ici'));
     await tester.pump();
     final (s, archive, dst, dir, newFolder) = api.extracts.single;
     expect([s, archive, dst, dir, newFolder], ['phone', '/photos.tar.gz', 'v1', '/', true]);
     expect(state.pendingExtract, isNull);
-    expect(find.text('« photos.tar.gz » à extraire'), findsNothing);
+    expect(find.text(Fr.toExtract('photos.tar.gz')), findsNothing);
 
     // Annuler vide la barre ; copier remplace l'extraction en attente
     state.setPendingExtract('phone', '/photos.tar.gz');
@@ -171,7 +171,7 @@ void main() {
     state.setClipboard('phone', ['/b.txt'], move: false);
     await tester.pump();
     expect(state.pendingExtract, isNull);
-    expect(find.text('1 élément(s) à copier'), findsOneWidget);
+    expect(find.text('1 élément à copier'), findsOneWidget);
     state.setPendingExtract('phone', '/photos.tar.gz');
     expect(state.clipboard, isNull);
   });
@@ -192,22 +192,22 @@ void main() {
         totalBytes: 100, finished: false, cancelled: false, elapsedMs: 0);
     state.onTransferChanged(t('compress'));
     await tester.pump();
-    expect(find.text('Compression : b.txt (1/2) — 50 %'), findsOneWidget);
+    expect(find.text('Compression de b.txt — 1 sur 2 · 50\u202F%'), findsOneWidget);
     state.onTransferChanged(t('extract'));
     await tester.pump();
-    expect(find.text('Extraction : b.txt (1/2) — 50 %'), findsOneWidget);
+    expect(find.text('Extraction de b.txt — 1 sur 2 · 50\u202F%'), findsOneWidget);
     state.onTransferChanged(t('move'));
     await tester.pump();
-    expect(find.text('Déplacement : b.txt (1/2) — 50 %'), findsOneWidget);
+    expect(find.text('Déplacement de b.txt — 1 sur 2 · 50\u202F%'), findsOneWidget);
     state.onTransferChanged(t('copy'));
     await tester.pump();
-    expect(find.text('Copie : b.txt (1/2) — 50 %'), findsOneWidget);
+    expect(find.text('Copie de b.txt — 1 sur 2 · 50\u202F%'), findsOneWidget);
   });
 
   test('extractFirstPassAnnounced', () {
     // premier passage (en-têtes seulement) : aucun fichier compté encore
     expect(Fr.transferLine('extract', 'b.tar.xz', 0, 0, 0), "Lecture de l'archive b.tar.xz…");
-    expect(Fr.transferLine('extract', 'a.txt', 1, 2, 50), 'Extraction : a.txt (1/2) — 50 %');
-    expect(Fr.transferLine('copy', 'a.txt', 0, 0, 0), 'Copie : a.txt (0/0) — 0 %');
+    expect(Fr.transferLine('extract', 'a.txt', 1, 2, 50), 'Extraction de a.txt — 1 sur 2 · 50\u202F%');
+    expect(Fr.transferLine('copy', 'a.txt', 0, 0, 0), 'Copie de a.txt — 0 sur 0 · 0\u202F%');
   });
 }

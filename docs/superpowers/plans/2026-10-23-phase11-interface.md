@@ -341,17 +341,17 @@ Valeurs fixées :
   - `emptyList` est remplacé par `noDiskTitle` « Aucun disque branché » et `noDiskBody` « Branchez un disque
     USB-C, chiffré LUKS ou non : ext4, NTFS, exFAT et FAT sont reconnus. ».
 
-- [ ] **Step 1 : tests** (`strings_test`) :
+- [x] **Step 1 : tests** (`strings_test`) :
   - `pluralFrench` (0, 1, 2) ;
   - `humanSizeUnits` (valeurs ci-dessus) ;
   - `friendlyDateRelative` (`now` fixé au 2026-10-23 15:00 locale : même jour, veille, 3 mars, 2025) ;
   - `frenchTypography` : lit `lib/src/strings_fr.dart` comme texte et n'y trouve aucune des suites `' ?'`, `' !'`,
     `' :'`, `' ;'`, `' %'`, `'« '`, `' »'` avec une espace ordinaire, ni `'(s)'`.
-- [ ] **Step 2 :** Run `flutter test test/strings_test.dart` → FAIL.
-- [ ] **Step 3 :** réécrire `Fr`. Les listes de l'explorateur, de la corbeille et des raccourcis affichent
+- [x] **Step 2 :** Run `flutter test test/strings_test.dart` → FAIL.
+- [x] **Step 3 :** réécrire `Fr`. Les listes de l'explorateur, de la corbeille et des raccourcis affichent
   `friendlyDate`. `shortDate` reste pour les propriétés.
-- [ ] **Step 4 :** `flutter test` vert après la mise à jour des attentes ; `flutter analyze` propre.
-- [ ] **Step 5 :** commit `fix(textes): pluriels, unités, dates relatives et typographie française`.
+- [x] **Step 4 :** `flutter test` vert après la mise à jour des attentes ; `flutter analyze` propre.
+- [x] **Step 5 :** commit `fix(textes): pluriels, unités, dates relatives et typographie française`.
 
 ### Task 4 : accueil revu et logo
 

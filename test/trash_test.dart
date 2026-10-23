@@ -5,6 +5,7 @@ import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/screens/explorer_screen.dart';
 import 'package:fluluks/src/screens/trash_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
+import 'package:fluluks/src/strings_fr.dart';
 
 import 'fake_host_api.dart';
 
@@ -88,7 +89,7 @@ void main() {
     final state = await pumpHome(tester, api);
     await push(tester, TrashScreen(state: state, sourceId: 'phone'));
     expect(find.text('Corbeille'), findsOneWidget);
-    expect(find.text('2 élément(s), 3,0 Mo'), findsOneWidget);
+    expect(find.text(Fr.trashSummary(2, 3000000)), findsOneWidget);
     expect(find.text('a.txt'), findsOneWidget); // nom d'origine, pas celui de la corbeille
     expect(find.textContaining('/docs/a.txt'), findsOneWidget);
 
@@ -99,7 +100,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(api.calls, contains('restoreTrash phone a (1).txt'));
     expect(find.text('a.txt'), findsNothing);
-    expect(find.text('1 élément(s), 3,0 Mo'), findsOneWidget);
+    expect(find.text(Fr.trashSummary(1, 3000000)), findsOneWidget);
 
     // supprimer définitivement un élément, après confirmation
     api.trash['phone']!.add(item('c.txt', '/c.txt'));
@@ -114,7 +115,7 @@ void main() {
     // vider, après confirmation
     await tester.tap(find.byTooltip('Vider la corbeille'));
     await tester.pumpAndSettle();
-    expect(find.text('Vider la corbeille ?'), findsOneWidget);
+    expect(find.text(Fr.emptyTrashTitle), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Vider'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('emptyTrash phone'));

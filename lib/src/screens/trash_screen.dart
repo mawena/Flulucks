@@ -115,7 +115,7 @@ class _TrashScreenState extends State<TrashScreen> {
   }
 
   Widget _tile(TrashItemMsg item) {
-    final date = item.deletedAt > 0 ? ' · ${Fr.shortDate(item.deletedAt ~/ 1000)}' : '';
+    final date = item.deletedAt > 0 ? ' · ${Fr.friendlyDate(item.deletedAt ~/ 1000)}' : '';
     return ListTile(
       key: ValueKey(item.id),
       leading: Icon(item.isDir ? Icons.folder : Icons.insert_drive_file),

@@ -99,7 +99,7 @@ class HomeScreen extends StatelessWidget {
                   child: Text(ejectErr, style: TextStyle(color: theme.colorScheme.error)),
                 ),
               if (state.disks.isEmpty)
-                const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: Text(Fr.emptyList)))
+                const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Center(child: Text(Fr.noDiskTitle)))
               else
                 for (final d in state.disks) DiskCard(state: state, disk: d),
               _Section(Fr.remoteFolders),

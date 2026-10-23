@@ -7,6 +7,7 @@ import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/screens/explorer_screen.dart';
 import 'package:fluluks/src/screens/space_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
+import 'package:fluluks/src/strings_fr.dart';
 
 import 'fake_host_api.dart';
 
@@ -67,18 +68,18 @@ void main() {
     final state = await pumpHome(tester, api);
     await push(tester, SpaceScreen(state: state, sourceId: 'phone'));
     expect(api.calls, contains('analyzeSpace phone /'));
-    expect(find.text('100,0 Mo — 3 fichier(s)'), findsOneWidget);
-    expect(find.text('85 %'), findsOneWidget);
-    expect(find.text('15 %'), findsOneWidget);
+    expect(find.text('100,0 Mo — 3 fichiers'), findsOneWidget);
+    expect(find.text(Fr.percent(85)), findsOneWidget);
+    expect(find.text(Fr.percent(15)), findsOneWidget);
     expect(bars(tester), [0.85, 0.15]);
 
     // descendre dans un dossier : lu dans l'analyse en mémoire
     await tester.tap(find.text('D'));
     await tester.pumpAndSettle();
     expect(api.calls, contains('spaceChildren phone /D'));
-    expect(find.text('82 %'), findsOneWidget); // 70 / 85
-    expect(find.text('18 %'), findsOneWidget);
-    expect(find.text('… et 3 autre(s) élément(s)'), findsOneWidget);
+    expect(find.text(Fr.percent(82)), findsOneWidget); // 70 / 85
+    expect(find.text(Fr.percent(18)), findsOneWidget);
+    expect(find.text('… et 3 autres éléments'), findsOneWidget);
     // un fichier ne s'ouvre pas
     await tester.tap(find.text('gros.bin'));
     await tester.pumpAndSettle();
@@ -87,7 +88,7 @@ void main() {
     // retour : le niveau précédent, sans quitter l'écran
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('85 %'), findsOneWidget);
+    expect(find.text(Fr.percent(85)), findsOneWidget);
     expect(find.byType(SpaceScreen), findsOneWidget);
 
     // les plus gros fichiers
@@ -113,8 +114,8 @@ void main() {
     expect(api.calls, contains('cancelAnalysis'));
     pending.complete(report('/', 100, [item('/a.bin', 100)], [], truncated: true));
     await tester.pumpAndSettle();
-    expect(find.text('Analyse incomplète : arrêtée, ou trop d\'éléments'), findsOneWidget);
-    expect(find.text('100 %'), findsOneWidget);
+    expect(find.text(Fr.spaceTruncated), findsOneWidget);
+    expect(find.text(Fr.percent(100)), findsOneWidget);
   });
 
   testWidgets('spaceOpenedFromExplorerRoot', (tester) async {

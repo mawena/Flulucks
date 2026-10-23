@@ -382,7 +382,7 @@ class _ExplorerScreenState extends State<ExplorerScreen> {
   }
 
   String _subtitle(EntryMsg e) {
-    final date = e.mtime > 0 ? Fr.shortDate(e.mtime) : '';
+    final date = e.mtime > 0 ? Fr.friendlyDate(e.mtime) : '';
     if (e.type != 'file') return date;
     return date.isEmpty ? Fr.humanSize(e.size) : '${Fr.humanSize(e.size)} · $date';
   }

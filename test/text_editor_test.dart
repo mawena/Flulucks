@@ -6,6 +6,7 @@ import 'package:fluluks/src/screens/explorer_screen.dart';
 import 'package:fluluks/src/screens/text_editor_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
 import 'package:fluluks/src/viewers.dart';
+import 'package:fluluks/src/strings_fr.dart';
 
 import 'fake_host_api.dart';
 
@@ -121,7 +122,7 @@ void main() {
     // Annuler : on reste dans l'éditeur
     await tester.pageBack();
     await tester.pumpAndSettle();
-    expect(find.text('Enregistrer les modifications avant de quitter ?'), findsOneWidget);
+    expect(find.text(Fr.unsavedBody), findsOneWidget);
     await tester.tap(find.text('Annuler'));
     await tester.pumpAndSettle();
     expect(find.byType(TextEditorScreen), findsOneWidget);
@@ -155,7 +156,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.byTooltip('Enregistrer'));
     await tester.pumpAndSettle();
-    expect(find.text('Le fichier a été modifié depuis son ouverture. Le remplacer par votre version ?'), findsOneWidget);
+    expect(find.text(Fr.textChangedBody), findsOneWidget);
     await tester.tap(find.text('Remplacer'));
     await tester.pumpAndSettle();
     expect(api.writes.map((w) => w.$7), [false, true]);
@@ -166,7 +167,7 @@ void main() {
     final api = api0()..texts['/notes.txt'] = text('figé', ro: 'Stockage en lecture seule');
     await pump(tester, api);
     await openNotes(tester);
-    expect(find.text('Lecture seule : Stockage en lecture seule'), findsOneWidget);
+    expect(find.text(Fr.readOnly('Stockage en lecture seule')), findsOneWidget);
     expect(find.byTooltip('Enregistrer'), findsNothing);
     expect(tester.widget<TextField>(find.byType(TextField)).readOnly, isTrue);
   });

@@ -7,6 +7,7 @@ import 'package:fluluks/src/app.dart';
 import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/screens/explorer_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
+import 'package:fluluks/src/strings_fr.dart';
 
 import 'fake_host_api.dart';
 
@@ -144,10 +145,10 @@ void main() {
     await longPress(tester, 'a.jpg');
     await tester.tap(find.text('b.txt')); // en sélection, toucher ajoute
     await tester.pump();
-    expect(find.text('2 sélectionné(s)'), findsOneWidget);
+    expect(find.text('2 sélectionnés'), findsOneWidget);
     await tester.tap(find.byTooltip('Copier'));
     await tester.pump();
-    expect(find.text('2 élément(s) à copier'), findsOneWidget);
+    expect(find.text('2 éléments à copier'), findsOneWidget);
     // coller sur le disque
     tester.state<NavigatorState>(find.byType(Navigator)).push(
         MaterialPageRoute<void>(builder: (_) => ExplorerScreen(state: state, sourceId: 'v1')));
@@ -167,7 +168,7 @@ void main() {
     await longPress(tester, 'b.txt');
     await tester.tap(find.byTooltip('Couper'));
     await tester.pump();
-    expect(find.text('1 élément(s) à déplacer'), findsOneWidget);
+    expect(find.text('1 élément à déplacer'), findsOneWidget);
     await tester.tap(find.text('DCIM'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Coller ici'));
@@ -180,7 +181,7 @@ void main() {
   testWidgets('pasteDisabledOnReadOnly', (tester) async {
     final api = api0()..sources = [src('phone'), src('v1', kind: 'disk', label: 'Données', readOnly: true, roReason: 'NTFS en veille prolongée')];
     final state = await pump(tester, api, source: 'v1');
-    expect(find.text('Lecture seule : NTFS en veille prolongée'), findsOneWidget);
+    expect(find.text(Fr.readOnly('NTFS en veille prolongée')), findsOneWidget);
     expect(find.byType(FloatingActionButton), findsNothing);
     state.setClipboard('phone', ['/b.txt'], move: false);
     await tester.pump();
@@ -196,7 +197,7 @@ void main() {
     await longPress(tester, 'b.txt');
     await tester.tap(find.byTooltip('Supprimer'));
     await tester.pumpAndSettle();
-    expect(find.text('Supprimer « b.txt » ?'), findsOneWidget);
+    expect(find.text(Fr.deleteOne('b.txt')), findsOneWidget);
     expect(find.text('Les éléments restent 30 jours dans la corbeille de ce stockage.'), findsOneWidget);
     await tester.tap(find.text('Annuler'));
     await tester.pumpAndSettle();
@@ -205,7 +206,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.byTooltip('Supprimer'));
     await tester.pumpAndSettle();
-    expect(find.text('Supprimer 2 éléments ?'), findsOneWidget);
+    expect(find.text(Fr.deleteMany(2)), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Supprimer'));
     await tester.pumpAndSettle();
     expect(api.calls.where((c) => c.startsWith('trash')).single, anyOf('trash phone /b.txt,/a.jpg', 'trash phone /a.jpg,/b.txt'));
@@ -254,7 +255,7 @@ void main() {
         finished: finished, cancelled: false, error: error, elapsedMs: 0);
     state.onTransferChanged(t());
     await tester.pump();
-    expect(find.text('Copie : film.mkv (1/1) — 25 %'), findsOneWidget);
+    expect(find.text(Fr.transferLine('copy', 'film.mkv', 1, 1, 25)), findsOneWidget);
     expect(tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator)).value, 0.25);
     await tester.tap(find.widgetWithText(TextButton, 'Annuler'));
     await tester.pump();
@@ -262,10 +263,10 @@ void main() {
     final before = api.calls.where((c) => c == 'listDir phone / false').length;
     state.onTransferChanged(t(done: 200, finished: true));
     await tester.pump();
-    expect(find.text('Terminé : 1 fichier(s)'), findsOneWidget);
+    expect(find.text(Fr.transferDone(1)), findsOneWidget);
     expect(api.calls.where((c) => c == 'listDir phone / false').length, before + 1); // liste rafraîchie
     await tester.pump(const Duration(seconds: 5));
-    expect(find.text('Terminé : 1 fichier(s)'), findsNothing);
+    expect(find.text(Fr.transferDone(1)), findsNothing);
   });
 
   testWidgets('explorerPopsWhenSourceCloses', (tester) async {
@@ -320,7 +321,7 @@ void main() {
     final state = await pump(tester, api0());
     state.onTransferChanged(done(bytes: 100000000, elapsedMs: 4000));
     await tester.pump();
-    expect(find.text('Terminé : 1 fichier(s), 25 Mo/s'), findsOneWidget);
+    expect(find.text('${Fr.transferDone(1)}, 25 Mo/s'), findsOneWidget);
     await tester.pump(const Duration(seconds: 5));
   });
 
@@ -328,7 +329,7 @@ void main() {
     final state = await pump(tester, api0());
     state.onTransferChanged(done());
     await tester.pump();
-    expect(find.text('Terminé : 1 fichier(s)'), findsOneWidget);
+    expect(find.text(Fr.transferDone(1)), findsOneWidget);
     await tester.pump(const Duration(seconds: 5)); // résultat vu
     await tester.pageBack();
     await tester.pumpAndSettle();
@@ -361,12 +362,12 @@ void main() {
     final api = api0();
     final state = await pump(tester, api);
     await longPress(tester, 'b.txt');
-    expect(find.text('1 sélectionné(s)'), findsOneWidget);
+    expect(find.text('1 sélectionné'), findsOneWidget);
     api.dirs['phone']!['/'] = [d('/DCIM'), f('/a.jpg', size: 3000000)]; // b.txt supprimé par une autre application
     final v = state.viewPrefs;
     await state.setViewPrefs(ViewPrefsMsg(sort: v.sort, ascending: v.ascending, grid: v.grid, showHidden: true, builtInViewers: v.builtInViewers));
     await tester.pumpAndSettle();
-    expect(find.text('1 sélectionné(s)'), findsNothing);
+    expect(find.text('1 sélectionné'), findsNothing);
   });
 
   testWidgets('favoriteDisabledWithoutPartUuid', (tester) async {
