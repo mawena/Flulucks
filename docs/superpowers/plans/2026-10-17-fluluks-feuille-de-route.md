@@ -305,8 +305,8 @@ dans le même commit que le travail.
 - [x] Relecture finale de toute la branche *(aucun point critique ; 5 importants corrigés : place réelle relue à
       l'extraction, premier passage borné, .gz/.xz seuls, purge de la corbeille, photos de la même seconde ;
       11 mineurs reportés)*
-- [ ] Fusion `feature/compression` → `develop`
-- [ ] Version `v1.2.0`
+- [x] Fusion `feature/compression` → `develop`
+- [x] Version `v1.2.0`
 
 ### Phase 10 — Lecteurs intégrés et stockages distants
 - [ ] Plan de la phase 10 écrit
