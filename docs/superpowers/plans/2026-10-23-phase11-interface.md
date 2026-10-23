@@ -536,7 +536,7 @@ enregistre `sourceId|path` à côté de `thumbRequests`).
   résultats **de la même source**, dans l'ordre affiché.
 - ⋮ (ou appui long en grille) ouvre une feuille : Ouvrir le dossier, Ouvrir avec…, Partager, Propriétés.
 
-- [ ] **Step 1 : tests** (ils échouent aujourd'hui) :
+- [x] **Step 1 : tests** (ils échouent aujourd'hui) :
   - `filterFollowsGridPreference` : `viewPrefs.grid = true`. Dans `FilterScreen` (`photos`, deux images du
     téléphone), `find.byType(SliverGrid)` trouve un widget, aucun `ListTile` n'est trouvé pour les éléments, et
     `api.thumbRequests` contient les deux chemins ;
@@ -551,11 +551,11 @@ enregistre `sourceId|path` à côté de `thumbRequests`).
   - `searchOpensInPortailViewer` ;
   - `trashAndSpaceStayLists` (grille choisie → corbeille et analyse toujours en liste ; ce test documente la
     décision).
-- [ ] **Step 2 :** Run `flutter test test/filters_test.dart test/search_screen_test.dart` → FAIL
+- [x] **Step 2 :** Run `flutter test test/filters_test.dart test/search_screen_test.dart` → FAIL
   (`filterFollowsGridPreference` : aucun `SliverGrid`).
-- [ ] **Step 3 :** implémenter (chaque écran garde un `ThumbCache` libéré par `dispose`).
-- [ ] **Step 4 :** tests verts ; suites vertes.
-- [ ] **Step 5 :** commit `fix(raccourcis): liste ou grille selon le réglage, vignettes et lecteurs de Portail`.
+- [x] **Step 3 :** implémenter (chaque écran garde un `ThumbCache` libéré par `dispose`).
+- [x] **Step 4 :** tests verts ; suites vertes.
+- [x] **Step 5 :** commit `fix(raccourcis): liste ou grille selon le réglage, vignettes et lecteurs de Portail`.
 
 ### Task 8 : recherche dans tous les stockages
 

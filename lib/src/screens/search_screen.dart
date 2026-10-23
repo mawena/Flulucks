@@ -6,14 +6,16 @@ import 'package:flutter/services.dart';
 import '../bridge/fluluks_api.g.dart';
 import '../state/app_state.dart';
 import '../strings_fr.dart';
-import '../ui/feedback.dart';
 import '../ui/states.dart';
 import '../ui/tokens.dart';
 import '../ui/widgets.dart';
-import '../file_types.dart';
+import '../widgets/entry_collection.dart';
+import '../widgets/found_entries.dart';
+import '../widgets/thumb.dart';
 import 'explorer_screen.dart';
 
-/// Recherche par nom sous [path] : lancée 400 ms après la dernière frappe, la précédente annulée.
+/// Recherche par nom sous [path] : lancée 400 ms après la dernière frappe, la précédente annulée. Résultats en
+/// liste ou en grille selon le réglage d'affichage, ouverts dans les lecteurs de Portail.
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key, required this.state, required this.sourceId, required this.path});
 
@@ -34,9 +36,24 @@ class _SearchScreenState extends State<SearchScreen> {
   String _query = '';
   SearchResultMsg? _result;
   String? _error;
+  final _thumbs = ThumbCache();
+
+  AppState get state => widget.state;
+
+  @override
+  void initState() {
+    super.initState();
+    state.addListener(_onState);
+  }
+
+  void _onState() {
+    if (mounted) setState(() {}); // réglage d'affichage (liste ou grille)
+  }
 
   @override
   void dispose() {
+    state.removeListener(_onState);
+    _thumbs.dispose();
     _timer?.cancel();
     if (_running) widget.state.api.cancelSearch();
     super.dispose();
@@ -79,14 +96,21 @@ class _SearchScreenState extends State<SearchScreen> {
     }
   }
 
-  void _open(EntryMsg e) {
-    if (e.type == 'dir') {
-      openExplorer(context, widget.state, widget.sourceId, path: e.path);
-    } else {
-      widget.state.api.openWith(widget.sourceId, e.path).catchError((Object err) {
-        if (mounted && err is PlatformException) showMessage(context, err.message ?? Fr.genericError, kind: MessageKind.error);
-      });
-    }
+  Widget _results(List<EntryMsg> entries) {
+    final items = [
+      for (final e in entries) EntryItem(sourceId: widget.sourceId, entry: e, subtitle: parentOf(e.path)),
+    ];
+    return CustomScrollView(slivers: [
+      EntrySliver(
+        state: state,
+        thumbs: _thumbs,
+        items: items,
+        grid: state.viewPrefs.grid,
+        onTap: (i) => openFoundEntry(context, state, i, items),
+        onLongPress: (i) => showFoundEntrySheet(context, state, i),
+        onMore: (i) => showFoundEntrySheet(context, state, i),
+      ),
+    ]);
   }
 
   @override
@@ -103,6 +127,7 @@ class _SearchScreenState extends State<SearchScreen> {
             _search(q.trim());
           },
         ),
+        actions: [ViewModeButton(state: state)],
       ),
       body: Column(children: [
         if (_running) const LinearProgressIndicator(),
@@ -118,18 +143,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   ? const SizedBox.shrink()
                   : r.entries.isEmpty && !_running && _query.isNotEmpty
                       ? const EmptyState(icon: Icons.search_off_rounded, title: Fr.noResult)
-                      : ListView.builder(
-                          itemCount: r.entries.length,
-                          itemBuilder: (_, i) {
-                            final e = r.entries[i];
-                            return ListTile(
-                              leading: Icon(kindIcon(kindOf(e))),
-                              title: Text(e.name),
-                              subtitle: Text(parentOf(e.path)),
-                              onTap: () => _open(e),
-                            );
-                          },
-                        ),
+                      : _results(r.entries),
         ),
       ]),
     );

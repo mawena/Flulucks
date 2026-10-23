@@ -5,11 +5,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:fluluks/src/app.dart';
 import 'package:fluluks/src/bridge/fluluks_api.g.dart';
 import 'package:fluluks/src/screens/explorer_screen.dart';
+import 'package:fluluks/src/screens/image_viewer_screen.dart';
 import 'package:fluluks/src/screens/search_screen.dart';
 import 'package:fluluks/src/state/app_state.dart';
 import 'package:fluluks/src/strings_fr.dart';
 
-import 'explorer_screen_test.dart' show d, f, src;
+import 'explorer_screen_test.dart' show d, f, png, src;
 import 'fake_host_api.dart';
 
 Future<FakeHostApi> pump(WidgetTester tester, {FakeHostApi? api}) async {
@@ -52,15 +53,15 @@ void main() {
   testWidgets('showsResultsWithParentPath', (tester) async {
     final api = FakeHostApi()
       ..sources = [src('phone')]
-      ..searchResult = (_) => res([f('/DCIM/2026/Été.jpg')]);
+      ..searchResult = (_) => res([f('/DCIM/2026/Été.pdf')]);
     await pump(tester, api: api);
     await tester.enterText(find.byType(TextField), 'ete');
     await tester.pumpAndSettle(const Duration(milliseconds: 500));
-    expect(find.text('Été.jpg'), findsOneWidget);
+    expect(find.text('Été.pdf'), findsOneWidget);
     expect(find.text('/DCIM/2026'), findsOneWidget);
-    await tester.tap(find.text('Été.jpg'));
+    await tester.tap(find.text('Été.pdf')); // aucun lecteur de Portail : autre application
     await tester.pump();
-    expect(api.calls, contains('openWith phone /DCIM/2026/Été.jpg'));
+    expect(api.calls, contains('openWith phone /DCIM/2026/Été.pdf'));
     api.searchResult = (_) => res([]);
     await tester.enterText(find.byType(TextField), 'rien');
     await tester.pumpAndSettle(const Duration(milliseconds: 500));
@@ -102,5 +103,35 @@ void main() {
     await tester.tap(find.byTooltip('Rechercher'));
     await tester.pumpAndSettle();
     expect(find.byType(SearchScreen), findsOneWidget);
+  });
+
+  // phase 11, T7
+
+  testWidgets('searchFollowsGridPreference', (tester) async {
+    final api = FakeHostApi()
+      ..sources = [src('phone')]
+      ..viewPrefs = ViewPrefsMsg(sort: 'name', ascending: true, grid: true, showHidden: false, builtInViewers: true)
+      ..searchResult = (_) => res([f('/DCIM/a.jpg'), f('/DCIM/b.jpg')]);
+    await pump(tester, api: api);
+    await tester.enterText(find.byType(TextField), 'jpg');
+    await tester.pumpAndSettle(const Duration(milliseconds: 500));
+    expect(find.byType(SliverGrid), findsOneWidget);
+    expect(api.thumbSources, containsAll(['phone|/DCIM/a.jpg', 'phone|/DCIM/b.jpg']));
+  });
+
+  testWidgets('searchOpensInPortailViewer', (tester) async {
+    final api = FakeHostApi()
+      ..sources = [src('phone')]
+      ..images['/DCIM/a.jpg'] = png
+      ..images['/DCIM/c.jpg'] = png
+      ..searchResult = (_) => res([f('/DCIM/a.jpg'), f('/DCIM/b.txt'), f('/DCIM/c.jpg')]);
+    await pump(tester, api: api);
+    await tester.enterText(find.byType(TextField), 'x');
+    await tester.pumpAndSettle(const Duration(milliseconds: 500));
+    await tester.tap(find.text('c.jpg'));
+    await tester.pumpAndSettle();
+    final viewer = tester.widget<ImageViewerScreen>(find.byType(ImageViewerScreen));
+    expect([for (final e in viewer.images) e.path], ['/DCIM/a.jpg', '/DCIM/c.jpg']);
+    expect(viewer.initialIndex, 1);
   });
 }

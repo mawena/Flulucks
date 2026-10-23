@@ -417,6 +417,9 @@ class FakeHostApi implements HostApi {
 
   /// Réponse de [search] selon la requête ; un completer dans [searchGates] la retarde.
   SearchResultMsg Function(String query) searchResult = (_) => SearchResultMsg(entries: [], truncated: false);
+
+  /// Résultats propres à une source (recherche dans tous les stockages) ; sinon [searchResult].
+  final searchBySource = <String, SearchResultMsg Function(String query)>{};
   final searchGates = <String, Completer<void>>{};
   int searchCancels = 0;
 
@@ -425,7 +428,7 @@ class FakeHostApi implements HostApi {
     calls.add('search $sourceId $path $query');
     final gate = searchGates[query];
     if (gate != null) await gate.future;
-    return searchResult(query);
+    return (searchBySource[sourceId] ?? searchResult)(query);
   }
 
   @override
@@ -435,9 +438,13 @@ class FakeHostApi implements HostApi {
   final thumbs = <String, Uint8List>{};
   final thumbRequests = <String>[];
 
+  /// Les mêmes demandes, avec leur source : `sourceId|chemin`.
+  final thumbSources = <String>[];
+
   @override
   Future<Uint8List?> thumbnail(String sourceId, String path, int sizePx) async {
     thumbRequests.add(path);
+    thumbSources.add('$sourceId|$path');
     return thumbs[path];
   }
 
