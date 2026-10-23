@@ -119,17 +119,17 @@ libarchive (faites par 7-Zip et WinRAR).
 CRC64, SHA-256) et `fl_libarchive` (lecteurs zip, 7zip, rar, rar5, tar, raw ; filtres gzip, xz, lzma ;
 écrivain zip), liées à `fluluks`.
 
-- [ ] **Step 1 :** télécharger `libarchive-3.8.10.tar.xz` et `xz-5.8.4.tar.xz` depuis leurs dépôts GitHub
+- [x] **Step 1 :** télécharger `libarchive-3.8.10.tar.xz` et `xz-5.8.4.tar.xz` depuis leurs dépôts GitHub
   officiels ; comparer l'empreinte SHA-256 à celle publiée (champ `digest` de l'API GitHub) ; vérifier
   la signature `.sig`/`.asc` si la clé publique s'obtient ; noter versions et empreintes dans `PATCHES.md`.
   *Jamais xz 5.6.0 ni 5.6.1.*
-- [ ] **Step 2 : test de fumée** `test_arc_fumee` : lit avec l'API libarchive brute un `tar.xz` et un `zip`
+- [x] **Step 2 : test de fumée** `test_arc_fumee` : lit avec l'API libarchive brute un `tar.xz` et un `zip`
   produits par `tar -cJf` et `zip` (fixtures ajoutées à `tools/fixtures/make_fixtures.sh`) et compare les
   noms et contenus. Run `ctest --test-dir build/native -R test_arc_fumee` → FAIL (cible absente).
-- [ ] **Step 3 :** cibles CMake et `config.h` ; options `-Werror` levées pour ces seules cibles (code
+- [x] **Step 3 :** cibles CMake et `config.h` ; options `-Werror` levées pour ces seules cibles (code
   amont), ASan/UBSan gardés ; construction NDK arm64 et x86_64 (`flutter build apk --debug`).
-- [ ] **Step 4 :** test vert ; suite rapide `ctest -LE lent` verte.
-- [ ] **Step 5 :** commit `build(moteur): libarchive 3.8.10 et liblzma 5.8.4`.
+- [x] **Step 4 :** test vert ; suite rapide `ctest -LE lent` verte.
+- [x] **Step 5 :** commit `build(moteur): libarchive 3.8.10 et liblzma 5.8.4`.
 
 ### Task 2 : lecture d'archives (moteur)
 
@@ -150,7 +150,7 @@ void fl_arc_close(fl_arc_reader *r);
 ```
 `name` : octets bruts de l'archive (non convertis, non assainis) ; `size` : -1 si inconnue.
 
-- [ ] **Step 1 : tests** (`test_archive_read`) :
+- [x] **Step 1 : tests** (`test_archive_read`) :
   - `test_arc_formats` : zip (deflate et stocké), tar, tar.gz, tar.xz, `.gz` seul, 7z (LZMA2, BCJ), RAR4,
     RAR5 : noms, types, tailles et contenus égaux à la référence (contenus des fixtures listés dans le test) ;
   - `test_arc_noms_bruts` : zip fabriqué par Python avec `../x`, `/abs`, `a/../../x`, nom avec `\` : rendus
@@ -159,13 +159,13 @@ void fl_arc_close(fl_arc_reader *r);
   - `test_arc_chiffre` : `zip -P` → `encrypted` vrai, `fl_arc_read` < 0 ;
   - `test_arc_tronque` : archive coupée à moitié → erreur, jamais de plantage (ASan) ;
   - `test_arc_inconnu` : fichier texte → `FL_ENOTSUP`.
-- [ ] **Step 2 :** Run `ctest -R test_archive_read` → FAIL (en-tête absent).
-- [ ] **Step 3 :** implémenter sur `archive_read_new` + `archive_read_support_format_{zip_seekable,7zip,rar,
+- [x] **Step 2 :** Run `ctest -R test_archive_read` → FAIL (en-tête absent).
+- [x] **Step 3 :** implémenter sur `archive_read_new` + `archive_read_support_format_{zip_seekable,7zip,rar,
   rar5,tar,raw}` + filtres ; callbacks `read`/`seek`/`skip` sur `fl_arc_in` (tampon de 64 Kio) ; le format
   `raw` seulement si un filtre gzip/xz est actif (sinon tout fichier serait une « archive ») ; noms par
   `archive_entry_pathname` sans conversion de jeu de caractères (option `hdrcharset` non utilisée).
-- [ ] **Step 4 :** tests verts ; suite rapide verte.
-- [ ] **Step 5 :** commit `feat(archives): lecture de ZIP, 7z, RAR, TAR, GZ et XZ`.
+- [x] **Step 4 :** tests verts ; suite rapide verte.
+- [x] **Step 5 :** commit `feat(archives): lecture de ZIP, 7z, RAR, TAR, GZ et XZ`.
 
 ### Task 3 : écriture ZIP (moteur)
 
@@ -180,18 +180,18 @@ int fl_arcw_write(fl_arc_writer *w, const void *buf, size_t len);
 int fl_arcw_close(fl_arc_writer *w, bool commit);  /* commit faux : abandon, rien de plus n'est écrit */
 ```
 
-- [ ] **Step 1 : tests** jugés par `unzip -t`, `zip -T` et `zipfile` de Python :
+- [x] **Step 1 : tests** jugés par `unzip -t`, `zip -T` et `zipfile` de Python :
   - `test_arcw_arbre` : dossiers, fichiers vides, 3 Mio aléatoires, stocké et deflate ; relu octet par octet ;
   - `test_arcw_noms_utf8` : `été/日本.txt` → drapeau UTF-8 posé, `zipfile` rend le même nom ;
   - `test_arcw_dates` : date relue par `zipfile` égale (à 2 s près, résolution DOS) ;
   - `test_arcw_zip64_lent` (label `lent`) : fichier creux de 4,5 Gio → ZIP64, `unzip -t` propre ;
   - `test_arcw_abandon` : `commit` faux → l'appelant supprime le fichier, aucune fuite (ASan).
-- [ ] **Step 2 :** Run → FAIL.
-- [ ] **Step 3 :** `archive_write_set_format_zip`, `archive_write_zip_set_compression_deflate|store` avant
+- [x] **Step 2 :** Run → FAIL.
+- [x] **Step 3 :** `archive_write_set_format_zip`, `archive_write_zip_set_compression_deflate|store` avant
   chaque entrée, `archive_entry_set_pathname_utf8`, option `zip:zip64` automatique ; `fl_arcw_add` refuse
   un nom vide, absolu ou contenant `..` (`FL_EINVAL`).
-- [ ] **Step 4 :** tests verts ; suite rapide verte.
-- [ ] **Step 5 :** commit `feat(archives): écriture ZIP`.
+- [x] **Step 4 :** tests verts ; suite rapide verte.
+- [x] **Step 5 :** commit `feat(archives): écriture ZIP`.
 
 ### Task 4 : JNI et entrées-sorties des sources
 
@@ -213,16 +213,16 @@ int fl_arcw_close(fl_arc_writer *w, bool commit);  /* commit faux : abandon, rie
 - `FileSource.openNative(path: String): NativeIn` et `createNative(parent, name): Pair<String, NativeOut>`
   avec `sealed class NativeIn { Fd(pfd), EngineFile(handle) }` (idem `NativeOut`), fermés par l'archive.
 
-- [ ] **Step 1 : tests** `test_handles` : `test_arc_par_jni` (zip sur une image de disque lu par
+- [x] **Step 1 : tests** `test_handles` : `test_arc_par_jni` (zip sur une image de disque lu par
   `fj_arc_open_file`, puis écrit par `fj_arcw_open_file`, relu) ; `test_arc_disque_ferme` (archive
   ouverte, `fj_close_disk` → la poignée d'archive est fermée, `fj_arc_read` rend `FL_EINVAL`,
   `fj_debug_used() == 0`). JVM : `LocalSourceTest.openNativeReadsSameBytes`.
-- [ ] **Step 2 :** Run → FAIL.
-- [ ] **Step 3 :** type `T_ARC` (parent : la poignée de fichier, ou aucun pour un descripteur) ; entrée
+- [x] **Step 2 :** Run → FAIL.
+- [x] **Step 3 :** type `T_ARC` (parent : la poignée de fichier, ou aucun pour un descripteur) ; entrée
   `fl_arc_in` sur `pread(2)` ou sur `fj_pread` ; sortie sur `write(2)` ou `fj_pwrite` (position
   tenue par l'archive) ; `fj_close_disk` ferme les archives de ses fichiers.
-- [ ] **Step 4 :** tests verts ; construction NDK ; JVM verte.
-- [ ] **Step 5 :** commit `feat(archives): poignées d'archive par JNI`.
+- [x] **Step 4 :** tests verts ; construction NDK ; JVM verte.
+- [x] **Step 5 :** commit `feat(archives): poignées d'archive par JNI`.
 
 ### Task 5 : compresser et extraire (Kotlin)
 
