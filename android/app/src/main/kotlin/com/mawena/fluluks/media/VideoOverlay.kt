@@ -39,6 +39,9 @@ class VideoOverlay(private val context: Context) {
     val lockButton = button(com.mawena.fluluks.R.drawable.video_ic_lock_open, VideoOrientation.lockDescription(OrientationMode.Auto))
     private val info = bubble(20f)
     private val hideInfo = Runnable { info.visibility = View.GONE }
+    private val jumpBack = bubble(18f)
+    private val jumpForward = bubble(18f)
+    private val hideJumps = Runnable { jumpBack.visibility = View.GONE; jumpForward.visibility = View.GONE }
 
     init {
         bar.addView(title, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -58,6 +61,26 @@ class VideoOverlay(private val context: Context) {
         root.addView(player, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
         root.addView(bar, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP))
         root.addView(info, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+        // bulles des sauts au milieu de la moitié touchée
+        val half = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
+        for (b in listOf(jumpBack, jumpForward)) {
+            val cell = FrameLayout(context)
+            cell.addView(b, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.CENTER))
+            half.addView(cell, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f))
+        }
+        root.addView(half, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+    }
+
+    /** Cumul d'une série de touchers, [text] dans la moitié avant ([forward]) ou arrière ; caché après [hideAfterMs]. */
+    fun showJump(forward: Boolean, text: String, hideAfterMs: Long) {
+        val (shown, other) = if (forward) jumpForward to jumpBack else jumpBack to jumpForward
+        other.visibility = View.GONE
+        shown.text = text
+        shown.visibility = View.VISIBLE
+        shown.removeCallbacks(hideJumps)
+        jumpBack.removeCallbacks(hideJumps)
+        jumpForward.removeCallbacks(hideJumps)
+        shown.postDelayed(hideJumps, hideAfterMs)
     }
 
     fun setTitle(text: String) { title.text = text }

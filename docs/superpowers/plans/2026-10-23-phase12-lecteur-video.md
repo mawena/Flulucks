@@ -284,9 +284,9 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
 `SeekGesturesTest.kt`.
 
 **Interfaces :** Consumes `SeekGestures`, `TimeText.seconds`, `TimeText.clamp` (T3). Produces
-`VideoOverlay.showJump(forward: Boolean, text: String)`.
+`VideoOverlay.showJump(forward: Boolean, text: String, hideAfterMs: Long)`.
 
-- [ ] **Step 1 : tests en échec** (suite de `SeekGesturesTest`)
+- [x] **Step 1 : tests en échec** (suite de `SeekGesturesTest`)
 
 ```kotlin
 @Test fun doubleTapRightJumpsForward() {
@@ -307,18 +307,18 @@ private fun text(g: Int, lang: String?, label: String?, sel: Boolean = false) = 
 @Test fun notSeekableDoubleTapPasses() // seekable = false : les deux touchers passent au lecteur
 ```
 
-- [ ] **Step 2 :** lancer → échecs.
-- [ ] **Step 3 :** compléter `SeekGestures` : un toucher de `PRESSED` (sans glissement, ≤ `tapMaxMs`) devient candidat
+- [x] **Step 2 :** lancer → échecs.
+- [x] **Step 3 :** compléter `SeekGestures` : un toucher de `PRESSED` (sans glissement, ≤ `tapMaxMs`) devient candidat
   (position, heure du `up`) s'il n'est pas parti d'une commande ; un `down` à ≤ `doubleTapTimeoutMs` du `up` candidat
   et à ≤ `doubleTapSlop` de lui passe en `HELD` (retenu, même sur une commande devenue visible) ; un `down` hors
   commande à ≤ `streakMs` du dernier saut passe en `HELD` (série) ; au `up` d'un `HELD` resté toucher : `Jump` (côté
   = moitié de la largeur ; même côté : cumul, sinon cumul repart de ±10 s) ; tout autre `down` termine la série.
-- [ ] **Step 4 :** relancer → vert.
-- [ ] **Step 5 : activité et vues.** Au `down` passé en `PRESSED`, retenir `controllerWasVisible`
+- [x] **Step 4 :** relancer → vert.
+- [x] **Step 5 : activité et vues.** Au `down` passé en `PRESSED`, retenir `controllerWasVisible`
   (`playerView.isControllerFullyVisible`). `Jump` → `seekTo(TimeText.clamp(currentPosition + step, durée))`,
   `showJump(step > 0, TimeText.seconds(total))` (bulle au tiers gauche ou droit, cachée 700 ms après), et si
   `restoreControls` : `showController()` ou `hideController()` selon `controllerWasVisible`.
-- [ ] **Step 6 :** suites vertes ; commit `feat(video): toucher deux fois pour reculer ou avancer de 10 s, cumulable`.
+- [x] **Step 6 :** suites vertes ; commit `feat(video): toucher deux fois pour reculer ou avancer de 10 s, cumulable`.
 
 ### Task 5 : documentation
 

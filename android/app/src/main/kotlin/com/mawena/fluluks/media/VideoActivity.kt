@@ -38,6 +38,7 @@ class VideoActivity : Activity() {
     private lateinit var overlay: VideoOverlay
     private lateinit var playerView: PlayerView
     private lateinit var gestures: SeekGestures
+    private var controllerWasVisible = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -111,6 +112,7 @@ class VideoActivity : Activity() {
             MotionEvent.ACTION_CANCEL -> gestures.cancel()
             else -> null
         } ?: return super.dispatchTouchEvent(ev)
+        if (ev.actionMasked == MotionEvent.ACTION_DOWN && o.dispatch) controllerWasVisible = playerView.isControllerFullyVisible
         if (o.cancelChildren) {
             val c = MotionEvent.obtain(ev).apply { action = MotionEvent.ACTION_CANCEL }
             super.dispatchTouchEvent(c)
@@ -141,7 +143,15 @@ class VideoActivity : Activity() {
                 overlay.hideInfo()
                 if (e.deltaMs != 0L) player?.seekTo(e.targetMs)
             }
-            is SeekGestures.Effect.Jump -> Unit // tâche 4
+            is SeekGestures.Effect.Jump -> {
+                val p = player ?: return
+                p.seekTo(TimeText.clamp(p.currentPosition + e.stepMs, playback().durationMs))
+                overlay.showJump(e.stepMs > 0, TimeText.seconds(e.totalMs), JUMP_MS)
+                // le premier toucher du double a montré ou caché les commandes : on les remet comme avant
+                if (e.restoreControls) {
+                    if (controllerWasVisible) playerView.showController() else playerView.hideController()
+                }
+            }
         }
     }
 
@@ -209,6 +219,7 @@ class VideoActivity : Activity() {
         const val SEEK_MS = 10_000L
         const val MSG_PLAY_ERROR = "Lecture impossible"
         private const val INFO_MS = 1_500L
+        private const val JUMP_MS = 700L
 
         /**
          * Lecteur de la vidéo [uri] avec ses sous-titres (le premier actif), pas encore préparé ; repris tel quel par

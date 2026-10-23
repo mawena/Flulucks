@@ -353,7 +353,7 @@ dans le même commit que le travail.
 - [x] T1 — Orientation : portrait par défaut, rotation selon le réglage d'Android, boutons « Tourner » et cadenas
 - [x] T2 — Choix des pistes audio et des sous-titres, désactivables
 - [x] T3 — Glisser pour avancer ou reculer, avec l'aperçu de la position visée
-- [ ] T4 — Toucher deux fois pour reculer ou avancer de 10 s, cumulable
+- [x] T4 — Toucher deux fois pour reculer ou avancer de 10 s, cumulable
 - [ ] T5 — Documentation
 - [ ] T6 — Essais instrumentés sur le Pixel
 - [ ] *(utilisateur)* T7 — Essais sur le Pixel ([fiche](../research/2026-10-23-essais-phase12/essais.md))
