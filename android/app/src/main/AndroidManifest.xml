@@ -60,6 +60,12 @@
                 <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
             </intent-filter>
         </provider>
+        <!-- Fichiers des dossiers distants (phase 10), servis par descripteur mandataire. -->
+        <provider
+            android:name=".provider.StreamProvider"
+            android:authorities="com.mawena.fluluks.flux"
+            android:exported="false"
+            android:grantUriPermissions="true" />
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="com.mawena.fluluks.fichiers"

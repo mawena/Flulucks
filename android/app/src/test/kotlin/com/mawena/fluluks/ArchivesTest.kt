@@ -7,11 +7,16 @@ import com.mawena.fluluks.files.FileSource
 import com.mawena.fluluks.files.Files
 import com.mawena.fluluks.files.FilesException
 import com.mawena.fluluks.files.LocalSource
+import com.mawena.fluluks.files.NativeIn
+import com.mawena.fluluks.files.NativeOut
 import com.mawena.fluluks.files.TransferState
 import com.mawena.fluluks.files.Transfers
 import com.mawena.fluluks.volumes.VolumeManager
 import java.io.ByteArrayOutputStream
 import java.io.File
+import java.io.InputStream
+import java.io.PipedInputStream
+import java.io.PipedOutputStream
 import java.nio.file.Files as NioFiles
 import java.util.Base64
 import java.util.concurrent.CountDownLatch
@@ -59,6 +64,10 @@ class ArchivesTest {
         var onPwrite: (Int) -> Unit = {}
         var onPread: (Int) -> Unit = {}
         var onNext: (Int) -> Unit = {}
+        var onArcwWrite: (Int) -> Unit = {}
+        var arcwWrites = 0
+        /** Tubes donnés à Archives (NativeOut.Pipe) : descripteur → côté écriture. */
+        private val pipes = HashMap<Int, PipedOutputStream>()
         var arcReads = 0
         var nexts = 0
         /** Allocation simulée : chaque élément du volume occupe au moins [cluster] octets de la place libre. */
@@ -79,12 +88,23 @@ class ArchivesTest {
         var lastData: List<ByteArray> = emptyList()
 
         val openArchives get() = readers.size + writers.size
+        fun pipesClosed() = pipes.isEmpty()
 
         fun openFd(f: File, write: Boolean): Int {
             val fd = nextFd++
             fds[fd] = f
             if (write) f.writeBytes(ByteArray(0))
             return fd
+        }
+
+        /** Comme ParcelFileDescriptor.createPipe : descripteur d'écriture pour le moteur, flux de lecture pour Archives. */
+        fun pipe(): Pair<Int, InputStream> {
+            val fd = nextFd++
+            fds[fd] = File("tube-$fd")
+            val out = PipedOutputStream()
+            val inp = PipedInputStream(out, 1 shl 16)
+            pipes[fd] = out
+            return fd to inp
         }
 
         private fun release(fd: Int, file: Long) {
@@ -178,6 +198,7 @@ class ArchivesTest {
 
         override fun arcwWrite(arc: Long, buf: ByteArray, len: Int): Int {
             val w = writers[arc] ?: return EngineError.FL_EINVAL
+            onArcwWrite(++arcwWrites)
             w.data.last().write(buf, 0, len)
             return 0
         }
@@ -187,8 +208,13 @@ class ArchivesTest {
             if (commit) {
                 lastAdds = w.adds
                 lastData = w.data.map { it.toByteArray() }
-                if (w.fd >= 0) fds[w.fd]!!.writeBytes(ZIP) else pwrite(w.file, 0, ZIP, ZIP.size)
+                when {
+                    w.fd in pipes -> pipes[w.fd]!!.write(ZIP)
+                    w.fd >= 0 -> fds[w.fd]!!.writeBytes(ZIP)
+                    else -> pwrite(w.file, 0, ZIP, ZIP.size)
+                }
             }
+            pipes.remove(w.fd)?.close()
             release(w.fd, w.file)
             return 0
         }
@@ -196,22 +222,42 @@ class ArchivesTest {
 
     private lateinit var e: Engine
     private lateinit var volId: String
+    private lateinit var remote: RemoteLike
     private val root: File get() = File(tmp.root, "racine")
+    private val remoteRoot: File get() = File(tmp.root, "distant")
+
+    /**
+     * Source « distante » : un dossier local, mais l'archive est lue par un descripteur mandataire
+     * ([NativeIn.Proxy]) et le ZIP écrit par un tube ([NativeOut.Pipe]), comme un serveur FTP ou SFTP.
+     */
+    private inner class RemoteLike(val inner: LocalSource) : FileSource by inner {
+        override val id = "remote"
+        var closedWith: Boolean? = null
+        override fun openNative(path: String): NativeIn =
+            NativeIn.Proxy(inner.stat(path)!!.size) { e.openFd(File(remoteRoot, path.substring(1)), false) }
+        override fun createNative(parent: String, name: String): Pair<String, NativeOut> {
+            val (p, out) = inner.createFile(parent, name)
+            return p to NativeOut.Pipe(out) { closedWith = it }
+        }
+    }
     private val mib = 1 shl 20
 
     @Before fun setup() {
         root.mkdir()
+        remoteRoot.mkdir()
         e = Engine()
         VolumeManager.resetForTests(e, delayer = FakeDelayer())
         val diskId = VolumeManager.addImageDiskForTests("/x/mem.img", readOnly = false)
         volId = runBlocking { VolumeManager.mountPlain(diskId, 1, true) }.id
         Transfers.resetForTests()
-        Archives.resetForTests(e, e::openFd)
+        Archives.resetForTests(e, e::openFd, e::pipe)
         val local = LocalSource("phone", "phone", "Téléphone", root) { true }
+        remote = RemoteLike(LocalSource("remote", "remote", "Serveur", remoteRoot) { true })
         val disks = DiskSource(volId, e)
         Files.setResolverForTests { id ->
             when (id) {
                 "phone" -> local
+                "remote" -> remote
                 volId -> disks.takeIf { VolumeManager.volume(volId) != null }
                 else -> null
             }
@@ -220,7 +266,7 @@ class ArchivesTest {
 
     @After fun teardown() {
         Transfers.resetForTests()
-        Archives.resetForTests(null, null)
+        Archives.resetForTests(null, null, null)
         Files.setResolverForTests(null)
     }
 
@@ -254,6 +300,7 @@ class ArchivesTest {
         assertEquals(0, e.openArchives)
         assertTrue(e.files.isEmpty())
         assertEquals(e.fds.keys, e.closedFds)
+        assertTrue(e.pipesClosed())
         val partial = tmp.root.walk().filter { it.name.endsWith(Transfers.PARTIAL_SUFFIX) }.toList()
         assertEquals(emptyList<File>(), partial)
         assertFalse(e.nodes.keys.any { it.endsWith(Transfers.PARTIAL_SUFFIX) })
@@ -311,7 +358,8 @@ class ArchivesTest {
         assertArrayEquals(d, File(root, "out/ok.txt").readBytes())
         assertArrayEquals(d, File(root, "out/a/b/c.txt").readBytes())
         // rien hors de la destination : ni à côté de la racine, ni à la racine, ni à côté de l'archive
-        assertEquals(listOf("racine"), tmp.root.list()!!.toList())
+        assertEquals(setOf("racine", "distant"), tmp.root.list()!!.toSet())
+        assertEquals(0, remoteRoot.list()!!.size)
         assertEquals(setOf("h.zip", "out"), root.list()!!.toSet())
         assertArrayEquals("archive".toByteArray(), File(root, "h.zip").readBytes())
         assertEquals(setOf("ok.txt", "a"), File(root, "out").list()!!.toSet())
@@ -433,6 +481,37 @@ class ArchivesTest {
         assertNull(s.error)
         assertArrayEquals(d, File(root, "notes (1).txt").readBytes())
         assertEquals(setOf("notes.txt.xz", "notes.txt", "notes (1).txt"), root.list()!!.toSet())
+        noLeak()
+    }
+
+    @Test fun extractThroughProxy() {
+        File(remoteRoot, "a.zip").writeBytes("archive".toByteArray())
+        val b = data(2 * mib + 1)
+        e.entries = listOf(file("d/b.bin", b))
+        File(root, "out").mkdir()
+        val s = extract("remote", "/a.zip", "phone", "/out", newFolder = false)
+        assertNull(s.error)
+        assertArrayEquals(b, File(root, "out/d/b.bin").readBytes())
+        noLeak()
+    }
+
+    @Test fun compressThroughPipe() {
+        File(remoteRoot, "a.txt").writeBytes(data(1000)); File(remoteRoot, "b.txt").writeBytes(data(5000, 3))
+        val s = compress("remote", listOf("/a.txt", "/b.txt"), "/", "lot")
+        assertNull(s.error)
+        assertArrayEquals(ZIP, File(remoteRoot, "lot.zip").readBytes())
+        assertEquals(true, remote.closedWith)
+        assertEquals(setOf("a.txt", "b.txt", "lot.zip"), remoteRoot.list()!!.toSet())
+        noLeak()
+    }
+
+    @Test fun compressThroughPipeCancelled() {
+        File(remoteRoot, "gros.bin").writeBytes(data(3 * mib))
+        e.onArcwWrite = { if (it == 2) Transfers.cancel() }
+        val s = compress("remote", listOf("/gros.bin"), "/")
+        assertTrue(s.cancelled)
+        assertEquals(setOf("gros.bin"), remoteRoot.list()!!.toSet())
+        assertEquals(false, remote.closedWith)
         noLeak()
     }
 

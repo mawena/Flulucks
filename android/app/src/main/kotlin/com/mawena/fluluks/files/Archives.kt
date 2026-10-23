@@ -11,6 +11,7 @@ import com.mawena.fluluks.provider.DocumentIds
 import com.mawena.fluluks.provider.WriteOps
 import java.io.File
 import java.io.FileNotFoundException
+import java.io.InputStream
 import java.io.OutputStream
 import java.util.Base64
 import org.json.JSONObject
@@ -69,13 +70,57 @@ object Archives {
 
     @Volatile private var engineForTests: Engine? = null
     @Volatile private var openFdForTests: ((File, Boolean) -> Int)? = null
+    @Volatile private var pipeForTests: (() -> Pair<Int, InputStream>)? = null
     private val engine: Engine get() = engineForTests ?: NativeEngine
 
-    /** Tests JVM : moteur et ouverture des descripteurs simulés ; null rend ceux d'Android. */
+    /** Tests JVM : moteur, ouverture des descripteurs et tubes simulés ; null rend ceux d'Android. */
     @VisibleForTesting
-    fun resetForTests(engine: Engine?, openFd: ((File, Boolean) -> Int)?) {
+    fun resetForTests(engine: Engine?, openFd: ((File, Boolean) -> Int)?, pipe: (() -> Pair<Int, InputStream>)?) {
         engineForTests = engine
         openFdForTests = openFd
+        pipeForTests = pipe
+    }
+
+    /** Tube : descripteur d'écriture détaché (il appartient à l'archive), flux de lecture pour [Pump]. */
+    private fun pipe(): Pair<Int, InputStream> {
+        pipeForTests?.let { return it() }
+        val (r, w) = ParcelFileDescriptor.createPipe()
+        return w.detachFd() to ParcelFileDescriptor.AutoCloseInputStream(r)
+    }
+
+    /**
+     * Recopie le côté lecture d'un tube vers [sink] (dossier distant), puis ferme [sink]. Une erreur de [sink] est
+     * gardée et le tube vidé jusqu'au bout : le moteur n'écrit jamais dans un tube fermé.
+     */
+    private class Pump(private val input: InputStream, private val sink: OutputStream) : Thread("portail-zip-tube") {
+        @Volatile var error: Throwable? = null
+
+        override fun run() {
+            val buf = ByteArray(64 * 1024)
+            input.use {
+                while (true) {
+                    val n = try {
+                        input.read(buf)
+                    } catch (t: Throwable) {
+                        if (error == null) error = t
+                        break
+                    }
+                    if (n < 0) break
+                    if (error == null) {
+                        try {
+                            sink.write(buf, 0, n)
+                        } catch (t: Throwable) {
+                            error = t
+                        }
+                    }
+                }
+            }
+            try {
+                sink.close()
+            } catch (t: Throwable) {
+                if (error == null) error = t
+            }
+        }
     }
 
     /** Descripteur détaché du fichier local [f] : il appartient ensuite à l'archive, qui le ferme. */
@@ -127,6 +172,7 @@ object Archives {
                 activity = n.onActivity
                 engine.arcOpenFile(n.handle, n.size)
             }
+            is NativeIn.Proxy -> engine.arcOpenFd(n.open())
         }
         if (h < 0) {
             val code = h.toInt()
@@ -361,14 +407,22 @@ object Archives {
             s.stat(DocumentIds.child(dir, tmp))?.let { if (it.type == FileType.FILE) s.delete(it.path) }
             val (partial, out) = s.createNative(dir, tmp)
             var created: String? = partial
-            var onClosed: () -> Unit = {}
+            var onClosed: (Boolean) -> Unit = {}
+            var committed = false
+            var pump: Pump? = null
             var h = 0L
             try {
                 h = when (out) {
                     is NativeOut.Fd -> engine.arcwOpenFd(openFd(out.file, true))
                     is NativeOut.EngineFile -> {
-                        onClosed = out.onClosed
+                        onClosed = { out.onClosed() }
                         engine.arcwOpenFile(out.handle)
+                    }
+                    is NativeOut.Pipe -> {
+                        onClosed = out.onClosed
+                        val (fd, input) = pipe()
+                        pump = Pump(input, out.sink).also { it.start() }
+                        engine.arcwOpenFd(fd)
                     }
                 }
                 EngineError.check(h) // en cas d'échec, le moteur a déjà fermé la destination
@@ -392,13 +446,20 @@ object Archives {
                 val rc = engine.arcwClose(h, true)
                 h = 0L
                 EngineError.check(rc)
+                // dossier distant : le tube vidé et le fichier distant fermé avant de lui donner son nom
+                pump?.let { p ->
+                    p.join()
+                    p.error?.let { throw FilesException(EngineError.FL_EIO, it.message ?: "Écriture interrompue") }
+                }
+                committed = true
                 val finalName = DocNames.unique(zipName) { s.stat(DocumentIds.child(dir, it)) != null }
                     ?: throw FileNotFoundException("Trop d'éléments portent déjà ce nom")
                 s.rename(partial, finalName)
                 created = null
             } finally {
                 if (h > 0) runCatching { engine.arcwClose(h, false) }
-                onClosed()
+                pump?.join()
+                onClosed(committed)
                 created?.let { p -> if (Transfers.alive(s)) runCatching { s.delete(p) } }
             }
         }

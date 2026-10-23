@@ -67,6 +67,22 @@ interface FileSource {
 
     fun openRead(path: String): InputStream
 
+    /** Flux de [path] à partir de l'octet [offset] ; une source distante le fait sans relire le début. */
+    fun openReadAt(path: String, offset: Long): InputStream {
+        val s = openRead(path)
+        try {
+            var left = offset
+            while (left > 0) {
+                val k = s.skip(left)
+                if (k > 0) left -= k else if (s.read() < 0) break else left--
+            }
+            return s
+        } catch (e: Exception) {
+            s.close()
+            throw e
+        }
+    }
+
     /** Crée le fichier [name] sous [parent] (nom unique) ; rend son chemin et un flux d'écriture à fermer. */
     fun createFile(parent: String, name: String): Pair<String, OutputStream>
 
@@ -97,6 +113,12 @@ sealed class NativeIn {
      * volume), lève une erreur si le volume a été fermé.
      */
     class EngineFile(val handle: Long, val size: Long, val onActivity: () -> Unit) : NativeIn()
+
+    /**
+     * Fichier sans descripteur propre (dossier distant) : [open] rend un descripteur mandataire détaché
+     * ([com.mawena.fluluks.provider.StreamProvider.openProxy]), lu à n'importe quel décalage.
+     */
+    class Proxy(val size: Long, val open: () -> Int) : NativeIn()
 }
 
 /** Destination d'un ZIP écrit par le moteur (Engine.arcwOpenFd / arcwOpenFile), fermée par l'archive. */
@@ -105,6 +127,12 @@ sealed class NativeOut {
 
     /** [onClosed] après la fermeture (synchronisation programmée, vues prévenues). */
     class EngineFile(val handle: Long, val onClosed: () -> Unit) : NativeOut()
+
+    /**
+     * Destination sans descripteur (dossier distant) : le moteur écrit dans un tube, recopié vers [sink], fermé
+     * ensuite ; [onClosed] reçoit vrai si l'archive est complète.
+     */
+    class Pipe(val sink: OutputStream, val onClosed: (commit: Boolean) -> Unit) : NativeOut()
 }
 
 internal fun FileType.isDir() = this == FileType.DIR

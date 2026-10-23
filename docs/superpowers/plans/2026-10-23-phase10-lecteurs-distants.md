@@ -209,19 +209,19 @@ sealed class NativeOut { class Pipe(val sink: OutputStream, val onClosed: (commi
 ```
 Jeton aléatoire de 128 bits par fichier servi, gardé en mémoire ; `query` rend `DISPLAY_NAME` et `SIZE`.
 
-- [ ] **Step 1 : tests** :
+- [x] **Step 1 : tests** :
   - `SeekableReaderTest` : `randomReadsMatch` (1 000 lectures à des décalages aléatoires sur 5 Mio = octets de
     référence) ; `sequentialReadsOpenOnce` ; `nearSeekSkips` (≤ 256 Kio sans réouverture) ; `farSeekReopensOnce` ;
     `closeClosesStream` ; `readerClosedWhenSourceGone` (l'ouvreur lève → erreur rendue, flux fermé) ;
   - `StreamProviderTest` (logique pure : jetons, oubli d'une source, nom et taille rendus, jeton inconnu refusé) ;
   - `ArchivesTest` : extraction depuis un `NativeIn.Proxy` et compression vers un `NativeOut.Pipe` (moteur simulé),
     tube fermé et partiel distant supprimé à l'annulation.
-- [ ] **Step 2 :** Run `./gradlew -q :app:testDebugUnitTest --tests '*SeekableReaderTest' --tests '*StreamProviderTest' --tests '*ArchivesTest'` → FAIL.
-- [ ] **Step 3 :** implémenter ; `openFile` par `openProxyFileDescriptor` (rappels sur un `HandlerThread` dédié),
+- [x] **Step 2 :** Run `./gradlew -q :app:testDebugUnitTest --tests '*SeekableReaderTest' --tests '*StreamProviderTest' --tests '*ArchivesTest'` → FAIL.
+- [x] **Step 3 :** implémenter ; `openFile` par `openProxyFileDescriptor` (rappels sur un `HandlerThread` dédié),
   `NativeOut.Pipe` par `ParcelFileDescriptor.createPipe()` et un fil qui recopie vers le flux distant (l'écrivain
   ZIP natif n'écrit qu'en séquence, par `write`).
-- [ ] **Step 4 :** tests verts ; suite JVM verte.
-- [ ] **Step 5 :** commit `feat(distant): lecture à accès aléatoire et fournisseur de flux`.
+- [x] **Step 4 :** tests verts ; suite JVM verte.
+- [x] **Step 5 :** commit `feat(distant): lecture à accès aléatoire et fournisseur de flux`.
 
 ### Task 5 : serveurs enregistrés et sources distantes
 
